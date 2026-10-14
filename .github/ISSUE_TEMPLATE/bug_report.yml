@@ -1,0 +1,22 @@
+name: Bug report
+description: Report incorrect behavior, crashes, or slow rendering.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Enlumi commit, Rust version, and graphics adapter if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction
+      description: Steps, expected behavior, actual behavior, and relevant errors.
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Log or rendering details
+      description: Log size, fields, line mode, panel count, and optional public or synthetic sample. Do not attach private flight data.

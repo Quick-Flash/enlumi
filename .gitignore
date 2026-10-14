@@ -1,0 +1,8 @@
+/target
+*.log
+*.ulg
+!/tests/fixtures/*.ulg
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db

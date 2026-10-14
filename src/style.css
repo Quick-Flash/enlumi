@@ -1,0 +1,175 @@
+.workbench { position: relative; flex: 1; width: 100vw; height: 100vh; max-height: 100vh; min-width: 0; min-height: 0; overflow: hidden; background: #12181c; color: #d7e1d9; gap: 0; }
+.toolbar { flex: none; gap: 6px; align-items: center; padding: 8px; background: #17221e; border-bottom: 1px solid #304339; }
+.sidebar-toggle-icon { width: 16px; height: 16px; color: transparent; --zgui-stroke: #d7e1d9; --zgui-stroke-width: 1.5px; pointer-events: none; }
+.workbench .zui-button.setting-active { background-color: #35553e; border-color: #75a77b; }
+.file-name { flex: 1; min-width: 0; font-size: 12px; color: #a8b6ad; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fps-readout { flex: none; width: 70px; font-size: 11px; color: #a8b6ad; text-align: right; white-space: nowrap; }
+.body { flex: 1; height: 0; min-width: 0; min-height: 0; overflow: hidden; }
+.plot-page { flex: 1; min-width: 0; min-height: 0; }
+.browser { flex: none; min-width: 0; min-height: 0; overflow: hidden; }
+.signal-sidebar { flex: 1; min-width: 0; min-height: 0; overflow: hidden; gap: 6px; padding: 8px; background: #17221e; }
+.browser-heading .heading { flex: 1; }
+.toolbar .zui-button, .browser-heading .zui-button { transition: none; }
+.browser-heading .zui-button { flex: none; padding: 3px 5px; }
+.browser-heading { align-items: center; justify-content: space-between; gap: 4px; }
+.heading { font-weight: 600; font-size: 12px; }
+.muted { color: #a8b6ad; font-size: 11px; }
+.signal-list { flex: 1; height: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.tree-row { position: relative; height: 28px; min-width: 0; align-items: center; }
+.tree-connectors { position: absolute; inset: 0; pointer-events: none; }
+.tree-guide { position: absolute; top: 0; height: 28px; width: 1px; background: #52715d; }
+.tree-guide-last { height: 14px; }
+.tree-elbow { position: absolute; top: 14px; width: 6px; height: 1px; background: #52715d; }
+.tree-stem { position: absolute; top: 20px; height: 8px; width: 1px; background: #52715d; }
+.tree-branch { display: flex; flex: 1; min-width: 0; align-items: center; height: 26px; padding: 2px 3px; gap: 4px; border: 1px solid transparent; border-radius: 3px; background: transparent; cursor: pointer; }
+.tree-branch:hover { background: #2b4032; border-color: #75a77b; }
+.tree-branch:focus-visible { outline: 1px solid #77b9e8; outline-offset: -1px; }
+.tree-arrow { width: 12px; height: 12px; flex: none; color: transparent; --zgui-stroke: #9ac9a5; --zgui-stroke-width: 1.5px; background: #2b4032; border-radius: 2px; pointer-events: none; }
+.tree-branch:hover .tree-arrow, .tree-branch:focus-visible .tree-arrow { --zgui-stroke: #c5f3d0; }
+.tree-branch .tree-name { font-weight: 600; }
+.tree-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tree-count { flex: none; padding: 0 4px; border-radius: 3px; background: transparent; font-size: 10px; color: #a8b6ad; }
+.field-leaf { flex: 1; min-width: 0; }
+.metric-option { display: flex; flex: 1; min-width: 0; align-items: center; height: 26px; padding: 2px 5px; gap: 5px; border: 1px solid transparent; border-radius: 3px; cursor: grab; }
+.metric-option:hover { background: #2b4032; border-color: #52715d; }
+.metric-option-selected { background: #35553e; border-color: #75a77b; }
+.metric-option:focus-visible { outline: 1px solid #77b9e8; outline-offset: -1px; }
+.signal-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.metric-option-count { flex: none; color: #a8b6ad; font-size: 10px; }
+.selected-field { flex: none; height: 30px; overflow: hidden; font-size: 11px; color: #a8b6ad; }
+.sidebar-grip { flex: none; width: 6px; cursor: ew-resize; background: #304339; }
+.sidebar-grip:hover { background: #75a77b; }
+.sidebar-grip:focus-visible { background: #77b9e8; outline: 2px solid #b9ddf5; outline-offset: -2px; }
+.workbench-plot.workbench-plot-active { border-color: #75a77b; }
+.workbench .plot-grid { overflow: hidden; }
+.workbench .workbench-plot { min-width: 0; min-height: 0; overflow: hidden; }
+.plot-content { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.plot-content > .time-series-host { flex: 1; min-width: 0; min-height: 0; }
+.plot-content .time-series-plot { flex: 1; min-height: 0; }
+.plot-empty { position: absolute; inset: 0; align-items: center; justify-content: center; gap: 8px; padding: 32px; pointer-events: none; }
+.empty-title { font-size: 20px; color: #75a77b; font-weight: 600; }
+.cursor-plot { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.cursor-plot .time-series-plot > .time-series-layer:nth-child(3), .cursor-plot .time-series-plot .plot-legend { display: none; }
+.enlumi-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cursor-plot .time-series-plot > .time-series-layer:nth-child(4) { z-index: 1; }
+.cursor-plot .plot-tick { z-index: 2; }
+.workbench-legend { position: absolute; top: 4px; right: 6px; max-width: calc(100% - 12px); gap: 0; padding: 4px 6px; background: #0e171bcc; border: 1px solid #46565b; border-radius: 3px; z-index: 2; }
+.legend-heading { align-items: center; justify-content: space-between; gap: 12px; }
+.legend-entry { min-width: 0; align-items: center; gap: 4px; }
+.legend-drag-source { flex: 1; min-width: 0; cursor: grab; }
+.legend-entry.legend-dragging { opacity: 0.45; }
+.legend-entry.legend-insert-before { box-shadow: 0 -2px 0 0 #8be3a3; }
+.legend-entry.legend-insert-after { box-shadow: 0 2px 0 0 #8be3a3; }
+.plot-content.legend-drop-active { outline: 2px solid #8be3a3; outline-offset: -2px; }
+.workbench-legend .plot-legend-item { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workbench-legend .legend-remove.zui-button { flex: none; width: 18px; min-width: 18px; height: 18px; min-height: 18px; padding: 0; border: none; background: transparent; color: #a8b6ad; }
+.workbench-legend .legend-remove.zui-button:hover { color: #ed9186; background: #24312b; }
+.workbench-legend .plot-gear.zui-button { flex: none; width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 2px; border: none; background: transparent; }
+.gear-icon { width: 18px; height: 18px; pointer-events: none; }
+.cursor-plot .plot-linked-pointer, .cursor-plot .plot-cursor-values { display: none; }
+.snapped-linked-pointer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+.snapped-cursor-values { position: absolute; z-index: 2; right: 6px; left: 64px; height: 18px; font-size: 11px; line-height: 16px; color: #d7e1d9; text-align: right; overflow: hidden; white-space: nowrap; pointer-events: none; }
+.link-controls { gap: 0; }
+.link-check { align-items: center; gap: 8px; }
+.signal-drop-overlay { position: absolute; inset: 28px 0 0 0; z-index: 10; align-items: center; justify-content: center; gap: 12px; padding: 16px; background: #15221ed9; color: #c8d5cc; border: 1px dashed #6c8676; pointer-events: none; }
+.signal-drop-overlay.signal-drop-active { background: #284b3aed; border: 3px solid #8be3a3; color: #effff2; }
+.drop-title { font-size: 18px; font-weight: 600; }
+.drop-name { font-size: 12px; }
+.workbench-dragging, .workbench-dragging * { cursor: grabbing; }
+.page .zui-button { background-color: #24312b; color: #d7e1d9; border-color: #42554a; box-shadow: none; border-radius: 4px; }
+.page .zui-button:hover { background-color: #33483c; color: #ebf2ec; }
+.page .zui-button:active { background-color: #1c2922; }
+.page .zui-button:disabled, .plot-settings-surface .zui-button:disabled { background-color: #1a2220; color: #a8b6ad; border-color: #303d35; opacity: 1; }
+.page .zui-input { background-color: #1a2721; color: #d7e1d9; border-color: #42554a; }
+.plot-settings-surface { max-height: 80vh; max-width: 480px; overflow-y: auto; padding: 8px; background: #17221e; color: #d7e1d9; border: 1px solid #52715d; }
+.plot-settings-content { gap: 8px; }
+.plot-editor-surface { width: 680px; max-width: 90vw; max-height: 90vh; padding: 18px; --zui-surface-enter-scale: 1; --zui-surface-exit-scale: 1; }
+.plot-editor-surface .zui-dialog__dismiss { color: #d7e1d9; }
+.appearance-row { gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.appearance-controls { flex: 1; min-width: 200px; gap: 8px; }
+.appearance-controls .zui-slider { width: auto; }
+.color-picker { flex: none; width: 180px; gap: 6px; }
+.color-square { overflow: hidden; position: relative; width: 180px; height: 180px; flex: none; cursor: crosshair; }
+.color-square:focus-visible { outline: 1px solid #77b9e8; }
+.color-square-image { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.color-picker .zui-slider { flex: 1; width: auto; min-width: 0; }
+.color-value { padding: 6px; border-radius: 4px; font-size: 12px; font-weight: 600; text-align: center; }
+.page .plot-links-trigger.zui-button { align-self: center; align-items: center; flex: none; width: 156px; min-width: 156px; height: 20px; min-height: 20px; padding: 0 4px; margin: 0; font-size: 11px; line-height: 16px; justify-content: space-between; gap: 3px; }
+.page .plot-links-trigger.zui-button.links-open { background: #35553e; border-color: #75a77b; }
+.plot-links-label { min-width: 0; white-space: nowrap; }
+.plot-links-chevron { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: #d7e1d9; --zgui-stroke-width: 1.5px; pointer-events: none; }
+.plot-links-trigger.links-open .plot-links-chevron { transform: rotate(180deg); }
+.zui-surface.plot-links-surface { width: 156px; min-width: 0; max-width: 90vw; min-height: 0; max-height: 55vh; overflow-y: auto; overflow-x: hidden; padding: 3px; background: #17221e; color: #d7e1d9; border: 1px solid #52715d; border-radius: 4px; font-size: 11px; animation: none; transform: none; }
+.zui-surface.plot-links-surface[data-state="closed"] { animation: none; }
+.settings-title { font-size: 14px; font-weight: 600; }
+.plot-settings-surface .zui-button { min-height: 28px; height: auto; padding: 4px 8px; background: #25322f; color: #d7e1d9; }
+.plot-settings-surface .zui-button:hover { background: #375239; color: #ffffff; border-color: #75a77b; }
+.editor { min-width: 0; gap: 8px; }
+.line-list { max-height: 160px; overflow-y: auto; gap: 4px; }
+.line-button { justify-content: flex-start; min-width: 0; overflow: hidden; }
+.line-button.selected { outline: 2px solid #d7e1d9; outline-offset: -3px; }
+.line-color-swatch { flex: none; width: 16px; height: 16px; border: 1px solid #a8b6ad; border-radius: 3px; }
+.line-button { justify-content: flex-start; white-space: nowrap; text-overflow: ellipsis; }
+.line-style { gap: 8px; padding-top: 8px; border-top: 1px solid #304339; }
+.plot-editor-surface .line-marker.chosen, .plot-editor-surface .line-connection.chosen { background: #35553e; border-color: #75a77b; }
+.editor-empty { padding: 12px 0; }
+.filter-workspace { flex: 1; width: 0; min-width: 0; min-height: 0; padding: 16px; overflow-y: auto; background: #17221e; color: #d7e1d9; }
+.filter-page-heading { align-items: center; justify-content: space-between; gap: 12px; }
+.filter-page-title { font-size: 18px; font-weight: 600; }
+.filter-batch { flex: 2; min-width: 260px; }
+.filter-sources { min-height: 180px; gap: 10px; padding: 12px; border: 1px dashed #6c8676; border-radius: 6px; background: #121b17; }
+.filter-sources.filter-sources-hover { border: 2px solid #8be3a3; background: #284b3a; }
+.filter-drop-empty { padding: 28px 12px; text-align: center; color: #a8b6ad; }
+.filter-source-basket { gap: 8px; max-height: 58vh; overflow-y: auto; }
+.filter-source-row { gap: 7px; padding: 9px; background: #1b2a22; border: 1px solid #304339; border-radius: 4px; }
+.filter-source-row-heading { gap: 8px; align-items: center; }
+.filter-source-label { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.filter-output-row { gap: 8px; align-items: center; }
+.filter-output-row .filter-output-name { flex: 1; min-width: 0; }
+.filter-workspace-content { gap: 12px; min-width: 0; }
+.filter-workspace-body { gap: 20px; min-height: 0; min-width: 0; flex-wrap: wrap; }
+.derived-library { flex: none; width: 230px; min-width: 0; gap: 10px; }
+.derived-library-list { gap: 5px; max-height: 52vh; overflow-y: auto; }
+.derived-library-item.zui-button { justify-content: flex-start; text-align: left; min-height: 56px; height: auto; padding: 8px; }
+.derived-library-item > column { gap: 4px; min-width: 0; }
+.derived-library-name { font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.derived-library-item.chosen { background: #35553e; border-color: #75a77b; }
+.derived-empty { padding: 12px 0; }
+.filter-editor { flex: 1; min-width: 260px; gap: 9px; padding-left: 18px; border-left: 1px solid #304339; }
+.filter-section-title { font-size: 16px; font-weight: 600; }
+.filter-parameters { gap: 12px; }
+.filter-parameters > column { flex: 1; min-width: 0; gap: 6px; }
+.filter-actions { gap: 6px; flex-wrap: wrap; padding-top: 8px; }
+.filter-error { color: #ffb29a; font-size: 12px; }
+.filter-workspace .zui-input { background: #1a2721; color: #d7e1d9; border-color: #42554a; }
+.filter-workspace .zui-button { background: #24312b; color: #d7e1d9; border-color: #42554a; }
+.filter-workspace .zui-button:hover { background: #33483c; }
+.filter-type { width: 100%; }
+.plot-toolbar { gap: 6px; flex-wrap: wrap; }
+.status { flex: none; height: 22px; padding: 3px 8px; font-size: 11px; color: #eebe60; background: #17221e; border-top: 1px solid #304339; overflow: hidden; white-space: nowrap; }
+.warnings { font-size: 11px; color: #e7b978; }
+.hidden { display: none; }
+
+.plot-links-surface .zui-menu__item { flex: none; height: 24px; min-height: 24px; padding: 2px 6px 2px 24px; gap: 5px; font-size: 11px; line-height: 16px; border-radius: 2px; color: #d7e1d9; }
+.plot-links-surface .zui-menu__item[data-state="checked"] { background: #243b2c; }
+.plot-links-surface .zui-menu__item:hover, .plot-links-surface .zui-menu__item:focus { background: #35553e; color: #ebf2ec; }
+.plot-links-surface .zui-menu__indicator { left: 6px; width: 14px; height: 14px; border: 1px solid #6c8676; border-radius: 3px; background: #121b17; color: #a5f2b5; }
+.plot-links-surface .link-option[data-state="checked"] .zui-menu__indicator { background: #35553e; border-color: #8be3a3; }
+.plot-links-surface .zui-menu__indicator .zui-icon { width: 12px; height: 12px; }
+
+.color-hue.zui-slider { height: 24px; }
+.color-hue.zui-slider > .zui-slider__track { height: 14px; background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000); }
+.color-hue.zui-slider > .zui-slider__track > .zui-slider__range { background: transparent; }
+.color-hue.zui-slider > .zui-slider__thumb { height: 22px; width: 10px; margin-left: -5px; border: 2px solid #ffffff; border-radius: 3px; background: var(--picker-hue); box-shadow: 0 0 0 1px #12181c; }
+.color-hex-row { align-items: center; gap: 8px; }
+.color-hex-label { font-size: 12px; color: #a8b6ad; }
+.color-hex-row .color-hex { flex: 1; min-width: 0; background: #12181c; color: #d7e1d9; }
+.color-square { border: 1px solid #52715d; border-radius: 4px; }
+
+.page .plot-links-trigger.zui-button.links-active { background: #243b2c; border-color: #75a77b; }
+.page .plot-links-trigger.zui-button.links-open { background: #35553e; }
+.color-hue { cursor: pointer; }
+
+.filter-source-heading { align-items: center; justify-content: space-between; gap: 8px; }
+.zui-surface.filter-type-surface { background: #17221e; color: #d7e1d9; border: 1px solid #52715d; border-radius: 4px; box-shadow: none; animation: none; transform: none; }
+.zui-surface.filter-type-surface[data-state="closed"] { animation: none; }
