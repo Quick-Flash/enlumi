@@ -8,6 +8,8 @@
 .plot-page { flex: 1; min-width: 0; min-height: 0; }
 .browser { flex: none; min-width: 0; min-height: 0; overflow: hidden; }
 .signal-sidebar { flex: 1; min-width: 0; min-height: 0; overflow: hidden; gap: 6px; padding: 8px; background: #17221e; }
+.field-search .zui-input-group__addon[data-align="inline-end"] { align-self: stretch; padding-block: 0; cursor: pointer; }
+.field-search .zui-input-group__button { cursor: pointer; }
 .browser-heading .heading { flex: 1; }
 .toolbar .zui-button, .browser-heading .zui-button { transition: none; }
 .browser-heading .zui-button { flex: none; padding: 3px 5px; }

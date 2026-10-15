@@ -68,7 +68,14 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                     Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "open-filters", node_ref = workbench.filter_button, class:setting-active = move || workbench.filters_open.get(), disabled = Signal::derive_local(move || workbench.log.get().is_none() || workbench.loading.get()), on:click = move |_| workbench.filters_open.update(|open| *open = !*open)) { "Filters" }
                     Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
                 }
-                Input(value = workbench.query, placeholder = "Search topics and fields", a11y:label = "Search ULog fields")
+                InputGroup(class = "field-search") {
+                    InputGroupInput(value = workbench.query, placeholder = "Search topics and fields", a11y:label = "Search ULog fields")
+                    if move || !workbench.query.with(String::is_empty) {
+                        InputGroupAddon(align = InputGroupAddonAlign::InlineEnd, on:click = move |_| workbench.query.set(String::new())) {
+                            InputGroupButton(size = InputGroupButtonSize::IconXs, a11y:label = "Clear search") { "×" }
+                        }
+                    }
+                }
                 text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Open a log to browse fields".into(), |log| format!("{} fields | drag onto a plot", log.catalogue.len())))}}
                 VirtualList(count = Signal::derive_local(move || rows.with(Vec::len)), row_size = 28.0, label = "ULog field tree", class = "signal-list",
                     row = move |index: usize| view! { FieldRow(workbench = workbench, row = Memo::new(move |_| rows.with(|rows| rows.get(index).cloned())), visible_fields = visible_fields) })
