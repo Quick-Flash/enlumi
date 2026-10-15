@@ -132,6 +132,387 @@ fn click_class(harness: &mut Harness<zgui::runtime::Runtime>, class: &str) {
     harness.settle(128);
 }
 
+fn drag_filter_card(
+    harness: &mut Harness<zgui::runtime::Runtime>,
+    workbench: crate::state::Workbench,
+    from: usize,
+    to: usize,
+    cancel: bool,
+) {
+    let original = workbench.filter_inputs.get_untracked();
+    let window = &harness.app().windows()[0];
+    let source = window.nodes_with_class("filter-input-handle")[from];
+    let target = if workbench.filter_kind.get_untracked() == "rpy" {
+        window.nodes_with_class("filter-quaternion-slot")[to]
+    } else {
+        window.nodes_with_class("filter-source-row")[to]
+    };
+    let a = zgui::view::ViewHost::window_box(window.host().as_ref(), source).unwrap();
+    let b = zgui::view::ViewHost::window_box(window.host().as_ref(), target).unwrap();
+    let (sx, sy) = (a.origin.x.0 + 3.0, a.origin.y.0 + 3.0);
+    let (tx, ty) = (
+        b.origin.x.0 + b.size.width.0 / 2.0,
+        b.origin.y.0 + b.size.height.0 / 2.0,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, sx, sy));
+    harness.deliver_to_first(pointer(PointerAction::Moved, tx, ty));
+    harness.settle(16);
+    assert_eq!(
+        workbench.filter_inputs.get_untracked(),
+        original,
+        "Preview must not mutate assignments"
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("filter-input-dragging")
+            .len(),
+        1,
+        "Drag {from} to {to}, source {a:?}, target {b:?}"
+    );
+    assert_ne!(workbench.filter_input_offset(from), "translateY(0px)");
+    assert_ne!(
+        workbench.filter_input_offset(to),
+        "translateY(0px)",
+        "Neighbor must slide into preview position"
+    );
+    harness.deliver_to_first(pointer(
+        if cancel {
+            PointerAction::Cancelled
+        } else {
+            PointerAction::Released
+        },
+        tx,
+        ty,
+    ));
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while workbench.filter_input_ui.drag.get_untracked().is_some() {
+        assert!(Instant::now() < deadline, "Input drag did not settle");
+        harness.advance(Duration::from_millis(16));
+        harness.settle(16);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.advance(Duration::from_millis(32));
+    harness.settle(128);
+    if cancel {
+        assert_eq!(workbench.filter_inputs.get_untracked(), original);
+    }
+}
+
+#[test]
+fn compact_saved_rows_toggle_editing_delete_with_x_and_fill_window_height() {
+    use crate::{filter_workspace::FilterWorkspaceProps, state::Workbench};
+    use zgui_ui_tokens::prelude::*;
+    fn finish(harness: &mut Harness<zgui::runtime::Runtime>, workbench: Workbench) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while workbench.derived_busy.get_untracked() {
+            assert!(Instant::now() < deadline);
+            harness.pump();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        harness.settle(128);
+    }
+    let model = Rc::new(RefCell::new(None));
+    let built = Rc::clone(&model);
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    let source = log.catalogue[0].id.clone();
+    let handler=app().with_size(1200.0,800.0)
+        .with_renderer(Box::new(|_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(include_str!("style.css"))
+        .into_handler(move || {
+            let workbench=Workbench::new();workbench.log.set(Some(log.clone()));workbench.filters_open.set(true);*built.borrow_mut()=Some(workbench);
+            view! {ThemeProvider(scheme = ColorScheme::Dark) {column(class = "workbench") {row(class = "body") {FilterWorkspace(workbench = workbench)}}}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.0),
+        DevicePx(800.0),
+    )));
+    harness.settle(128);
+    let workbench = model.borrow().unwrap();
+    workbench.set_filter_kind("magnitude".into());
+    workbench.accept_filter_sources(vec![source]).unwrap();
+    harness.settle(128);
+    click_class(&mut harness, "save-derived-field");
+    finish(&mut harness, workbench);
+    let first = workbench.filter_outputs.get_untracked()[0];
+    let saved = workbench.derived.get_untracked()[0].clone();
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    assert!(workbench.filter_inputs.get_untracked().is_empty());
+    let window = &harness.app().windows()[0];
+    assert!(window.nodes_with_class("filter-start-new").is_empty());
+    assert!(window.nodes_with_class("delete-derived-field").is_empty());
+    let row = window.box_with_class("derived-library-row").unwrap();
+    assert!((30.0..=38.0).contains(&row.size.height.0), "{row:?}");
+    let list = window.box_with_class("derived-library-list").unwrap();
+    assert!(
+        list.size.height.0 > 650.0 && list.origin.y.0 + list.size.height.0 >= 788.0,
+        "{list:?}"
+    );
+    click_class(&mut harness, "derived-library-item");
+    assert_eq!(
+        workbench.filter_mode.get_untracked().selected(),
+        Some(first)
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("filter-mode-edit")
+            .is_some()
+    );
+    assert_eq!(
+        harness.app().windows()[0].nodes_with_class("chosen").len(),
+        1
+    );
+    click_class(&mut harness, "derived-library-item");
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("chosen")
+            .is_empty()
+    );
+    click_class(&mut harness, "derived-library-item");
+    click_class(&mut harness, "filter-done-editing");
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    workbench
+        .accept_filter_sources(vec![crate::derived::key(first)])
+        .unwrap();
+    harness.settle(128);
+    click_class(&mut harness, "save-derived-field");
+    finish(&mut harness, workbench);
+    assert_eq!(workbench.derived.get_untracked().len(), 2);
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    click_class(&mut harness, "remove-saved-field");
+    assert!(workbench.filter_error.get_untracked().contains("dependent"));
+    assert!(
+        workbench.filter_mode.get_untracked().is_new(),
+        "X must not enter editing"
+    );
+    let window = &harness.app().windows()[0];
+    let x = window.nodes_with_class("remove-saved-field")[1];
+    let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), x).unwrap();
+    let (x, y) = (
+        rect.origin.x.0 + rect.size.width.0 / 2.0,
+        rect.origin.y.0 + rect.size.height.0 / 2.0,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y));
+    harness.settle(128);
+    assert_eq!(workbench.derived.get_untracked().len(), 1);
+    click_class(&mut harness, "remove-saved-field");
+    assert!(workbench.derived.get_untracked().is_empty());
+    let fields = (0..30)
+        .map(|index| {
+            let mut field = saved.clone();
+            field.id = 1000 + index;
+            field.group = field.id;
+            field.name = format!("Magnitude {index}");
+            field
+        })
+        .collect();
+    workbench.derived.set(fields);
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    let list = window.box_with_class("derived-library-list").unwrap();
+    let rows = window.nodes_with_class("derived-library-row");
+    assert_eq!(rows.len(), 30);
+    let last =
+        zgui::view::ViewHost::window_box(window.host().as_ref(), *rows.last().unwrap()).unwrap();
+    assert!(list.origin.y.0 + list.size.height.0 <= 791.0);
+    assert!(
+        last.origin.y.0 > list.origin.y.0 + list.size.height.0,
+        "Saved list must scroll rather than grow window"
+    );
+}
+
+#[test]
+fn combined_filter_editor_labels_inputs_reorders_and_switches_output_names() {
+    use crate::{derived::FilterInput, filter_workspace::FilterWorkspaceProps, state::Workbench};
+    use zgui_ui_tokens::prelude::*;
+    let model = Rc::new(RefCell::new(None));
+    let built = Rc::clone(&model);
+    let handler = app().with_size(1200.0, 800.0)
+        .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
+        .with_stylesheet(include_str!("style.css"))
+        .into_handler(move || {
+            let workbench = Workbench::new();
+            workbench.filter_kind.set("rpy".into());
+            *built.borrow_mut() = Some(workbench);
+            view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "workbench") { row(class = "body") { FilterWorkspace(workbench = workbench) } } } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.0),
+        DevicePx(800.0),
+    )));
+    harness.settle(128);
+    let workbench = model.borrow().unwrap();
+    let window = &harness.app().windows()[0];
+    let labels: Vec<_> = window
+        .nodes_with_class("filter-input-role")
+        .iter()
+        .map(|node| window.dom().text_content(*node))
+        .collect();
+    assert_eq!(labels, ["W", "X", "Y", "Z"]);
+    assert_eq!(window.nodes_with_class("filter-slot-empty").len(), 4);
+    assert!(window.nodes_with_class("filter-input-grip").is_empty());
+    assert!(window.nodes_with_class("filter-source-row").is_empty());
+    let slot = window.nodes_with_class("filter-quaternion-slot")[3];
+    let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), slot).unwrap();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    let source = log.catalogue[0].id.clone();
+    workbench.log.set(Some(log));
+    workbench.filters_open.set(true);
+    workbench.drop_fields(
+        source.clone(),
+        rect.origin.x.0 + rect.size.width.0 / 2.0,
+        rect.origin.y.0 + rect.size.height.0 / 2.0,
+    );
+    harness.settle(128);
+    let inputs = workbench.filter_inputs.get_untracked();
+    assert_eq!(inputs[3].source, source);
+    assert!(inputs[..3].iter().all(|input| input.source.is_empty()));
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("filter-slot-empty")
+            .len(),
+        3
+    );
+    workbench.filter_inputs.set(
+        (0..4)
+            .map(|index| FilterInput {
+                source: format!("q[{index}]"),
+                name: format!("unused {index}"),
+            })
+            .collect(),
+    );
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    assert_eq!(window.nodes_with_class("filter-output-name-row").len(), 3);
+    assert!(
+        window.nodes_with_class("filter-output-name").is_empty(),
+        "Combined inputs must not show batch output names"
+    );
+    click_class(&mut harness, "filter-angle-unit");
+    let window = &harness.app().windows()[0];
+    let degrees = window
+        .nodes_with_class("zui-select__item")
+        .into_iter()
+        .find(|node| window.dom().text_content(*node).contains("Degrees"))
+        .unwrap();
+    let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), degrees).unwrap();
+    let (x, y) = (
+        rect.origin.x.0 + rect.size.width.0 / 2.0,
+        rect.origin.y.0 + rect.size.height.0 / 2.0,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y));
+    harness.settle(128);
+    assert_eq!(workbench.filter_angle_unit.get_untracked(), "deg");
+    let window = &harness.app().windows()[0];
+    for node in window.nodes_with_class("filter-output-name-row") {
+        assert!(window.dom().text_content(node).contains("(deg)"));
+    }
+    assert!(window.nodes_with_class("reorder-filter-source").is_empty());
+    drag_filter_card(&mut harness, workbench, 3, 2, false);
+    drag_filter_card(&mut harness, workbench, 0, 3, true);
+    assert_eq!(workbench.filter_inputs.get_untracked()[2].source, "q[3]");
+    workbench
+        .filter_names
+        .update(|names| names[1] = "Bank".into());
+    workbench.set_filter_kind("magnitude".into());
+    harness.settle(128);
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("filter-output-name-row")
+            .len(),
+        1
+    );
+    workbench.set_filter_kind("rpy".into());
+    harness.settle(128);
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("filter-output-name-row")
+            .len(),
+        3
+    );
+    assert_eq!(workbench.filter_names.get_untracked()[1], "Bank");
+    click_class(&mut harness, "remove-filter-source");
+    assert!(workbench.filter_input_ui.drag.get_untracked().is_none());
+    assert_eq!(workbench.filter_inputs.get_untracked().len(), 4);
+    assert!(workbench.filter_inputs.get_untracked()[0].source.is_empty());
+    let window = &harness.app().windows()[0];
+    let labels: Vec<_> = window
+        .nodes_with_class("filter-input-role")
+        .iter()
+        .map(|node| window.dom().text_content(*node))
+        .collect();
+    assert_eq!(labels, ["W", "X", "Y", "Z"]);
+    assert_eq!(window.nodes_with_class("filter-slot-empty").len(), 1);
+    workbench.set_filter_kind("magnitude".into());
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("filter-input-handle")
+            .is_empty()
+    );
+    let before = workbench.filter_inputs.get_untracked();
+    workbench.start_filter_input_drag(0, 0.0, 0.0);
+    assert!(workbench.filter_input_ui.drag.get_untracked().is_none());
+    assert_eq!(workbench.filter_inputs.get_untracked(), before);
+    workbench.set_filter_kind("affine".into());
+    workbench.filter_offset.set("7".into());
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    assert!(window.nodes_with_class("filter-input-handle").is_empty());
+    assert_eq!(window.nodes_with_class("filter-io-label").len(), 6);
+    let row = window.box_with_class("filter-source-row").unwrap();
+    assert!(
+        row.size.height.0 <= 36.0,
+        "Standard filter rows should be compact: {row:?}"
+    );
+    let before = workbench.filter_inputs.get_untracked();
+    let (x, y) = (row.origin.x.0 + 3.0, row.origin.y.0 + 3.0);
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x, y + 50.0));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y + 50.0));
+    harness.settle(128);
+    assert!(workbench.filter_input_ui.drag.get_untracked().is_none());
+    assert_eq!(workbench.filter_inputs.get_untracked(), before);
+    click_class(&mut harness, "preset-rad-to-deg");
+    assert_eq!(
+        workbench
+            .filter_gain
+            .get_untracked()
+            .parse::<f64>()
+            .unwrap(),
+        1.0_f64.to_degrees()
+    );
+    assert_eq!(workbench.filter_offset.get_untracked(), "0");
+    workbench.filter_offset.set("4".into());
+    harness.settle(128);
+    click_class(&mut harness, "preset-deg-to-rad");
+    assert_eq!(
+        workbench
+            .filter_gain
+            .get_untracked()
+            .parse::<f64>()
+            .unwrap(),
+        1.0_f64.to_radians()
+    );
+    assert_eq!(workbench.filter_offset.get_untracked(), "0");
+}
+
 #[test]
 fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
     use crate::{
@@ -873,7 +1254,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     eprintln!("Filter dropdown first open: {:?}", opened.elapsed());
     let window = &harness.app().windows()[0];
     let popup = window.box_with_class("filter-type-surface").unwrap();
-    assert!(popup.size.height.0 < 160.0 && popup.size.width.0 > 100.0);
+    assert!(popup.size.height.0 < 260.0 && popup.size.width.0 > 100.0);
     let item = window
         .nodes_with_class("zui-select__item")
         .into_iter()
@@ -903,8 +1284,11 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     loop {
         harness.settle(128);
         let window = &harness.app().windows()[0];
-        let save = window.nodes_with_class("save-derived-field")[0];
-        if window.dom().text_content(save) == "Apply to 2 fields" {
+        if window
+            .nodes_with_class("filter-result-status")
+            .iter()
+            .any(|node| window.dom().text_content(*node) == "Created 2 fields")
+        {
             break;
         }
         assert!(Instant::now() < deadline, "Derived batch never computed");
@@ -952,8 +1336,11 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     loop {
         harness.settle(128);
         let window = &harness.app().windows()[0];
-        let save = window.nodes_with_class("save-derived-field")[0];
-        if window.dom().text_content(save) == "Apply to 2 fields" {
+        if window
+            .nodes_with_class("filter-result-status")
+            .iter()
+            .any(|node| window.dom().text_content(*node) == "Created 2 fields")
+        {
             break;
         }
         assert!(
@@ -971,7 +1358,11 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     click_class(&mut harness, "clear-filter-sources");
     let window = &harness.app().windows()[0];
     assert!(window.nodes_with_class("filter-source-row").is_empty());
-    assert!(window.nodes_with_class("chain-derived-field").is_empty());
+    assert!(!window.nodes_with_class("chain-derived-field").is_empty());
+    assert!(
+        window.box_with_class("filter-mode-edit").is_none(),
+        "Creating fields must leave a new draft"
+    );
     assert_eq!(window.nodes_with_class("derived-library-item").len(), 4);
     click_class(&mut harness, "save-derived-field");
     assert!(

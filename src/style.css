@@ -62,35 +62,71 @@
 .page .zui-button:disabled, .plot-settings-surface .zui-button:disabled { background-color: #1a2220; color: #a8b6ad; border-color: #303d35; opacity: 1; }
 .page .zui-input { background-color: #1a2721; color: #d7e1d9; border-color: #42554a; }
 .plot-settings-content { gap: 8px; }
-.filter-workspace { flex: 1; width: 0; min-width: 0; min-height: 0; padding: 16px; overflow-y: auto; background: #17221e; color: #d7e1d9; }
-.filter-page-heading { align-items: center; justify-content: space-between; gap: 12px; }
-.filter-page-title { font-size: 18px; font-weight: 600; }
-.filter-batch { flex: 2; min-width: 260px; }
-.filter-sources { min-height: 180px; gap: 10px; padding: 12px; border: 1px dashed #6c8676; border-radius: 6px; background: #121b17; }
-.filter-sources.filter-sources-hover { border: 2px solid #8be3a3; background: #284b3a; }
-.filter-drop-empty { padding: 28px 12px; text-align: center; color: #a8b6ad; }
-.filter-source-basket { gap: 8px; max-height: 58vh; overflow-y: auto; }
-.filter-source-row { gap: 7px; padding: 9px; background: #1b2a22; border: 1px solid #304339; border-radius: 4px; }
-.filter-source-row-heading { gap: 8px; align-items: center; }
+.filter-workspace { flex: 1; width: 0; min-width: 0; min-height: 0; padding: 10px; overflow: hidden; background: #17221e; color: #d7e1d9; }
+.filter-workspace-content { flex: 1; height: 0; min-width: 0; min-height: 0; gap: 8px; }
+.filter-page-heading { flex: none; align-items: center; justify-content: space-between; gap: 8px; }
+.filter-page-title { font-size: 15px; font-weight: 600; }
+.filter-workspace-body { flex: 1; height: 0; min-height: 0; min-width: 0; gap: 12px; }
+.filter-composer { flex: 1; min-width: 0; min-height: 0; gap: 6px; }
+.filter-composer-body { flex: 1; height: 0; min-height: 0; min-width: 0; gap: 10px; flex-wrap: wrap; overflow-y: auto; }
+.filter-mode-banner { flex: none; min-height: 28px; gap: 8px; align-items: center; border-bottom: 1px solid #304339; padding-bottom: 4px; }
+.filter-mode-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.filter-mode-edit .filter-mode-title { color: #b4e7c0; }
+.filter-batch { flex: 1; min-width: 230px; min-height: 120px; }
+.filter-sources { flex: 1; min-height: 0; gap: 6px; padding: 6px; border: 1px dashed #405a49; border-radius: 4px; background: #121b17; }
+.filter-sources.filter-sources-hover { border-color: #8be3a3; background: #203c2b; }
+.filter-source-heading { flex: none; align-items: center; justify-content: space-between; gap: 6px; }
+.filter-drop-empty { flex: none; padding: 18px 8px; text-align: center; color: #91ab99; font-size: 12px; }
+.filter-source-basket { flex: 1; height: 0; min-height: 0; gap: 3px; overflow-y: auto; overflow-x: hidden; }
+.filter-source-row { position: relative; flex: none; padding: 3px 4px; border: 1px solid #2c4033; border-radius: 3px; background: #1a2920; transition: transform 150ms ease; }
+.filter-source-row.filter-input-dragging { z-index: 5; transition: none; border-color: #8be3a3; box-shadow: 0 3px 9px #00000066; }
+.filter-source-row.filter-input-rebase { transition: none; }
+.filter-input-handle { cursor: grab; }
+.filter-input-handle:hover { border-color: #63856c; }
+.filter-input-handle:focus-visible { outline: 1px solid #77b9e8; }
+.filter-quaternion-slot { flex: none; min-height: 36px; align-items: center; gap: 6px; }
+.filter-quaternion-slot.filter-slot-hover { background: #284b3a; border-radius: 3px; }
+.filter-slot-content { flex: 1; min-width: 0; }
+.filter-slot-empty { height: 30px; padding: 6px; border: 1px dashed #405a49; border-radius: 3px; font-size: 11px; color: #91ab99; }
+.filter-source-row-heading { gap: 5px; align-items: center; min-width: 0; }
 .filter-source-label { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.filter-output-row { gap: 8px; align-items: center; }
-.filter-output-row .filter-output-name { flex: 1; min-width: 0; }
-.filter-workspace-content { gap: 12px; min-width: 0; }
-.filter-workspace-body { gap: 20px; min-height: 0; min-width: 0; flex-wrap: wrap; }
-.derived-library { flex: none; width: 230px; min-width: 0; gap: 10px; }
-.derived-library-list { gap: 5px; max-height: 52vh; overflow-y: auto; }
-.derived-library-item.zui-button { justify-content: flex-start; text-align: left; min-height: 56px; height: auto; padding: 8px; }
-.derived-library-item > column { gap: 4px; min-width: 0; }
-.derived-library-name { font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.derived-library-item.chosen { background: #35553e; border-color: #75a77b; }
-.derived-empty { padding: 12px 0; }
-.filter-editor { flex: 1; min-width: 260px; gap: 9px; padding-left: 18px; border-left: 1px solid #304339; }
-.filter-section-title { font-size: 16px; font-weight: 600; }
-.filter-parameters { gap: 12px; }
-.filter-parameters > column { flex: 1; min-width: 0; gap: 6px; }
-.filter-actions { gap: 6px; flex-wrap: wrap; padding-top: 8px; }
-.filter-error { color: #ffb29a; font-size: 12px; }
-.filter-workspace .zui-input { background: #1a2721; color: #d7e1d9; border-color: #42554a; }
+.filter-io-label { flex: none; font-size: 10px; color: #91ab99; }
+.filter-input-role { flex: none; width: 18px; font-weight: 600; font-size: 12px; color: #9ac9a5; }
+.filter-output-name { flex: 1; width: 0; min-width: 55px; }
+.filter-workspace .remove-filter-source.zui-button { flex: none; width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 0; border-color: transparent; background: transparent; }
+.filter-output-names { gap: 4px; }
+.filter-output-name-row { gap: 6px; align-items: center; }
+.filter-output-name-row .heading { flex: none; width: 62px; font-size: 10px; }
+.filter-output-name-row .zui-input { flex: 1; width: 0; min-width: 0; }
+.derived-library { flex: none; width: 210px; min-width: 0; min-height: 0; gap: 4px; }
+.derived-library-heading { flex: none; justify-content: space-between; align-items: center; }
+.derived-library-count { color: #91ab99; font-size: 11px; }
+.derived-library > .muted { flex: none; font-size: 10px; }
+.derived-library-list { flex: 1; height: 0; min-height: 0; gap: 2px; padding-right: 3px; overflow-y: auto; overflow-x: hidden; }
+.derived-library-row { flex: none; height: 36px; min-height: 36px; align-items: center; border-left: 2px solid transparent; border-radius: 3px; }
+.derived-library-row:hover { background: #20372a; }
+.derived-library-row.chosen { background: #294633; border-left-color: #a0dbad; }
+.filter-workspace .derived-library-item.zui-button { flex: 1; min-width: 0; flex-direction: column; align-items: stretch; justify-content: center; gap: 1px; height: 34px; min-height: 34px; padding: 2px 5px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: left; cursor: pointer; }
+.filter-workspace .derived-library-item.zui-button:hover { background: transparent; }
+.derived-card-main { width: 100%; gap: 5px; align-items: center; min-width: 0; }
+.derived-library-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; line-height: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.derived-filter-badge { flex: none; color: #91ab99; font-size: 9px; }
+.derived-library-detail { width: 100%; color: #91ab99; font-size: 10px; line-height: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.filter-workspace .remove-saved-field.zui-button { flex: none; width: 20px; min-width: 20px; height: 22px; min-height: 22px; padding: 0; border: 0; background: transparent; color: #91ab99; }
+.filter-workspace .remove-saved-field.zui-button:hover { background: #49312b; color: #efc0b1; }
+.derived-empty { padding: 10px 4px; }
+.filter-editor { flex: none; width: 220px; min-width: 190px; min-height: 0; gap: 6px; padding-left: 10px; border-left: 1px solid #304339; overflow-y: auto; }
+.filter-section-title { font-size: 12px; font-weight: 600; }
+.filter-parameters { gap: 8px; }
+.filter-angle-presets { gap: 4px; align-items: center; flex-wrap: wrap; }
+.filter-angle-unit { width: 100%; }
+.filter-parameters > column { flex: 1; min-width: 0; gap: 3px; }
+.filter-actions { gap: 4px; flex-wrap: wrap; padding-top: 4px; }
+.filter-result { gap: 4px; align-items: center; }
+.filter-result-status { color: #9ac9a5; font-size: 11px; }
+.filter-error { color: #ffb29a; font-size: 11px; }
+.filter-workspace .zui-input { height: 26px; min-height: 26px; padding: 3px 5px; font-size: 12px; background: #1a2721; color: #d7e1d9; border-color: #42554a; }
+.filter-source-row .filter-output-name { height: 24px; min-height: 24px; padding: 2px 4px; }
 .filter-workspace .zui-button { background: #24312b; color: #d7e1d9; border-color: #42554a; }
 .filter-workspace .zui-button:hover { background: #33483c; }
 .filter-type { width: 100%; }

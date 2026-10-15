@@ -50,6 +50,331 @@ fn same(a: &SeriesData, b: &SeriesData) {
         assert!(a.y == b.y || a.y.is_nan() && b.y.is_nan());
     }
 }
+
+#[test]
+fn new_mode_can_use_saved_outputs_and_edit_mode_only_checks_its_own_targets() {
+    let window = Window::open();
+    let (workbench, source) = loaded(&window);
+    workbench.edit_filter(None, None);
+    workbench.set_filter_kind("magnitude".into());
+    workbench
+        .accept_filter_sources(vec![source.clone()])
+        .unwrap();
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    let first = workbench.filter_outputs.get_untracked()[0];
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    assert!(workbench.filter_inputs.get_untracked().is_empty());
+    workbench.toggle_filter_editing(first);
+    let before = workbench.filter_inputs.get_untracked();
+    assert!(
+        workbench
+            .accept_filter_sources(vec![derived::key(first)])
+            .is_err()
+    );
+    assert_eq!(workbench.filter_inputs.get_untracked(), before);
+    workbench.edit_filter(None, None);
+    workbench.set_filter_kind("magnitude".into());
+    // Creation must ignore old result IDs, even if a caller retained them for plotting.
+    workbench.filter_outputs.set(vec![first]);
+    workbench
+        .accept_filter_sources(vec![derived::key(first)])
+        .unwrap();
+    assert_eq!(workbench.filter_outputs.get_untracked(), [first]);
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    assert_eq!(
+        workbench.filter_inputs.get_untracked()[0].source,
+        derived::key(first)
+    );
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    let second = workbench.filter_outputs.get_untracked()[0];
+    assert_ne!(first, second);
+    workbench.next_filters();
+    assert_eq!(workbench.filter_kind.get_untracked(), "magnitude");
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    let fields = workbench.derived.get_untracked();
+    assert_eq!(fields.len(), 3);
+    assert_eq!(fields[0].sources, [source]);
+    assert_eq!(fields[1].sources, [derived::key(first)]);
+    assert_eq!(fields[2].sources, [derived::key(second)]);
+    assert!(
+        workbench
+            .upsert_filter(
+                Some(first),
+                "True cycle".into(),
+                fields[2].key(),
+                FilterSpec::LowPass(5.0)
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn quaternion_slots_keep_sparse_assignments_and_removal_does_not_shift_roles() {
+    let window = Window::open();
+    let (workbench, _) = loaded(&window);
+    let sources: Vec<_> = workbench
+        .log
+        .get_untracked()
+        .unwrap()
+        .catalogue
+        .iter()
+        .take(4)
+        .map(|field| field.id.clone())
+        .collect();
+    assert_eq!(sources.len(), 4);
+    workbench.edit_filter(None, None);
+    workbench.set_filter_kind("rpy".into());
+    workbench
+        .accept_filter_sources_at(vec![sources[3].clone()], Some(3))
+        .unwrap();
+    let inputs = workbench.filter_inputs.get_untracked();
+    assert!(inputs[..3].iter().all(|input| input.source.is_empty()));
+    assert_eq!(inputs[3].source, sources[3]);
+    workbench
+        .accept_filter_sources_at(vec![sources[0].clone()], Some(0))
+        .unwrap();
+    workbench
+        .accept_filter_sources_at(vec![sources[1].clone()], Some(1))
+        .unwrap();
+    workbench.save_filter();
+    assert!(workbench.filter_error.get_untracked().contains("fill W"));
+    assert!(workbench.derived.get_untracked().is_empty());
+    workbench
+        .accept_filter_sources_at(vec![sources[2].clone()], Some(2))
+        .unwrap();
+    workbench.remove_filter_input(1);
+    let inputs = workbench.filter_inputs.get_untracked();
+    assert_eq!(inputs[0].source, sources[0]);
+    assert!(inputs[1].source.is_empty());
+    assert_eq!(inputs[2].source, sources[2]);
+    assert_eq!(inputs[3].source, sources[3]);
+    workbench
+        .accept_filter_sources_at(vec![sources[1].clone()], Some(1))
+        .unwrap();
+    workbench
+        .accept_filter_sources_at(vec![sources[3].clone()], Some(0))
+        .unwrap();
+    let inputs = workbench.filter_inputs.get_untracked();
+    assert_eq!(inputs[0].source, sources[3]);
+    assert_eq!(inputs[3].source, sources[0]);
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    assert_eq!(workbench.filter_outputs.get_untracked().len(), 3);
+}
+
+#[test]
+fn magnitude_tracks_all_parents_and_rejects_nonfirst_dependency_cycles() {
+    let window = Window::open();
+    let (workbench, source) = loaded(&window);
+    let first = workbench
+        .upsert_filter(
+            None,
+            "First input".into(),
+            source.clone(),
+            FilterSpec::Affine {
+                gain: 1.0,
+                offset: 0.0,
+            },
+        )
+        .unwrap();
+    let second = workbench
+        .upsert_filter(
+            None,
+            "Second input".into(),
+            source.clone(),
+            FilterSpec::Affine {
+                gain: 2.0,
+                offset: 0.0,
+            },
+        )
+        .unwrap();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    workbench.edit_filter(None, None);
+    workbench.filter_kind.set("magnitude".into());
+    workbench
+        .accept_filter_sources(vec![derived::key(first), derived::key(second)])
+        .unwrap();
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    let magnitude = workbench.filter_outputs.get_untracked()[0];
+    workbench.add(derived::key(magnitude));
+    let before = workbench.pane().selection().unwrap();
+    workbench
+        .upsert_filter(
+            Some(second),
+            "Changed second input".into(),
+            source.clone(),
+            FilterSpec::Affine {
+                gain: 3.0,
+                offset: 0.0,
+            },
+        )
+        .unwrap();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    let fields = workbench.derived.get_untracked();
+    let parents: Vec<_> = [first, second]
+        .iter()
+        .map(|id| {
+            fields
+                .iter()
+                .find(|field| field.id == *id)
+                .unwrap()
+                .data
+                .as_ref()
+                .unwrap()
+        })
+        .collect();
+    same(
+        &workbench.pane().selection().unwrap().data,
+        &FilterSpec::Magnitude.apply_inputs(&parents).unwrap(),
+    );
+    assert!(workbench.pane().selection().unwrap().revision > before.revision);
+    assert!(
+        workbench
+            .upsert_filter(
+                Some(second),
+                "Cycle".into(),
+                derived::key(magnitude),
+                FilterSpec::LowPass(5.0)
+            )
+            .is_err()
+    );
+    assert!(workbench.delete_filter(second).is_err());
+    workbench.edit_filter(Some(magnitude), None);
+    workbench.filter_names.update(|names| names[0] = " ".into());
+    workbench.save_filter();
+    assert!(!workbench.filter_error.get_untracked().is_empty());
+    assert_eq!(workbench.derived.get_untracked().len(), 3);
+    assert_eq!(workbench.filter_outputs.get_untracked(), [magnitude]);
+}
+
+#[test]
+fn quaternion_creates_named_group_edits_in_place_and_chains_all_outputs() {
+    let window = Window::open();
+    let (workbench, source) = loaded(&window);
+    let mut sources = Vec::new();
+    for (index, offset) in [0.8, 0.2, -0.4, 0.4].into_iter().enumerate() {
+        let id = workbench
+            .upsert_filter(
+                None,
+                format!("q{index}"),
+                source.clone(),
+                FilterSpec::Affine { gain: 0.0, offset },
+            )
+            .unwrap();
+        sources.push(derived::key(id));
+    }
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    workbench.edit_filter(None, None);
+    workbench.filter_kind.set("rpy".into());
+    workbench
+        .accept_filter_sources(sources[..3].to_vec())
+        .unwrap();
+    workbench.save_filter();
+    assert!(workbench.filter_error.get_untracked().contains("four"));
+    assert_eq!(workbench.derived.get_untracked().len(), 4);
+    workbench
+        .accept_filter_sources(vec![sources[3].clone()])
+        .unwrap();
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    let ids = workbench.filter_outputs.get_untracked();
+    assert_eq!(ids.len(), 3);
+    let fields = workbench.derived.get_untracked();
+    for (index, expected) in [0.0, (-0.8_f64).asin(), 0.48_f64.atan2(0.36)]
+        .into_iter()
+        .enumerate()
+    {
+        let field = fields.iter().find(|field| field.id == ids[index]).unwrap();
+        assert_eq!(field.sources, sources);
+        let value = field
+            .data
+            .as_ref()
+            .unwrap()
+            .samples()
+            .iter()
+            .find(|point| point.y.is_finite())
+            .unwrap()
+            .y;
+        assert!((value - expected).abs() < 1e-12);
+    }
+    workbench.edit_created_filters();
+    workbench.filter_angle_unit.set("deg".into());
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    assert_eq!(workbench.filter_outputs.get_untracked(), ids);
+    let fields = workbench.derived.get_untracked();
+    for (index, expected) in [0.0, (-0.8_f64).asin(), 0.48_f64.atan2(0.36)]
+        .into_iter()
+        .enumerate()
+    {
+        let field = fields.iter().find(|field| field.id == ids[index]).unwrap();
+        assert!(field.filter.label().contains("deg"));
+        let value = field
+            .data
+            .as_ref()
+            .unwrap()
+            .samples()
+            .iter()
+            .find(|point| point.y.is_finite())
+            .unwrap()
+            .y;
+        assert!((value - expected.to_degrees()).abs() < 1e-12);
+    }
+    workbench.filter_angle_unit.set("rad".into());
+    workbench.edit_filter(Some(ids[2]), None);
+    assert_eq!(workbench.filter_angle_unit.get_untracked(), "deg");
+    assert_eq!(workbench.filter_outputs.get_untracked(), ids);
+    assert_eq!(workbench.filter_inputs.get_untracked().len(), 4);
+    workbench
+        .filter_names
+        .update(|names| names[3] = "Heading".into());
+    workbench.move_filter_input(&sources[3], -1);
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    assert_eq!(workbench.filter_outputs.get_untracked(), ids);
+    let fields = workbench.derived.get_untracked();
+    let yaw = fields.iter().find(|field| field.id == ids[2]).unwrap();
+    assert_eq!(yaw.name, "Heading");
+    assert_eq!(
+        yaw.sources,
+        [
+            sources[0].clone(),
+            sources[1].clone(),
+            sources[3].clone(),
+            sources[2].clone()
+        ]
+    );
+    assert_eq!(fields.len(), 7);
+    assert!(
+        workbench
+            .upsert_filter(
+                Some(ids[0]),
+                "Cycle".into(),
+                derived::key(ids[0]),
+                FilterSpec::LowPass(5.0)
+            )
+            .is_err()
+    );
+    workbench.next_filters();
+    assert_eq!(workbench.filter_kind.get_untracked(), "low");
+    assert_eq!(workbench.filter_inputs.get_untracked().len(), 3);
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    assert_eq!(workbench.derived.get_untracked().len(), 10);
+    assert!(workbench.delete_filter(ids[0]).is_err());
+}
 #[test]
 fn named_chains_recompute_plotted_copies_without_changing_raw_data_or_appearance() {
     let window = Window::open();
@@ -204,7 +529,7 @@ fn invalid_names_parameters_and_cycles_leave_graph_intact_and_deletion_respects_
             )
             .is_err()
     );
-    assert_eq!(workbench.derived.get_untracked()[0].source, source);
+    assert_eq!(workbench.derived.get_untracked()[0].sources, [source]);
     assert_eq!(workbench.derived.get_untracked().len(), 2);
     assert!(workbench.delete_filter(first).is_err());
     workbench.add(derived::key(second));
@@ -426,6 +751,7 @@ fn batches_share_settings_keep_names_and_ids_and_chain_all_outputs() {
             .unwrap(),
         );
     }
+    workbench.edit_created_filters();
     workbench.filter_gain.set("4".into());
     workbench.save_filter();
     settle(&window, || !workbench.derived_busy.get_untracked());
@@ -472,7 +798,7 @@ fn batches_share_settings_keep_names_and_ids_and_chain_all_outputs() {
 }
 
 #[test]
-fn invalid_batch_is_atomic_and_edit_source_drop_rejects_cycles() {
+fn invalid_batch_is_atomic_and_edit_cycle_does_not_change_mode() {
     let window = Window::open();
     let (workbench, source) = loaded(&window);
     let result = workbench.apply_filter_batch(
@@ -506,13 +832,37 @@ fn invalid_batch_is_atomic_and_edit_source_drop_rejects_cycles() {
         .unwrap();
     settle(&window, || !workbench.derived_busy.get_untracked());
     workbench.edit_filter(Some(parent), None);
-    let before = workbench.filter_inputs.get_untracked()[0].source.clone();
+    let mode = workbench.filter_mode.get_untracked();
+    let before = workbench.filter_inputs.get_untracked();
     assert!(
         workbench
             .accept_filter_sources(vec![derived::key(child)])
             .is_err()
     );
-    assert_eq!(workbench.filter_inputs.get_untracked()[0].source, before);
+    assert_eq!(workbench.filter_mode.get_untracked(), mode);
+    assert_eq!(workbench.filter_inputs.get_untracked(), before);
+    workbench.clear_filter_sources();
+    workbench
+        .accept_filter_sources(vec![before[0].source.clone()])
+        .unwrap();
+    assert_eq!(workbench.filter_inputs.get_untracked()[0].name, "Parent");
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert_eq!(workbench.filter_outputs.get_untracked(), [parent]);
+    workbench.edit_filter(None, None);
+    workbench
+        .accept_filter_sources(vec![derived::key(child)])
+        .unwrap();
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    assert!(workbench.filter_outputs.get_untracked().is_empty());
+    assert_eq!(
+        workbench.filter_inputs.get_untracked()[0].source,
+        derived::key(child)
+    );
+    workbench.save_filter();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    assert_eq!(workbench.derived.get_untracked().len(), 3);
 }
 
 #[test]
@@ -573,7 +923,7 @@ fn legend_filter_handoff_starts_new_batch_with_raw_and_derived_sources() {
         "Filter action must close line settings"
     );
     assert!(workbench.filters_open.get_untracked());
-    assert!(workbench.filter_edit.get_untracked().is_none());
+    assert!(workbench.filter_mode.get_untracked().is_new());
     assert!(workbench.filter_outputs.get_untracked().is_empty());
     assert!(workbench.filter_error.get_untracked().is_empty());
     let inputs = workbench.filter_inputs.get_untracked();

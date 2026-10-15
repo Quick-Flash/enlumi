@@ -15,8 +15,11 @@ pub fn WorkbenchApp(initial_path: Option<PathBuf>) -> impl IntoView {
     }
     view! {
         ThemeProvider(scheme = ColorScheme::Dark, dark = Theme::dark().with_css(include_str!("theme.css"))) {
-            column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving),
+            column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
                 on:key_down:capture = move |event| {
+                    if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && workbench.filter_input_ui.drag.get_untracked().is_some() {
+                        workbench.finish_filter_input_drag(true); event.prevent_default(); event.stop_propagation(); return;
+                    }
                     if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && (workbench.drag.state.get_untracked().is_some() || workbench.line_drag.state.get_untracked().is_some()) {
                         workbench.line_drag.cancel();
                         workbench.drag.state.set(None); workbench.drop_target.set(None); event.prevent_default(); event.stop_propagation();

@@ -23,8 +23,9 @@ Zgui temporarily pins a public text-selection fork; see [Contributing](CONTRIBUT
 - Movable legend entries and hover previews of hidden lines.
 - Contrasting automatic colors across panels; per-line colors, widths, markers, and step connections.
 - Fixed bounds on legend toggles; independent X/Y fit from axis double-click or right-click menu.
-- Named low-pass, high-pass, and gain/offset fields, shared batch settings,
-  and derived fields as inputs to later filter stages.
+- Named low-pass, high-pass, and gain/offset fields with shared batch settings.
+- Multi-input magnitude and quaternion-to-RPY transforms, with named outputs
+  that can feed later filter stages.
 - Bounded column rendering; filters and cursor lookup use full samples.
 
 ## Build and run

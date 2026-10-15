@@ -121,13 +121,16 @@ pub struct Workbench {
     pub derived: RwSignal<Vec<crate::derived::DerivedField>, LocalStorage>,
     pub derived_busy: RwSignal<bool, LocalStorage>,
     pub filters_open: RwSignal<bool, LocalStorage>,
-    pub filter_edit: RwSignal<Option<u64>, LocalStorage>,
+    pub filter_mode: RwSignal<crate::filter_mode::FilterMode, LocalStorage>,
     pub filter_inputs: RwSignal<Vec<crate::derived::FilterInput>, LocalStorage>,
+    pub filter_input_ui: crate::filter_input_drag::FilterInputUi,
     pub filter_outputs: RwSignal<Vec<u64>, LocalStorage>,
     pub filter_drop: NodeRef,
     pub filter_button: NodeRef,
     pub filter_drop_active: RwSignal<bool, LocalStorage>,
     pub filter_kind: RwSignal<String, LocalStorage>,
+    pub filter_names: RwSignal<Vec<String>, LocalStorage>,
+    pub filter_angle_unit: RwSignal<String, LocalStorage>,
     pub filter_cutoff: RwSignal<String, LocalStorage>,
     pub filter_gain: RwSignal<String, LocalStorage>,
     pub filter_offset: RwSignal<String, LocalStorage>,
@@ -171,13 +174,20 @@ impl Workbench {
             derived: RwSignal::new_local(Vec::new()),
             derived_busy: RwSignal::new_local(false),
             filters_open: RwSignal::new_local(false),
-            filter_edit: RwSignal::new_local(None),
+            filter_mode: RwSignal::new_local(crate::filter_mode::FilterMode::New),
             filter_inputs: RwSignal::new_local(Vec::new()),
+            filter_input_ui: crate::filter_input_drag::FilterInputUi::new(),
             filter_outputs: RwSignal::new_local(Vec::new()),
             filter_drop: NodeRef::new(),
             filter_button: NodeRef::new(),
             filter_drop_active: RwSignal::new_local(false),
             filter_kind: RwSignal::new_local("low".into()),
+            filter_names: RwSignal::new_local(
+                ["Magnitude", "Roll", "Pitch", "Yaw"]
+                    .map(String::from)
+                    .to_vec(),
+            ),
+            filter_angle_unit: RwSignal::new_local("rad".into()),
             filter_cutoff: RwSignal::new_local("5".into()),
             filter_gain: RwSignal::new_local("1".into()),
             filter_offset: RwSignal::new_local("0".into()),
@@ -243,7 +253,7 @@ impl Workbench {
                     self.cache.set(BTreeMap::new());
                     self.derived.set(Vec::new());
                     self.filters_open.set(false);
-                    self.filter_edit.set(None);
+                    self.filter_mode.set(crate::filter_mode::FilterMode::New);
                     self.filter_inputs.set(Vec::new());
                     self.filter_outputs.set(Vec::new());
                     self.filter_drop_active.set(false);

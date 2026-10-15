@@ -1,22 +1,38 @@
-use crate::{filter_source_row::FilterSourceRowProps, state::Workbench};
+use crate::{
+    filter_quaternion_slot::FilterQuaternionSlotProps, filter_source_row::FilterSourceRowProps,
+    state::Workbench,
+};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
 #[component]
 pub fn FilterSources(workbench: Workbench) -> impl IntoView {
+    workbench.filter_input_ui.clock.set_value(Timers::current());
+    on_cleanup_local(move || {
+        workbench.cancel_filter_input_drag();
+        workbench.filter_input_ui.clock.set_value(None);
+    });
     view! {
         column(class = "filter-sources", node_ref = workbench.filter_drop, class:filter-sources-hover = move || workbench.filter_drop_active.get()) {
             row(class = "filter-source-heading") {
-                text(class = "filter-section-title") {{move || format!("{} source fields", workbench.filter_inputs.with(|inputs| inputs.len()))}}
-                Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "clear-filter-sources", disabled = Signal::derive_local(move || workbench.filter_inputs.with(Vec::is_empty)), on:click = move |_| workbench.clear_filter_sources()) { "Clear fields" }
+                text(class = "filter-section-title") {{move || if workbench.combined_filter() { "Inputs" } else { "Inputs / outputs" }}}
+                Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "clear-filter-sources", disabled = Signal::derive_local(move || workbench.filter_inputs.with(|inputs| inputs.iter().all(|input| input.source.is_empty()))), on:click = move |_| workbench.clear_filter_sources()) { "Clear fields" }
             }
-            text(class = "muted") { "Drag fields here. Ctrl-click or Shift-click several in left tree, then drag any selected field to add whole selection." }
-            if move || workbench.filter_inputs.with(Vec::is_empty) {
-                text(class = "filter-drop-empty") { "Drop raw or derived fields here" }
+            if move || workbench.filter_kind.get() != "rpy" && workbench.filter_inputs.with(Vec::is_empty) {
+                text(class = "filter-drop-empty") { "Drop fields here" }
+            }
+            if move || workbench.filter_kind.get() == "rpy" {
+                text(class = "muted") { "Unit quaternion: W, X, Y, Z. Drag to swap slots." }
             }
             column(class = "filter-source-basket") {
+                if move || workbench.filter_kind.get() == "rpy" {
+                    for index in move || 0..4, key = |index| *index {
+                        FilterQuaternionSlot(workbench = workbench, index = index)
+                    }
+                } else {
                 for input in move || workbench.filter_inputs.get(), key = |input| input.source.clone() {
                     FilterSourceRow(workbench = workbench, source = input.source.clone())
+                }
                 }
             }
         }

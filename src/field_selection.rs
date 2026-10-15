@@ -51,10 +51,12 @@ impl Workbench {
             }));
     }
     pub fn clear_filter_sources(self) {
+        self.cancel_filter_input_drag();
         self.filter_inputs.set(Vec::new());
-        self.filter_outputs.set(Vec::new());
-        self.filter_edit.set(None);
         self.filter_error.set(String::new());
+        if self.filter_mode.get_untracked().is_new() {
+            self.reset_filter_names();
+        }
         self.finish_field_drag();
     }
     fn drag_fields(self, source: String) -> Vec<String> {
@@ -77,10 +79,18 @@ impl Workbench {
         }
         self.filter_drop_active
             .set(self.filters_open.get_untracked() && Self::inside(self.filter_drop, x, y));
+        self.filter_input_ui
+            .hover
+            .set(if self.filters_open.get_untracked() {
+                self.quaternion_slot_at(x, y)
+            } else {
+                None
+            });
         self.drop_target.set(self.hit_plot(x, y));
     }
     pub fn finish_field_drag(self) {
         self.filter_drop_active.set(false);
+        self.filter_input_ui.hover.set(None);
         self.drop_target.set(None);
     }
     pub fn drop_fields(self, source: String, x: f32, y: f32) {
@@ -89,7 +99,9 @@ impl Workbench {
             || self.filters_open.get_untracked() && Self::inside(self.filter_drop, x, y)
         {
             self.filters_open.set(true);
-            if let Err(error) = self.accept_filter_sources(sources) {
+            if let Err(error) =
+                self.accept_filter_sources_at(sources, self.quaternion_slot_at(x, y))
+            {
                 self.filter_error.set(error);
             }
         } else if let Some(id) = self.hit_plot(x, y) {
@@ -117,6 +129,14 @@ impl Workbench {
             && y < bounds.origin.y.0 + bounds.size.height.0
     }
     pub fn accept_filter_sources(self, sources: Vec<String>) -> Result<(), String> {
+        self.accept_filter_sources_at(sources, None)
+    }
+    pub fn accept_filter_sources_at(
+        self,
+        sources: Vec<String>,
+        slot: Option<usize>,
+    ) -> Result<(), String> {
+        self.cancel_filter_input_drag();
         let log = self.log.get_untracked().ok_or("Open a log first")?;
         let fields = self.derived.get_untracked();
         for source in &sources {
@@ -125,20 +145,89 @@ impl Workbench {
             {
                 return Err("Source field no longer exists".into());
             }
-            if let Some(editing) = self.filter_edit.get_untracked()
-                && sources.len() == 1
-                && crate::derived::depends_on(&fields, source, editing)
-            {
-                return Err("Source would create a filter cycle".into());
-            }
         }
-        let editing = self.filter_edit.get_untracked();
+        let mode = self.filter_mode.get_untracked();
+        if !mode.is_new()
+            && sources.iter().any(|source| {
+                mode.ids()
+                    .iter()
+                    .any(|id| crate::derived::depends_on(&fields, source, *id))
+            })
+        {
+            return Err("This input depends on a field being edited. Finish editing to create another field from it".into());
+        }
+        let editing = mode.selected().filter(|_| mode.ids().len() == 1);
         let mut inputs = self.filter_inputs.get_untracked();
+        if self.combined_filter_untracked() {
+            if self.filter_kind.get_untracked() == "rpy" {
+                inputs.resize_with(4, crate::filter_input_drag::empty_input);
+                let missing = inputs
+                    .iter()
+                    .filter(|input| input.source.is_empty())
+                    .count();
+                if sources.len() > 4
+                    || slot.is_none()
+                        && sources
+                            .iter()
+                            .filter(|source| !inputs.iter().any(|input| &input.source == *source))
+                            .count()
+                            > missing
+                {
+                    return Err(
+                        "Quaternion has four slots. Drop onto W, X, Y, or Z to replace an input"
+                            .into(),
+                    );
+                }
+                let mut cursor = slot.unwrap_or(0).min(3);
+                for source in sources {
+                    let existing = inputs.iter().position(|input| input.source == source);
+                    let target = if slot.is_some() {
+                        let target = cursor;
+                        cursor = (cursor + 1) % 4;
+                        target
+                    } else if existing.is_some() {
+                        continue;
+                    } else {
+                        inputs
+                            .iter()
+                            .position(|input| input.source.is_empty())
+                            .ok_or("Quaternion slots are full")?
+                    };
+                    if let Some(existing) = existing {
+                        inputs.swap(existing, target);
+                    } else {
+                        inputs[target] = FilterInput {
+                            name: format!("{} filtered", self.field_name(&source)),
+                            source,
+                        };
+                    }
+                }
+            } else {
+                inputs.retain(|input| !input.source.is_empty());
+                for source in sources {
+                    if !inputs.iter().any(|input| input.source == source) {
+                        inputs.push(FilterInput {
+                            name: format!("{} filtered", self.field_name(&source)),
+                            source,
+                        });
+                    }
+                }
+            }
+            self.filter_inputs.set(inputs);
+            self.filter_error.set(String::new());
+            return Ok(());
+        }
         if editing.is_some() {
             if sources.len() == 1 {
-                let name = inputs
-                    .first()
-                    .map_or_else(String::new, |input| input.name.clone());
+                let name = inputs.first().map_or_else(
+                    || {
+                        fields
+                            .iter()
+                            .find(|field| Some(field.id) == editing)
+                            .map_or_else(String::new, |field| field.name.clone())
+                    },
+                    |input| input.name.clone(),
+                );
                 inputs = vec![FilterInput {
                     source: sources[0].clone(),
                     name,
@@ -147,12 +236,23 @@ impl Workbench {
                 self.filter_error.set(String::new());
                 return Ok(());
             }
-            self.filter_edit.set(None);
-            inputs.clear();
-            self.filter_outputs.set(Vec::new());
+            return Err(
+                "Editing one saved field requires one source. Finish editing to create a batch"
+                    .into(),
+            );
         }
         for source in sources {
             if inputs.iter().any(|input| input.source == source) {
+                continue;
+            }
+            if let Some(field) = fields
+                .iter()
+                .find(|field| mode.ids().contains(&field.id) && field.sources == [source.clone()])
+            {
+                inputs.push(FilterInput {
+                    source,
+                    name: field.name.clone(),
+                });
                 continue;
             }
             let label = fields
