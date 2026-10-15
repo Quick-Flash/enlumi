@@ -269,6 +269,7 @@ fn filtering_and_plot_state_survive_transient_settings_owner() {
     let appearance = plot::line_draw::LineDraw {
         connection: plot::line_draw::Connection::Post,
         markers: true,
+        ..Default::default()
     };
     pane.drawing.update(|drawing| {
         drawing.insert(moving, appearance);
@@ -360,6 +361,7 @@ fn docking_tabs_split_close_duplicate_and_maximize_preserve_data() {
     let appearance = plot::line_draw::LineDraw {
         connection: plot::line_draw::Connection::Pre,
         markers: true,
+        ..Default::default()
     };
     first.drawing.update(|drawing| {
         drawing.insert(original.id, appearance);

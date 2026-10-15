@@ -5530,7 +5530,7 @@ dependencies = [
 [[package]]
 name = "zgui-plot"
 version = "0.1.0"
-source = "git+https://github.com/Quick-Flash/zgui-plot?rev=e2e03e54b2d78571a5a448814c3eab76204adf71#e2e03e54b2d78571a5a448814c3eab76204adf71"
+source = "git+https://github.com/Quick-Flash/zgui-plot?rev=b7c8660738a09188de3a2cdc4c34e8df7fdaa647#b7c8660738a09188de3a2cdc4c34e8df7fdaa647"
 dependencies = [
  "kurbo",
  "zgui",

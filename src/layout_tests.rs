@@ -395,7 +395,8 @@ fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
         first.drawing.get_untracked()[&1],
         plot::line_draw::LineDraw {
             connection: plot::line_draw::Connection::Post,
-            markers: true
+            markers: true,
+            ..Default::default()
         }
     );
     click_class(&mut harness, "zui-dialog__dismiss");
@@ -1162,7 +1163,7 @@ fn legend_drag_reorders_moves_appends_and_cancels_without_toggling_visibility() 
             second.lines.set(vec![line(4)]);
             first.plot.hidden.update(|hidden| { hidden.insert("3".into()); });
             first.plot.styles.update(|styles| { let mut style = plot::plot_data::SeriesStyle::for_id("3"); style.color = [10, 160, 240, 255]; style.width = 4.0; styles.insert("3".into(), style); });
-            first.drawing.update(|drawing| { drawing.insert(3, plot::line_draw::LineDraw { connection: plot::line_draw::Connection::Post, markers: true }); });
+            first.drawing.update(|drawing| { drawing.insert(3, plot::line_draw::LineDraw { connection: plot::line_draw::Connection::Post, markers: true, ..Default::default() }); });
             *built.borrow_mut() = Some((workbench, first, second));
             view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "page workbench") { row(class = "body") { PlotWorkspace(workbench = workbench) } } } }
         }).unwrap();
@@ -1647,7 +1648,7 @@ fn dense_step_lines_and_markers_use_bounded_render_payloads_after_zoom() {
         .into_handler(move || {
             let workbench=Workbench::new(); let pane=workbench.pane();
             pane.lines.set((1..=3).map(|id|Line{id,source:format!("dense {id}"),name:format!("dense {id}"),data:data.clone(),revision:0}).collect());
-            pane.drawing.set([(1,LineDraw{connection:Connection::Linear,markers:true}),(2,LineDraw{connection:Connection::Pre,markers:true}),(3,LineDraw{connection:Connection::Post,markers:true})].into_iter().collect());
+            pane.drawing.set([(1,LineDraw{connection:Connection::Linear,markers:true,..Default::default()}),(2,LineDraw{connection:Connection::Pre,markers:true,..Default::default()}),(3,LineDraw{connection:Connection::Post,markers:true,..Default::default()})].into_iter().collect());
             *captured.borrow_mut()=Some(pane);
             view! { ThemeProvider(scheme=ColorScheme::Dark) { column(class="page workbench") { row(class="body") { CursorPlot(workbench=workbench,pane=pane,visible=Signal::stored_local(true),linked=RwSignal::new_local(None)) } } } }
         }).unwrap();

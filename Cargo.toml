@@ -16,7 +16,7 @@ resolver = "3"
 
 [dependencies]
 kurbo = "0.13.1"
-plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "e2e03e54b2d78571a5a448814c3eab76204adf71", features = ["workspace"] }
+plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "b7c8660738a09188de3a2cdc4c34e8df7fdaa647", features = ["workspace"] }
 px4-ulog = "0.6.1"
 rfd = "0.17.2"
 zgui = { git = "https://github.com/zortax/zgui", rev = "9927866a6b2b48a8898352a150f9465108246b9b" }
