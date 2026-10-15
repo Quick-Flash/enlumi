@@ -266,14 +266,16 @@ fn filtering_and_plot_state_survive_transient_settings_owner() {
         .set(plot::Ranges::new((1.0, 5.0), (-2.0, 2.0)));
     workbench.activate(pane.id);
     let moving = pane.selected.get_untracked().unwrap();
-    let appearance = crate::line_draw::LineDraw {
-        connection: crate::line_draw::Connection::Post,
+    let appearance = plot::line_draw::LineDraw {
+        connection: plot::line_draw::Connection::Post,
         markers: true,
     };
     pane.drawing.update(|drawing| {
         drawing.insert(moving, appearance);
     });
-    window.scope.with(|| workbench.move_line());
+    window
+        .scope
+        .with(|| workbench.place_line(pane.id, moving, second.id, None));
     assert_eq!(second.lines.get_untracked().len(), 1);
     assert_eq!(pane.lines.get_untracked().len(), 1);
     assert_eq!(workbench.active.get_untracked(), second.id);
@@ -355,8 +357,8 @@ fn docking_tabs_split_close_duplicate_and_maximize_preserve_data() {
         plot::workspace::layout::Layout::Split { ratio: 0.5, .. }
     ));
     assert_eq!(first.lines.get_untracked()[0].id, original.id);
-    let appearance = crate::line_draw::LineDraw {
-        connection: crate::line_draw::Connection::Pre,
+    let appearance = plot::line_draw::LineDraw {
+        connection: plot::line_draw::Connection::Pre,
         markers: true,
     };
     first.drawing.update(|drawing| {
@@ -477,7 +479,7 @@ fn editor_styles_follow_selected_line_only() {
     );
     assert_eq!(
         pane.drawing.get_untracked()[&1].connection,
-        crate::line_draw::Connection::Pre
+        plot::line_draw::Connection::Pre
     );
     assert!(pane.drawing.get_untracked()[&1].markers);
     assert!(class(&window, "zui-checkbox").is_empty());
@@ -495,7 +497,7 @@ fn editor_styles_follow_selected_line_only() {
     assert_eq!(
         pane.drawing
             .with_untracked(|drawing| drawing.get(&2).copied().unwrap_or_default()),
-        crate::line_draw::LineDraw::default()
+        plot::line_draw::LineDraw::default()
     );
     assert_eq!(pane.plot.style("1").color, changed);
     let hex = class(&window, "color-hex")[0];
@@ -518,6 +520,152 @@ fn editor_styles_follow_selected_line_only() {
         }
     }
     assert_eq!(pane.plot.style("1").color, changed);
+}
+
+#[test]
+fn editor_multi_selection_edits_shared_style_without_changing_colors() {
+    use crate::{editor::EditorProps, state::Line};
+    let window = Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    let pane = workbench.pane();
+    let data = plot::time_series::SeriesData::new(vec![]).unwrap();
+    pane.lines.set(
+        (1..=4)
+            .map(|id| Line {
+                id,
+                source: id.to_string(),
+                name: id.to_string(),
+                data: data.clone(),
+                revision: 0,
+            })
+            .collect(),
+    );
+    workbench.select(pane.id, 1);
+    let mut built = window.scope.with(|| view! { ThemeProvider(scheme = ColorScheme::Dark) { Editor(workbench = workbench, pane = pane) } }.into_view().build(&mut window.cx.cx()));
+    built.mount(&window.dom_handle, window.root, None);
+    window.frame();
+    let pick = |index, modifiers| {
+        window.dispatcher().with_modifiers(modifiers).send_to(
+            class(&window, "line-button")[index],
+            EventKind::Click,
+            Payload::Pointer(PointerEvent::mouse(zgui::geom::Point::new(
+                zgui::geom::CssPx(0.0),
+                zgui::geom::CssPx(0.0),
+            ))),
+        );
+        window.frame();
+    };
+    let colors: Vec<_> = (1..=4)
+        .map(|id| pane.plot.style(&id.to_string()).color)
+        .collect();
+    let untouched = pane.plot.style("4");
+    pick(2, zgui::vocab::Modifiers::CONTROL);
+    assert_eq!(class(&window, "color-square").len(), 1);
+    assert_eq!(class(&window, "color-picker-disabled").len(), 1);
+    window.dispatcher().key(
+        class(&window, "color-square")[0],
+        zgui::vocab::Key::Named(zgui::vocab::NamedKey::ArrowRight),
+    );
+    window.dispatcher().key(
+        class(&window, "color-hue")[0],
+        zgui::vocab::Key::Named(zgui::vocab::NamedKey::End),
+    );
+    window.dispatcher().send_to(
+        class(&window, "color-hex")[0],
+        EventKind::Input,
+        Payload::Value(zgui::vocab::ValueEvent {
+            value: "#FF0000".into(),
+            selection: Default::default(),
+            kind: zgui::vocab::ValueChange::Input,
+        }),
+    );
+    window.frame();
+    assert_eq!(
+        (1..=4)
+            .map(|id| pane.plot.style(&id.to_string()).color)
+            .collect::<Vec<_>>(),
+        colors
+    );
+    assert_eq!(class(&window, "selected").len(), 2);
+    window.dispatcher().key(
+        class(&window, "line-width")[0],
+        zgui::vocab::Key::Named(zgui::vocab::NamedKey::End),
+    );
+    window.frame();
+    assert_eq!(pane.plot.style("1").width, 10.0);
+    assert_ne!(pane.plot.style("2").width, 10.0);
+    assert_eq!(pane.plot.style("3").width, 10.0);
+    pick(0, zgui::vocab::Modifiers::SHIFT);
+    assert_eq!(class(&window, "selected").len(), 3);
+    assert!(
+        window
+            .dom
+            .tree()
+            .text_content(window.root)
+            .contains("Line width: mixed")
+    );
+    click(&window, class(&window, "line-marker")[2]);
+    window.dispatcher().key(
+        class(&window, "line-radius")[0],
+        zgui::vocab::Key::Named(zgui::vocab::NamedKey::End),
+    );
+    window.frame();
+    click(&window, class(&window, "line-connection")[2]);
+    window.dispatcher().key(
+        class(&window, "line-width")[0],
+        zgui::vocab::Key::Named(zgui::vocab::NamedKey::Home),
+    );
+    window.frame();
+    for id in 1..=3 {
+        let style = pane.plot.style(&id.to_string());
+        assert_eq!(style.width, 0.5);
+        assert_eq!(style.radius, 10.0);
+        assert_eq!(style.marker, plot::plot_data::MarkerShape::Square);
+        assert_eq!(
+            pane.drawing.get_untracked()[&id].connection,
+            plot::line_draw::Connection::Post
+        );
+        assert!(pane.drawing.get_untracked()[&id].markers);
+    }
+    assert_eq!(pane.plot.style("4"), untouched);
+    assert_eq!(
+        (1..=4)
+            .map(|id| pane.plot.style(&id.to_string()).color)
+            .collect::<Vec<_>>(),
+        colors
+    );
+    pick(1, zgui::vocab::Modifiers::CONTROL);
+    assert_eq!(class(&window, "selected").len(), 2);
+    pick(3, zgui::vocab::Modifiers::NONE);
+    assert_eq!(class(&window, "selected").len(), 1);
+    assert_eq!(class(&window, "color-square").len(), 1);
+    assert!(class(&window, "color-picker-disabled").is_empty());
+    pick(3, zgui::vocab::Modifiers::CONTROL);
+    assert_eq!(
+        class(&window, "selected").len(),
+        1,
+        "Ctrl-click must retain last selection"
+    );
+    pick(
+        3,
+        zgui::vocab::Modifiers::SHIFT | zgui::vocab::Modifiers::CONTROL,
+    );
+    assert_eq!(class(&window, "selected").len(), 1);
+    assert!(
+        !window
+            .dom
+            .tree()
+            .text_content(window.root)
+            .contains("Remove line")
+    );
+    assert!(
+        !window
+            .dom
+            .tree()
+            .text_content(window.root)
+            .contains("Move to next plot")
+    );
+    assert_eq!(class(&window, "legend-add-filters").len(), 1);
 }
 
 #[test]

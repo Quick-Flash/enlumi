@@ -1,4 +1,5 @@
 use crate::app::WorkbenchAppProps;
+use plot::zgui_workspace::LinkControlsProps;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -134,7 +135,6 @@ fn click_class(harness: &mut Harness<zgui::runtime::Runtime>, class: &str) {
 #[test]
 fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
     use crate::{
-        link_controls::LinkControlsProps,
         plot_cursor::CursorPlotProps,
         state::{Line, Workbench},
     };
@@ -181,8 +181,8 @@ fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
     let source_layers = window.nodes_with_class("time-series-layer");
     assert!(
         zgui::view::ViewHost::window_box(window.host().as_ref(), source_layers[2])
-            .is_none_or(|bounds| bounds.size.width.0 == 0.0),
-        "Shared linear layer must be hidden when Enlumi owns appearance rendering"
+            .is_some_and(|bounds| bounds.size.width.0 > 0.0),
+        "Shared plot renderer must own series drawing"
     );
     let x = graph.origin.x.0 + graph.size.width.0 * 0.25 + 7.0;
     let y = graph.origin.y.0 + graph.size.height.0 * 0.25 + 8.0;
@@ -251,6 +251,24 @@ fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
     );
     assert!(shared.get_untracked().is_none());
     click_class(&mut harness, "plot-settings-trigger");
+    harness.advance(Duration::from_millis(500));
+    harness.settle(128);
+    let info = harness.app().windows()[0]
+        .box_with_class("line-selection-info")
+        .unwrap();
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        info.origin.x.0 + info.size.width.0 / 2.0,
+        info.origin.y.0 + info.size.height.0 / 2.0,
+    ));
+    harness.settle(128);
+    harness.advance(Duration::from_millis(700));
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    let help = window.nodes_with_class("line-selection-help");
+    assert_eq!(help.len(), 1, "Hover must show selection help");
+    assert!(window.dom().text_content(help[0]).contains("Ctrl-click"));
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1.0, 1.0));
     harness.advance(Duration::from_millis(500));
     harness.settle(128);
     let window = &harness.app().windows()[0];
@@ -336,7 +354,7 @@ fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
         dragged_color, start_color,
         "Hue drag must update color: {hue:?}"
     );
-    let (h, _, _) = crate::color_picker::hsv(dragged_color);
+    let (h, _, _) = plot::zgui_series::hsv(dragged_color);
     assert!(
         (h - 251.0).abs() < 3.0,
         "Hue must follow pointer along rainbow strip: {h}"
@@ -375,8 +393,8 @@ fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
     harness.settle(128);
     assert_eq!(
         first.drawing.get_untracked()[&1],
-        crate::line_draw::LineDraw {
-            connection: crate::line_draw::Connection::Post,
+        plot::line_draw::LineDraw {
+            connection: plot::line_draw::Connection::Post,
             markers: true
         }
     );
@@ -464,11 +482,11 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     let pane = window.box_with_class("workbench-plot").unwrap();
     let graph = window.box_with_class("time-series-plot").unwrap();
     assert!(
-        pane.origin.y.0 + pane.size.height.0 <= 828.0,
+        pane.origin.y.0 + pane.size.height.0 <= 850.0,
         "Pane exceeds visible workspace: {pane:?}"
     );
     assert!(
-        browser.origin.y.0 + browser.size.height.0 <= 828.0,
+        browser.origin.y.0 + browser.size.height.0 <= 850.0,
         "Field list exceeds visible workspace: {browser:?}"
     );
     assert!(browser.size.height.0 > 500.0, "{browser:?}");
@@ -789,7 +807,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     let filter_window = window.box_with_class("filter-workspace").unwrap();
     let browser = window.box_with_class("signal-list").unwrap();
     assert!(filter_window.origin.x.0 >= browser.origin.x.0 + browser.size.width.0);
-    assert!(filter_window.origin.y.0 + filter_window.size.height.0 <= 828.0);
+    assert!(filter_window.origin.y.0 + filter_window.size.height.0 <= 850.0);
     assert!(window.nodes_with_class("field-select-checkbox").is_empty());
     assert!(window.nodes_with_class("new-derived-field").is_empty());
     let collapse = window.box_with_class("collapse-fields").unwrap();
@@ -1058,11 +1076,15 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     let pane = window.box_with_class("workbench-plot-active").unwrap();
     let grid = window.box_with_class("plot-grid").unwrap();
     assert!(
-        pane.origin.y.0 + pane.size.height.0 <= 328.0,
+        (grid.origin.y.0 + grid.size.height.0 - 350.0).abs() < 1.0,
+        "Workspace must reach window bottom: {grid:?}"
+    );
+    assert!(
+        pane.origin.y.0 + pane.size.height.0 <= 350.0,
         "Resize must fit plot: {pane:?}"
     );
     assert!((pane.size.height.0 - grid.size.height.0).abs() < 2.0);
-    assert!(list.size.height.0 > 0.0 && list.origin.y.0 + list.size.height.0 < 328.0);
+    assert!(list.size.height.0 > 0.0 && list.origin.y.0 + list.size.height.0 < 350.0);
     let first_row = window.nodes_with_class("tree-row")[0];
     harness.deliver_to_first(SurfaceEvent::Wheel {
         event: zgui::vocab::WheelEvent {
@@ -1107,7 +1129,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
             "{rect:?}"
         );
         assert!(
-            rect.origin.y.0 + rect.size.height.0 <= 328.0,
+            rect.origin.y.0 + rect.size.height.0 <= 350.0,
             "Stacked pane exceeds viewport: {rect:?}"
         );
     }
@@ -1140,7 +1162,7 @@ fn legend_drag_reorders_moves_appends_and_cancels_without_toggling_visibility() 
             second.lines.set(vec![line(4)]);
             first.plot.hidden.update(|hidden| { hidden.insert("3".into()); });
             first.plot.styles.update(|styles| { let mut style = plot::plot_data::SeriesStyle::for_id("3"); style.color = [10, 160, 240, 255]; style.width = 4.0; styles.insert("3".into(), style); });
-            first.drawing.update(|drawing| { drawing.insert(3, crate::line_draw::LineDraw { connection: crate::line_draw::Connection::Post, markers: true }); });
+            first.drawing.update(|drawing| { drawing.insert(3, plot::line_draw::LineDraw { connection: plot::line_draw::Connection::Post, markers: true }); });
             *built.borrow_mut() = Some((workbench, first, second));
             view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "page workbench") { row(class = "body") { PlotWorkspace(workbench = workbench) } } } }
         }).unwrap();
@@ -1478,7 +1500,10 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
         );
         let window = &harness.app().windows()[0];
         assert!(window.nodes_with_class("workspace-edge").is_empty());
-        assert!(!window.nodes_with_class("dock-drop-zone").is_empty());
+        assert!(
+            window.nodes_with_class("dock-drop-zone").is_empty(),
+            "Region guide must hide individual-pane arrows"
+        );
         let previews: Vec<_> = window
             .nodes_with_class("dock-preview-source")
             .iter()
@@ -1598,10 +1623,10 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
 #[test]
 fn dense_step_lines_and_markers_use_bounded_render_payloads_after_zoom() {
     use crate::{
-        line_draw::{Connection, LineDraw},
         plot_cursor::CursorPlotProps,
         state::{Line, Workbench},
     };
+    use plot::line_draw::{Connection, LineDraw};
     use zgui_ui_tokens::prelude::*;
     let saved = Rc::new(RefCell::new(None));
     let captured = Rc::clone(&saved);
@@ -1711,7 +1736,10 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
             Some((members.clone(), DropZone::Right))
         );
         let window = &harness.app().windows()[0];
-        assert!(!window.nodes_with_class("dock-drop-zone").is_empty());
+        assert!(
+            window.nodes_with_class("dock-drop-zone").is_empty(),
+            "Region guide must hide individual-pane arrows"
+        );
         assert!(window.nodes_with_class("workspace-edge").is_empty());
         assert_eq!(window.nodes_with_class("dock-group-active").len(), 1);
         let first_preview = harness.app().windows()[0]
@@ -1824,6 +1852,14 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
             (bounds.origin.x.0 + bounds.size.width.0 / 2.0) / scale,
             (bounds.origin.y.0 + bounds.size.height.0 / 2.0) / scale,
         ));
+        harness.deliver_to_first(pointer(PointerAction::Moved, -20.0, -20.0));
+        harness.settle(128);
+        assert!(
+            harness.app().windows()[0]
+                .nodes_with_class("dock-drop-zone")
+                .is_empty(),
+            "Outside workspace must hide docking arrows"
+        );
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
@@ -1839,8 +1875,10 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
             "dock-zone-right",
             "dock-zone-center",
         ] {
-            assert_eq!(window.nodes_with_class(class).len(), 2);
+            assert_eq!(window.nodes_with_class(class).len(), 1);
         }
+        let overlay = window.box_with_class("dock-drop-overlay").unwrap();
+        assert!(overlay.origin.x.0 >= original.origin.x.0);
         let predicted = window.box_with_class("dock-preview-source").unwrap();
         let neighbor = window.box_with_class(&format!("dock-preview-pane-{}", second.id));
         assert_eq!(
@@ -1941,9 +1979,370 @@ fn hidden_legend_hover_previews_on_top_without_changing_visibility_or_bounds() {
             .with_untracked(|lines| lines.iter().map(|line| line.id).collect::<Vec<_>>()),
         vec![1, 2]
     );
+    // Pointer capture during clicks must not clear hover and flash other lines.
+    for hidden in [false, true] {
+        for action in [PointerAction::Pressed, PointerAction::Released] {
+            harness.deliver_to_first(pointer(
+                action,
+                rect.origin.x.0 + 20.0,
+                rect.origin.y.0 + rect.size.height.0 / 2.0,
+            ));
+            harness.settle(128);
+            assert_eq!(
+                pane.plot.emphasized.get_untracked().as_deref(),
+                Some("1"),
+                "Hover lost on {action:?}"
+            );
+            assert_eq!(
+                widths(),
+                vec![2.5, 6.25],
+                "Click must retain dimming and preview"
+            );
+        }
+        assert_eq!(pane.plot.hidden.get_untracked().contains("1"), hidden);
+        assert_eq!(pane.plot.ranges.get_untracked(), bounds);
+    }
     harness.deliver_to_first(pointer(PointerAction::Moved, 800.0, 500.0));
     wait(&mut harness, &[2.5]);
     assert!(pane.plot.emphasized.get_untracked().is_none());
     assert!(pane.plot.hidden.get_untracked().contains("1"));
     assert_eq!(pane.plot.ranges.get_untracked(), bounds);
+}
+
+#[test]
+fn legend_toggles_keep_bounds_and_axis_menu_double_click_and_full_height_drag_work() {
+    use crate::{
+        state::{Line, Workbench},
+        workspace::PlotWorkspaceProps,
+    };
+    use zgui_ui_tokens::prelude::*;
+    let model = Rc::new(RefCell::new(None));
+    let built = Rc::clone(&model);
+    let handler = app().with_size(900.0, 600.0)
+        .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
+        .into_handler(move || {
+            let workbench = Workbench::new();
+            let pane = workbench.pane();
+            let data = |x, y| plot::time_series::SeriesData::new(vec![plot::PlotPoint { x, y }, plot::PlotPoint { x: x + 10.0, y: y + 10.0 }]).unwrap();
+            pane.lines.set(vec![Line { id: 1, source: "normal".into(), name: "normal".into(), data: data(0.0, 0.0), revision: 0 }, Line { id: 2, source: "outlier".into(), name: "outlier".into(), data: data(100.0, 200.0), revision: 0 }]);
+            *built.borrow_mut() = Some(pane);
+            view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "page workbench") { row(class = "body") { PlotWorkspace(workbench = workbench) } } } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(900.0),
+        DevicePx(600.0),
+    )));
+    harness.settle(256);
+    let pane = model.borrow().unwrap();
+    let fitted = pane.plot.ranges.get_untracked();
+    assert!(fitted.x.max >= 110.0 && fitted.y.max >= 210.0);
+    let click_at = |harness: &mut Harness<zgui::runtime::Runtime>, x, y| {
+        for action in [PointerAction::Pressed, PointerAction::Released] {
+            harness.deliver_to_first(pointer(action, x, y));
+        }
+        harness.settle(128);
+    };
+    let window = &harness.app().windows()[0];
+    let row = window.nodes_with_class("legend-drag-source")[1];
+    let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), row).unwrap();
+    let legend = (
+        rect.origin.x.0 + 20.0,
+        rect.origin.y.0 + rect.size.height.0 / 2.0,
+    );
+    click_at(&mut harness, legend.0, legend.1);
+    assert!(pane.plot.hidden.get_untracked().contains("2"));
+    assert_eq!(pane.plot.ranges.get_untracked(), fitted);
+    click_at(&mut harness, legend.0, legend.1);
+    assert!(!pane.plot.hidden.get_untracked().contains("2"));
+    assert_eq!(pane.plot.ranges.get_untracked(), fitted);
+    let graph = harness.app().windows()[0]
+        .box_with_class("cursor-plot")
+        .unwrap();
+    let open_menu = |harness: &mut Harness<zgui::runtime::Runtime>| {
+        let (x, y) = (
+            graph.origin.x.0 + graph.size.width.0 / 2.0,
+            graph.origin.y.0 + graph.size.height.0 / 2.0,
+        );
+        for action in [PointerAction::Pressed, PointerAction::Released] {
+            let mut event = pointer(action, x, y);
+            if let SurfaceEvent::Pointer { event, .. } = &mut event {
+                event.button = Some(zgui::vocab::PointerButton::Secondary);
+            }
+            harness.deliver_to_first(event);
+        }
+        harness.settle(128);
+        assert!(
+            harness.app().windows()[0]
+                .box_with_class("plot-fit-menu")
+                .is_some()
+        );
+    };
+    let zoom = plot::Ranges::new((2.0, 4.0), (50.0, 70.0));
+    pane.plot.set_view(zoom).unwrap();
+    harness.settle(128);
+    open_menu(&mut harness);
+    click_class(&mut harness, "plot-fit-x");
+    assert_eq!(
+        pane.plot.ranges.get_untracked(),
+        plot::Ranges {
+            x: fitted.x,
+            y: zoom.y
+        }
+    );
+    pane.plot.set_view(zoom).unwrap();
+    harness.settle(128);
+    open_menu(&mut harness);
+    click_class(&mut harness, "plot-fit-y");
+    assert_eq!(
+        pane.plot.ranges.get_untracked(),
+        plot::Ranges {
+            x: zoom.x,
+            y: (1.9, 4.1).into()
+        }
+    );
+    pane.plot.set_view(zoom).unwrap();
+    harness.settle(128);
+    open_menu(&mut harness);
+    click_class(&mut harness, "plot-line-settings");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("plot-editor-surface")
+            .is_some()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("plot-fit-menu")
+            .is_none()
+    );
+    assert_eq!(pane.plot.ranges.get_untracked(), zoom);
+    click_class(&mut harness, "settings-done");
+    let x_axis = (
+        graph.origin.x.0 + graph.size.width.0 / 2.0,
+        graph.origin.y.0 + graph.size.height.0 - 8.0,
+    );
+    click_at(&mut harness, x_axis.0, x_axis.1);
+    click_at(&mut harness, x_axis.0, x_axis.1);
+    assert_eq!(
+        pane.plot.ranges.get_untracked(),
+        plot::Ranges {
+            x: fitted.x,
+            y: zoom.y
+        }
+    );
+    pane.plot.set_view(zoom).unwrap();
+    harness.settle(128);
+    let y_axis = (
+        graph.origin.x.0 + 10.0,
+        graph.origin.y.0 + graph.size.height.0 * 0.4,
+    );
+    click_at(&mut harness, y_axis.0, y_axis.1);
+    click_at(&mut harness, y_axis.0, y_axis.1);
+    assert_eq!(
+        pane.plot.ranges.get_untracked(),
+        plot::Ranges {
+            x: zoom.x,
+            y: (1.9, 4.1).into()
+        }
+    );
+    pane.plot.set_view(zoom).unwrap();
+    harness.settle(128);
+    harness.deliver_to_first(pointer(PointerAction::Pressed, y_axis.0, y_axis.1));
+    harness.deliver_to_first(pointer(PointerAction::Moved, y_axis.0, y_axis.1 - 30.0));
+    harness.deliver_to_first(pointer(PointerAction::Released, y_axis.0, y_axis.1 - 30.0));
+    harness.settle(128);
+    let dragged = pane.plot.ranges.get_untracked();
+    assert_eq!(dragged.x, zoom.x);
+    assert_eq!(dragged.y.min, zoom.y.min);
+    assert!(
+        dragged.y.max > zoom.y.max,
+        "Full-height Y band must drag outside old corner: {dragged:?}"
+    );
+    // Removing a visible outlier must not shrink bounds either.
+    pane.remove_line(2);
+    harness.settle(128);
+    assert_eq!(pane.plot.ranges.get_untracked(), dragged);
+}
+
+#[test]
+fn own_tab_group_keeps_docking_guides_visible_over_center() {
+    use crate::{state::Workbench, workspace::PlotWorkspaceProps};
+    use zgui_ui_tokens::prelude::*;
+    let saved = Rc::new(RefCell::new(None));
+    let captured = Rc::clone(&saved);
+    let handler = app()
+        .with_size(1200.0, 700.0)
+        .with_renderer(Box::new(|_, target| {
+            let mut renderer = CaptureRenderer::new();
+            renderer.configure(target);
+            Ok(Box::new(renderer))
+        }))
+        .with_stylesheet(format!(
+            "{}\n{}\n{}\n{}",
+            plot::zgui_surface::stylesheet(),
+            plot::zgui_time_series::stylesheet(),
+            plot::zgui_workspace::stylesheet(),
+            include_str!("style.css")
+        ))
+        .into_handler(move || {
+            let workbench = Workbench::new();
+            let first = workbench.pane();
+            let second = workbench.add_plot(first.id, false, true);
+            workbench.add_plot(second.id, false, false);
+            *captured.borrow_mut() = Some((workbench, first, second));
+            view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "page workbench") {
+                row(class = "body") { PlotWorkspace(workbench = workbench) }
+            } } }
+        })
+        .unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.0),
+        DevicePx(700.0),
+    )));
+    harness.settle(256);
+    let (workbench, first, second) = saved.borrow().unwrap();
+    let original = workbench.layout.get_untracked();
+    let bounds = second.dock.node.window_bounds().unwrap();
+    let scale = second.dock.node.scale();
+    let center = (
+        (bounds.origin.x.0 + bounds.size.width.0 / 2.0) / scale,
+        (bounds.origin.y.0 + bounds.size.height.0 / 2.0) / scale,
+    );
+    for source in [first, second] {
+        let tab = workbench
+            .dock
+            .nodes
+            .with_value(|nodes| nodes[&(second.id, source.id)]);
+        let bounds = tab.window_bounds().unwrap();
+        harness.deliver_to_first(pointer(
+            PointerAction::Pressed,
+            (bounds.origin.x.0 + bounds.size.width.0 / 2.0) / tab.scale(),
+            (bounds.origin.y.0 + bounds.size.height.0 / 2.0) / tab.scale(),
+        ));
+        harness.deliver_to_first(pointer(PointerAction::Moved, center.0, center.1));
+        harness.settle(128);
+        assert!(
+            workbench.dock.target.get_untracked().is_none(),
+            "Self-center remains no-op drop"
+        );
+        let window = &harness.app().windows()[0];
+        for class in [
+            "dock-zone-top",
+            "dock-zone-bottom",
+            "dock-zone-left",
+            "dock-zone-right",
+            "dock-zone-center",
+        ] {
+            assert_eq!(
+                window.nodes_with_class(class).len(),
+                1,
+                "Own tab group must retain {class}"
+            );
+        }
+        assert!(window.nodes_with_class("dock-layout-preview").is_empty());
+        harness.deliver_to_first(pointer(PointerAction::Moved, -20.0, -20.0));
+        harness.settle(128);
+        assert!(
+            harness.app().windows()[0]
+                .nodes_with_class("dock-drop-overlay")
+                .is_empty()
+        );
+        harness.deliver_to_first(pointer(PointerAction::Moved, center.0, center.1));
+        harness.settle(128);
+        assert_eq!(
+            harness.app().windows()[0]
+                .nodes_with_class("dock-drop-overlay")
+                .len(),
+            1
+        );
+        harness.deliver_to_first(pointer(PointerAction::Released, center.0, center.1));
+        std::thread::sleep(Duration::from_millis(180));
+        harness.advance(Duration::from_millis(500));
+        harness.settle(256);
+        assert_eq!(workbench.layout.get_untracked(), original);
+        assert!(
+            harness.app().windows()[0]
+                .nodes_with_class("dock-drop-overlay")
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn line_settings_keep_geometry_fixed_during_selection_changes() {
+    use crate::{
+        editor::EditorProps,
+        state::{Line, Workbench},
+    };
+    use zgui_ui_tokens::prelude::*;
+    let handler = app().with_size(900.0, 700.0)
+        .with_renderer(Box::new(|_, target| {
+            let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer))
+        }))
+        .with_stylesheet(format!("{}\n.test-editor-root {{width:680px;}}", include_str!("style.css")))
+        .into_handler(|| {
+            let workbench = Workbench::new();
+            let pane = workbench.pane();
+            let data = plot::time_series::SeriesData::new(vec![]).unwrap();
+            pane.lines.set((1..=2).map(|id| Line { id, source: id.to_string(), name: format!("Line {id}"), data: data.clone(), revision: 0 }).collect());
+            workbench.select(pane.id, 1);
+            pane.drawing.update(|drawing| { drawing.entry(2).or_default().markers = true; });
+            view! { ThemeProvider(scheme = ColorScheme::Dark) {
+                column(class = "plot-settings-surface test-editor-root") { Editor(workbench = workbench, pane = pane) }
+            } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(900.0),
+        DevicePx(700.0),
+    )));
+    harness.settle(256);
+    let classes = [
+        "editor",
+        "appearance-row",
+        "color-picker",
+        "color-square",
+        "appearance-controls",
+        "line-width",
+        "line-radius",
+        "legend-add-filters",
+    ];
+    let before: Vec<_> = classes
+        .iter()
+        .map(|class| harness.app().windows()[0].box_with_class(class).unwrap())
+        .collect();
+    let rows = harness.app().windows()[0].nodes_with_class("line-button");
+    let rect =
+        zgui::view::ViewHost::window_box(harness.app().windows()[0].host().as_ref(), rows[1])
+            .unwrap();
+    let point = (
+        rect.origin.x.0 + rect.size.width.0 / 2.0,
+        rect.origin.y.0 + rect.size.height.0 / 2.0,
+    );
+    assert!(
+        rect.size.height.0 <= 26.0,
+        "Rows should stay compact: {rect:?}"
+    );
+    for modifiers in [Modifiers::CONTROL, Modifiers::NONE, Modifiers::CONTROL] {
+        for action in [PointerAction::Pressed, PointerAction::Released] {
+            let mut event = pointer(action, point.0, point.1);
+            if let SurfaceEvent::Pointer {
+                modifiers: held, ..
+            } = &mut event
+            {
+                *held = modifiers;
+            }
+            harness.deliver_to_first(event);
+        }
+        harness.settle(128);
+        for (class, before) in classes.iter().zip(&before) {
+            assert_eq!(
+                harness.app().windows()[0].box_with_class(class).unwrap(),
+                *before,
+                "Selection must not move {class}"
+            );
+        }
+    }
 }

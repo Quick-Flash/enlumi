@@ -37,13 +37,26 @@ pub struct Pane {
     pub links: RwSignal<LinkOptions, LocalStorage>,
     pub lines: RwSignal<Vec<Line>, LocalStorage>,
     pub selected: RwSignal<Option<u64>, LocalStorage>,
-    pub drawing: RwSignal<BTreeMap<u64, crate::line_draw::LineDraw>, LocalStorage>,
+    pub drawing: RwSignal<BTreeMap<u64, plot::line_draw::LineDraw>, LocalStorage>,
     pub plot: TimeSeriesState,
     pub series: Signal<TimeSeriesSet, LocalStorage>,
+    pub view_lines: Signal<Vec<plot::zgui_series::SeriesLine>, LocalStorage>,
 }
 impl Pane {
     fn new(id: u64) -> Self {
         let lines = RwSignal::new_local(Vec::<Line>::new());
+        let view_lines = Signal::derive_local(move || {
+            lines
+                .get()
+                .into_iter()
+                .map(|line| plot::zgui_series::SeriesLine {
+                    id: line.id,
+                    name: line.name,
+                    data: line.data,
+                    revision: line.revision,
+                })
+                .collect()
+        });
         let series = Signal::derive_local(move || {
             TimeSeriesSet::new(
                 lines
@@ -65,39 +78,35 @@ impl Pane {
                 pointer: true,
             }),
             lines,
+            view_lines,
             selected: RwSignal::new_local(None),
             drawing: RwSignal::new_local(BTreeMap::new()),
             plot: TimeSeriesState::default(),
             series,
         }
     }
+    pub fn display(self) -> plot::zgui_series::SeriesPane {
+        plot::zgui_series::SeriesPane {
+            id: self.id,
+            lines: self.view_lines,
+            selected: self.selected,
+            drawing: self.drawing,
+            plot: self.plot,
+            series: self.series,
+            links: self.links,
+        }
+    }
+    #[cfg(test)]
     pub fn selection(self) -> Option<Line> {
         let id = self.selected.get_untracked()?;
         self.lines
             .with_untracked(|lines| lines.iter().find(|line| line.id == id).cloned())
     }
     pub fn remove_line(self, id: u64) {
+        self.plot.auto_fit.set(false);
         self.lines
             .update(|lines| lines.retain(|line| line.id != id));
-        self.plot.hidden.update(|hidden| {
-            hidden.remove(&id.to_string());
-        });
-        self.plot.styles.update(|styles| {
-            styles.remove(&id.to_string());
-        });
-        self.drawing.update(|drawing| {
-            drawing.remove(&id);
-        });
-        self.plot.hover.set(None);
-        if self.plot.emphasized.get_untracked().as_deref() == Some(&id.to_string()) {
-            self.plot.emphasized.set(None);
-        }
-        if self.selected.get_untracked() == Some(id) {
-            self.selected.set(
-                self.lines
-                    .with_untracked(|lines| lines.first().map(|line| line.id)),
-            );
-        }
+        self.display().remove_appearance(id);
     }
 }
 
@@ -291,6 +300,7 @@ impl Workbench {
                 && let Some(data) = field.data
             {
                 let id = self.id();
+                self.assign_line_color(pane, id);
                 pane.lines.update(|lines| {
                     lines.push(Line {
                         id,
@@ -301,6 +311,7 @@ impl Workbench {
                     })
                 });
                 pane.selected.set(Some(id));
+                pane.fit_axes(plot::interaction::Axes::BOTH);
             }
             return;
         }
@@ -330,6 +341,7 @@ impl Workbench {
                         cache.insert(source.clone(), data.clone());
                     });
                     let id = self.id();
+                    self.assign_line_color(pane, id);
                     pane.lines.update(|lines| {
                         lines.push(Line {
                             id,
@@ -341,33 +353,12 @@ impl Workbench {
                     });
                     // Do not switch active pane when work finishes after user selected another pane.
                     pane.selected.set(Some(id));
+                    pane.fit_axes(plot::interaction::Axes::BOTH);
                     self.status.set(format!("Added {source}"));
                 }
                 Err(error) => self.status.set(error),
             }
         });
-    }
-    pub fn remove(self) {
-        let pane = self.pane();
-        if let Some(id) = pane.selected.get_untracked() {
-            pane.remove_line(id);
-        }
-    }
-    pub fn move_line(self) {
-        let pane = self.pane();
-        let Some(line) = pane.selection() else {
-            return;
-        };
-        let Some(target) = self.panes.with_untracked(|panes| {
-            if panes.len() < 2 {
-                return None;
-            }
-            let index = panes.iter().position(|other| other.id == pane.id)?;
-            panes.get((index + 1) % panes.len()).copied()
-        }) else {
-            return;
-        };
-        self.place_line(pane.id, line.id, target.id, None);
     }
     pub(crate) fn task(self, future: impl Future<Output = ()> + 'static) {
         self.owner.with_value(|owner| {
@@ -536,6 +527,6 @@ impl Workbench {
     pub fn equalize_panels(self) {
         self.finish_dock();
         self.maximized.set(None);
-        self.layout.update(crate::dock_layout::equalize);
+        self.layout.update(Layout::equalize);
     }
 }

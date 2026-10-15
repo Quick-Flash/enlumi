@@ -1,7 +1,6 @@
 use crate::{
     plot_actions::PlotActionsProps,
     plot_cursor::CursorPlotProps,
-    plot_links::PlotLinksMenuProps,
     state::{Pane, Workbench},
 };
 use plot::{

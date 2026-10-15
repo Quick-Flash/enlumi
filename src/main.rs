@@ -1,10 +1,9 @@
 #![recursion_limit = "256"]
 mod app;
 mod browser;
-mod color_picker;
 mod derived;
 mod derived_state;
-mod dock_layout;
+#[cfg(test)]
 mod editor;
 mod field_row;
 mod field_selection;
@@ -15,20 +14,13 @@ mod filter_source_row;
 mod filter_sources;
 mod filter_workspace;
 mod fps;
-mod legend;
 mod legend_drag;
-mod legend_entry;
-mod line_draw;
-mod line_style;
-mod link_controls;
+mod line_colors;
 mod log;
 mod panel;
 mod plot_actions;
+mod plot_bounds;
 mod plot_cursor;
-mod plot_editor;
-mod plot_lines;
-mod plot_links;
-mod plot_samples;
 mod startup;
 mod state;
 mod workspace;

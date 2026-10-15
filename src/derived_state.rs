@@ -5,6 +5,15 @@ use crate::{
 use zgui::prelude::*;
 
 impl Workbench {
+    pub fn filter_legend(self, pane: crate::state::Pane) {
+        let sources = pane
+            .lines
+            .with_untracked(|lines| lines.iter().map(|line| line.source.clone()).collect());
+        self.edit_filter(None, None);
+        if let Err(error) = self.accept_filter_sources(sources) {
+            self.filter_error.set(error);
+        }
+    }
     pub fn field_name(self, source: &str) -> String {
         self.derived.with(|fields| {
             fields

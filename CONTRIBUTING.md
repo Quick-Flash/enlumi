@@ -5,7 +5,7 @@ reports are welcome. Open an issue before large features or dependency migration
 
 ## Setup and checks
 
-Follow [README setup](README.md#build-and-run). Dependencies are public and pinned;
+Follow [README setup](README.md#build-and-run). Dependencies are public; current temporary plot checkout is described in README. Zgui is pinned;
 rustup selects the repository's nightly. Commit `Cargo.lock` with dependency changes.
 
 ```sh

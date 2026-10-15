@@ -38,6 +38,7 @@ pub fn WorkbenchApp(initial_path: Option<PathBuf>) -> impl IntoView {
                         disabled = Signal::derive_local(move || !matches!(workbench.layout.get(), plot::workspace::layout::Layout::Split { .. })),
                         on:click = move |_| workbench.equalize_panels()) { "Equalize panels" }
                     text(class = "file-name") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Enlumi".into(), |log| log.name.clone()))}}
+                    text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
                     Fps()
                 }
                 row(class = "body") {
@@ -45,7 +46,6 @@ pub fn WorkbenchApp(initial_path: Option<PathBuf>) -> impl IntoView {
                     column(class = "plot-page", class:hidden = move || workbench.filters_open.get()) { PlotWorkspace(workbench = workbench) }
                     if move || workbench.filters_open.get() { FilterWorkspace(workbench = workbench) }
                 }
-                text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
             }
         }
     }

@@ -1,5 +1,7 @@
 # Enlumi
 
+**Enlumi** comes from Esperanto, meaning **to enlighten**.
+
 A native desktop viewer for PX4 ULog (`.ulg`) flight logs. Browse fields, drag them
 onto docked plots, and build named filter chains without writing scripts.
 
@@ -7,8 +9,10 @@ Enlumi is an early-stage project inspired by
 [PlotJuggler](https://github.com/PlotJuggler/PlotJuggler). It uses
 [Zgui](https://github.com/zortax/zgui),
 [zgui-plot](https://github.com/Quick-Flash/zgui-plot), and upstream
-[px4-ulog](https://crates.io/crates/px4-ulog). Git dependencies are pinned;
-no sibling repositories or private checkouts are required.
+[px4-ulog](https://crates.io/crates/px4-ulog). Zgui dependencies are pinned.
+
+Plotting code is fetched from a pinned public Git revision of `zgui-plot`.
+No sibling checkout is required.
 
 ## Features
 
@@ -17,7 +21,8 @@ no sibling repositories or private checkouts are required.
 - Split, tab, duplicate, resize, and equalize docks; dock beside groups of panels.
 - Independent links for pointers and X/Y bounds.
 - Movable legend entries and hover previews of hidden lines.
-- Per-line colors, widths, markers, and pre/post step connections.
+- Contrasting automatic colors across panels; per-line colors, widths, markers, and step connections.
+- Fixed bounds on legend toggles; independent X/Y fit from axis double-click or right-click menu.
 - Named low-pass, high-pass, and gain/offset fields, shared batch settings,
   and derived fields as inputs to later filter stages.
 - Bounded column rendering; filters and cursor lookup use full samples.

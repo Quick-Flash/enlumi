@@ -514,3 +514,80 @@ fn invalid_batch_is_atomic_and_edit_source_drop_rejects_cycles() {
     );
     assert_eq!(workbench.filter_inputs.get_untracked()[0].source, before);
 }
+
+#[test]
+fn legend_filter_handoff_starts_new_batch_with_raw_and_derived_sources() {
+    let window = Window::open();
+    let (workbench, source) = loaded(&window);
+    let derived = window
+        .scope
+        .with(|| {
+            workbench.upsert_filter(
+                None,
+                "Stage one".into(),
+                source.clone(),
+                FilterSpec::LowPass(5.0),
+            )
+        })
+        .unwrap();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    window.scope.with(|| workbench.add(source.clone()));
+    settle(&window, || {
+        workbench
+            .pane()
+            .lines
+            .with_untracked(|lines| lines.len() == 1)
+    });
+    window.scope.with(|| workbench.add(derived::key(derived)));
+    let pane = workbench.pane();
+    assert_eq!(pane.lines.get_untracked().len(), 2);
+    workbench.edit_filter(Some(derived), None);
+    let closed = window.scope.with(|| RwSignal::new_local(false));
+    use crate::editor::EditorProps;
+    use zgui_ui_tokens::prelude::*;
+    let mut built = window.scope.with(|| view! { ThemeProvider(scheme = ColorScheme::Dark) {
+        Editor(workbench = workbench, pane = pane, on_filters = UnsyncCallback::new(move |()| closed.set(true)))
+    } }.into_view().build(&mut window.cx.cx()));
+    built.mount(&window.dom_handle, window.root, None);
+    window.frame();
+    let mut pending = vec![window.root];
+    let button = loop {
+        let node = pending.pop().expect("Add filters button");
+        if window
+            .dom
+            .tree()
+            .classes(node)
+            .contains(&zgui::view::ClassName::new("legend-add-filters"))
+        {
+            break node;
+        }
+        pending.extend(window.dom.tree().children(node));
+    };
+    window.dispatcher().key(
+        button,
+        zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter),
+    );
+    window.frame();
+    assert!(
+        closed.get_untracked(),
+        "Filter action must close line settings"
+    );
+    assert!(workbench.filters_open.get_untracked());
+    assert!(workbench.filter_edit.get_untracked().is_none());
+    assert!(workbench.filter_outputs.get_untracked().is_empty());
+    assert!(workbench.filter_error.get_untracked().is_empty());
+    let inputs = workbench.filter_inputs.get_untracked();
+    assert_eq!(
+        inputs
+            .iter()
+            .map(|input| input.source.clone())
+            .collect::<Vec<_>>(),
+        [source, derived::key(derived)]
+    );
+    assert_eq!(inputs[1].name, "Stage one filtered");
+    assert_eq!(
+        workbench.derived.get_untracked().len(),
+        1,
+        "Opening editor must not apply filter yet"
+    );
+}
