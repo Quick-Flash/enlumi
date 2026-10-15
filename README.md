@@ -12,7 +12,7 @@ Enlumi is an early-stage project inspired by
 [px4-ulog](https://crates.io/crates/px4-ulog). Zgui dependencies are pinned.
 
 Plotting code is fetched from a pinned public Git revision of `zgui-plot`.
-No sibling checkout is required.
+Zgui temporarily pins a public text-selection fork; see [Contributing](CONTRIBUTING.md#zgui-fork-development).
 
 ## Features
 

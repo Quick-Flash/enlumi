@@ -5,7 +5,7 @@ reports are welcome. Open an issue before large features or dependency migration
 
 ## Setup and checks
 
-Follow [README setup](README.md#build-and-run). Dependencies are public; current temporary plot checkout is described in README. Zgui is pinned;
+Follow [README setup](README.md#build-and-run). Dependencies are public. Zgui is pinned;
 rustup selects the repository's nightly. Commit `Cargo.lock` with dependency changes.
 
 ```sh
@@ -31,6 +31,20 @@ powershell -NoProfile -File scripts/check-startup.ps1
 It builds release, opens its own instance, verifies presented GPU frames, and
 closes that instance. Close existing release instances before rebuilding on
 Windows: running executables can prevent Cargo from replacing them.
+
+## Zgui fork development
+
+Zgui dependencies and testkits pin a public commit from
+[Quick-Flash/zgui, branch `text-multiclick-selection`](https://github.com/Quick-Flash/zgui/tree/text-multiclick-selection)
+until upstream merges text-selection support. `Cargo.toml` records the full
+revision; Enlumi and `zgui-plot` must use the same commit. No sibling checkout is
+required.
+
+Both Enlumi and `zgui-plot` now point directly to the same fork revision. After
+upstream merges text-selection support, switch every Zgui dependency and testkit
+in both repositories to one upstream revision containing the merge. Push the
+plot dependency update, then update Enlumi's plot pin. Commit lockfiles with
+those changes.
 
 ## Pull requests
 
