@@ -21,6 +21,7 @@ px4-ulog = "0.6.1"
 rfd = "0.17.2"
 tempfile = "3.27.0"
 syn = { version = "2.0.119", features = ["full"] }
+proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 wasmtime = { version = "49", default-features = false, features = ["cranelift", "runtime", "std"] }
 zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
 zgui-editor = { git = "https://github.com/zortax/zgui-editor", rev = "1f7aaec6e4e2dfaee4d26b049a719d9e88d16f8f", features = ["lang-rust"] }

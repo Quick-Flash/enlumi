@@ -1158,3 +1158,62 @@ pub fn filter(time: &[f64], inputs: &[&[f64]], outputs: &mut [&mut [f64]], _stat
     assert_eq!(workbench.derived.get_untracked().len(), 3);
     assert!(!workbench.script_busy.get_untracked());
 }
+
+#[test]
+fn new_builtins_save_and_restore_parameters_when_editing() {
+    let window = Window::open();
+    let (workbench, source) = loaded(&window);
+    for (kind, expected) in [
+        ("low", FilterSpec::ZeroPhaseLowPass(2.0)),
+        ("high", FilterSpec::ZeroPhaseHighPass(2.0)),
+        ("average", FilterSpec::MovingAverage(7)),
+        ("derivative", FilterSpec::Derivative),
+        ("integral", FilterSpec::Integral(3.0)),
+    ] {
+        workbench.finish_filter_editing();
+        workbench.set_filter_kind(kind.into());
+        workbench.filter_zero_phase.set(true);
+        workbench.filter_cutoff.set("2".into());
+        workbench.filter_window.set("7".into());
+        workbench.filter_initial.set("3".into());
+        workbench
+            .accept_filter_sources(vec![source.clone()])
+            .unwrap();
+        workbench
+            .filter_inputs
+            .update(|inputs| inputs[0].name = format!("Output {kind}"));
+        window.scope.with(|| workbench.save_filter());
+        settle(&window, || !workbench.derived_busy.get_untracked());
+        assert!(
+            workbench.filter_error.get_untracked().is_empty(),
+            "{}",
+            workbench.filter_error.get_untracked()
+        );
+        let id = workbench.filter_outputs.get_untracked()[0];
+        assert_eq!(
+            workbench
+                .derived
+                .get_untracked()
+                .iter()
+                .find(|field| field.id == id)
+                .unwrap()
+                .filter,
+            expected
+        );
+        workbench.filter_zero_phase.set(false);
+        workbench.filter_window.set("1".into());
+        workbench.filter_initial.set("0".into());
+        workbench.edit_filter(Some(id), None);
+        assert_eq!(workbench.filter_kind.get_untracked(), kind);
+        match expected {
+            FilterSpec::ZeroPhaseLowPass(_) | FilterSpec::ZeroPhaseHighPass(_) => {
+                assert!(workbench.filter_zero_phase.get_untracked())
+            }
+            FilterSpec::MovingAverage(_) => {
+                assert_eq!(workbench.filter_window.get_untracked(), "7")
+            }
+            FilterSpec::Integral(_) => assert_eq!(workbench.filter_initial.get_untracked(), "3"),
+            _ => {}
+        }
+    }
+}

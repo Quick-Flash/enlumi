@@ -11,7 +11,8 @@ change or remove that dependent field first. Changes publish together after a su
 
 **Check** compiles without running or saving; no log is required. **Cancel** stops
 pending compilation or guest execution. Compilation errors show locations in
-`filter.rs`, matching editor source lines. Failed runs leave saved fields intact.
+`filter.rs`, matching editor source lines. Syntax preflight also shows line/column,
+source context, and a caret. Failed runs leave saved fields intact.
 Changing inputs/names/editor mode during a run discards its result.
 Drag divider above diagnostics to give errors more or less space. Divider also
 supports Up/Down keys and shows a resize cursor on hover. Diagnostics always keep

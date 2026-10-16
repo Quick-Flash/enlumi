@@ -1,20 +1,25 @@
 use crate::action_button::ActionButtonProps;
+use crate::preferences::ThemePreference;
 use crate::{
     browser::BrowserProps, filter_workspace::FilterWorkspaceProps, fps::FpsProps, state::Workbench,
     workspace::PlotWorkspaceProps,
 };
+use crate::{theme::AppThemeProps, theme_picker::ThemePickerProps};
 use std::path::PathBuf;
 use zgui::prelude::*;
-use zgui_ui_tokens::prelude::*;
 
 #[component]
-pub fn WorkbenchApp(initial_path: Option<PathBuf>) -> impl IntoView {
+pub fn WorkbenchApp(
+    initial_path: Option<PathBuf>,
+    #[prop(default = ThemePreference::user())] preferences: ThemePreference,
+) -> impl IntoView {
     let workbench = Workbench::new();
     if let Some(path) = initial_path {
         workbench.open(path);
     }
+    let palette = RwSignal::new_local(preferences.load());
     view! {
-        ThemeProvider(scheme = ColorScheme::Dark, dark = Theme::dark().with_css(include_str!("theme.css"))) {
+        AppTheme(palette = palette) {
             column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
                 on:key_down:capture = move |event| {
                     if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && workbench.filter_input_ui.drag.get_untracked().is_some() {
@@ -42,6 +47,7 @@ pub fn WorkbenchApp(initial_path: Option<PathBuf>) -> impl IntoView {
                         on:click = move |_| workbench.equalize_panels()) { "Equalize panels" }
                     text(class = "file-name") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Enlumi".into(), |log| log.name.clone()))}}
                     text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
+                    ThemePicker(palette = palette, preferences = preferences.clone())
                     Fps()
                 }
                 row(class = "body") {

@@ -17,7 +17,7 @@ pub fn FilterLibraryCard(workbench: Workbench, id: u64) -> impl IntoView {
                 on:click = move |_| workbench.toggle_filter_editing(id)) {
                 row(class = "derived-card-main") {
                     text(class = "derived-library-name") {{move || current.get().map_or_else(String::new, |field| field.name)}}
-                    text(class = "derived-filter-badge") {{move || current.get().map_or("", |field| match field.filter { FilterSpec::LowPass(_) => "LP", FilterSpec::HighPass(_) => "HP", FilterSpec::Affine {..} => "G/O", FilterSpec::Magnitude => "MAG", FilterSpec::Quaternion(..) => "RPY", FilterSpec::Rust(..) => "RUST" })}}
+                    text(class = "derived-filter-badge") {{move || current.get().map_or("", |field| match field.filter { FilterSpec::LowPass(_) => "LP", FilterSpec::HighPass(_) => "HP", FilterSpec::ZeroPhaseLowPass(_) => "LP0", FilterSpec::ZeroPhaseHighPass(_) => "HP0", FilterSpec::MovingAverage(_) => "AVG", FilterSpec::Derivative => "d/dt", FilterSpec::Integral(_) => "INT", FilterSpec::Affine {..} => "G/O", FilterSpec::Magnitude => "MAG", FilterSpec::Quaternion(..) => "RPY", FilterSpec::Rust(..) => "RUST" })}}
                 }
                 text(class = "derived-library-detail") {{move || current.get().map_or_else(String::new, |field| format!("{} \u{00b7} {} inputs", field.filter.label(), field.sources.len()))}}
             }

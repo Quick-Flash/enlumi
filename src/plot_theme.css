@@ -1,0 +1,27 @@
+/* App-owned adapter for upstream plot chrome; series colors stay user-owned. */
+.page .workbench-plot { background: var(--app-background); border-color: var(--app-border); }
+.page .plot-strip { background: var(--app-surface); }
+.page .plot-tabs .plot-tab { background: var(--app-control); color: var(--app-muted); border-color: var(--app-border); }
+.page .plot-tabs .plot-tab:hover { background: var(--app-hover); color: var(--app-foreground); border-color: var(--app-accent); }
+.page .plot-tabs .plot-tab-active { background: var(--app-background); color: var(--app-foreground); border-color: var(--app-accent); }
+.page .plot-strip .plot-links-trigger { background: var(--app-control); color: var(--app-foreground); border-color: var(--app-border-strong); }
+.page .plot-strip .plot-links-trigger.links-active, .page .plot-strip .plot-links-trigger.links-open { background: var(--app-selected); border-color: var(--app-accent); }
+.page .plot-strip .plot-links-trigger:hover { background: var(--app-hover); }
+.plot-links-surface.plot-links-surface, .plot-settings-surface.plot-settings-surface { background: var(--app-surface); color: var(--app-foreground); border-color: var(--app-border-strong); }
+.plot-links-surface .zui-menu__item { color: var(--app-foreground); }
+.plot-links-surface .zui-menu__item[data-state="checked"] { background: var(--app-selected); }
+.plot-links-surface .zui-menu__item:hover, .plot-links-surface .zui-menu__item:focus { background: var(--app-hover); }
+.plot-links-surface .zui-menu__indicator { background: var(--app-inset); border-color: var(--app-border-strong); color: var(--app-accent-text); }
+.plot-links-surface .link-option[data-state="checked"] .zui-menu__indicator { background: var(--app-selected); border-color: var(--app-accent); }
+.workbench-legend.workbench-legend { background: var(--app-inset); border-color: var(--app-border-strong); }
+.snapped-cursor-values.snapped-cursor-values { color: var(--app-foreground); }
+.plot-settings-surface .zui-button[data-variant] { background: var(--app-control); color: var(--app-foreground); border-color: var(--app-border-strong); }
+.plot-settings-surface .zui-button[data-variant]:hover { background: var(--app-hover); border-color: var(--app-accent); }
+.plot-settings-surface .zui-button.chosen[data-variant] { background: var(--app-selected); border-color: var(--app-accent); }
+.plot-settings-surface .line-style { border-color: var(--app-border); }
+.plot-settings-surface .line-button:hover { outline-color: var(--app-accent); }
+.plot-settings-surface .line-button:focus-visible { outline-color: var(--app-focus); }
+
+.page .plot-tabs .plot-tab { border-radius: var(--app-radius) var(--app-radius) 0 0; }
+.plot-links-surface.plot-links-surface, .plot-settings-surface.plot-settings-surface, .workbench-legend.workbench-legend { border-radius: var(--app-radius); }
+.plot-links-surface .zui-menu__item, .plot-links-surface .zui-menu__indicator { border-radius: var(--app-radius-sm); }

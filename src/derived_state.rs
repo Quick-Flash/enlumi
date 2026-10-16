@@ -113,9 +113,19 @@ impl Workbench {
                     .collect(),
             );
             match &field.filter {
-                FilterSpec::LowPass(hz) | FilterSpec::HighPass(hz) => {
+                FilterSpec::LowPass(hz)
+                | FilterSpec::HighPass(hz)
+                | FilterSpec::ZeroPhaseLowPass(hz)
+                | FilterSpec::ZeroPhaseHighPass(hz) => {
+                    self.filter_zero_phase.set(matches!(
+                        field.filter,
+                        FilterSpec::ZeroPhaseLowPass(_) | FilterSpec::ZeroPhaseHighPass(_)
+                    ));
                     self.filter_kind.set(
-                        if matches!(field.filter, FilterSpec::LowPass(_)) {
+                        if matches!(
+                            field.filter,
+                            FilterSpec::LowPass(_) | FilterSpec::ZeroPhaseLowPass(_)
+                        ) {
                             "low"
                         } else {
                             "high"
@@ -184,6 +194,17 @@ impl Workbench {
                             }
                         }
                     });
+                }
+                FilterSpec::MovingAverage(window) => {
+                    self.filter_kind.set("average".into());
+                    self.filter_window.set(window.to_string());
+                }
+                FilterSpec::Derivative => {
+                    self.filter_kind.set("derivative".into());
+                }
+                FilterSpec::Integral(initial) => {
+                    self.filter_kind.set("integral".into());
+                    self.filter_initial.set(initial.to_string());
                 }
                 FilterSpec::Affine { gain, offset } => {
                     self.filter_kind.set("affine".into());
@@ -260,12 +281,33 @@ impl Workbench {
                     .map_err(|_| "Filter parameters must be numbers".to_owned())
             };
             let spec = match self.filter_kind.get_untracked().as_str() {
-                "high" => parse(self.filter_cutoff.get_untracked()).map(FilterSpec::HighPass),
+                "high" => parse(self.filter_cutoff.get_untracked()).map(|hz| {
+                    if self.filter_zero_phase.get_untracked() {
+                        FilterSpec::ZeroPhaseHighPass(hz)
+                    } else {
+                        FilterSpec::HighPass(hz)
+                    }
+                }),
+                "average" => self
+                    .filter_window
+                    .get_untracked()
+                    .trim()
+                    .parse::<usize>()
+                    .map(FilterSpec::MovingAverage)
+                    .map_err(|_| "Window must be a whole number of samples".into()),
+                "derivative" => Ok(FilterSpec::Derivative),
+                "integral" => parse(self.filter_initial.get_untracked()).map(FilterSpec::Integral),
                 "affine" => parse(self.filter_gain.get_untracked()).and_then(|gain| {
                     parse(self.filter_offset.get_untracked())
                         .map(|offset| FilterSpec::Affine { gain, offset })
                 }),
-                _ => parse(self.filter_cutoff.get_untracked()).map(FilterSpec::LowPass),
+                _ => parse(self.filter_cutoff.get_untracked()).map(|hz| {
+                    if self.filter_zero_phase.get_untracked() {
+                        FilterSpec::ZeroPhaseLowPass(hz)
+                    } else {
+                        FilterSpec::LowPass(hz)
+                    }
+                }),
             };
             spec.and_then(|spec| {
                 let inputs = self.filter_inputs.get_untracked();

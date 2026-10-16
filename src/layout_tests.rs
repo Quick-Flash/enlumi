@@ -24,6 +24,7 @@ struct Counts {
     seen_dots: bool,
     line_strokes: Vec<f32>,
     painted_boxes: Vec<([f32; 4], String)>,
+    painted_radii: Vec<([f32; 4], [f32; 8])>,
 }
 struct Capture {
     renderer: CaptureRenderer,
@@ -70,6 +71,7 @@ impl Renderer for Capture {
         );
         // Render deltas contain changed quads; preserve unchanged button paints.
         let mut painted_boxes = std::mem::take(&mut self.counts.borrow_mut().painted_boxes);
+        let mut painted_radii = std::mem::take(&mut self.counts.borrow_mut().painted_radii);
         for quad in &scene.primitives.quads {
             if let Some(color) = quad
                 .fill
@@ -79,6 +81,8 @@ impl Renderer for Capture {
             {
                 painted_boxes.retain(|(bounds, _)| *bounds != quad.bounds);
                 painted_boxes.push((quad.bounds, format!("{color:?}")));
+                painted_radii.retain(|(bounds, _)| *bounds != quad.bounds);
+                painted_radii.push((quad.bounds, quad.radii));
             }
         }
         *self.counts.borrow_mut() = Counts {
@@ -88,6 +92,7 @@ impl Renderer for Capture {
             seen_dots,
             line_strokes: Vec::new(),
             painted_boxes,
+            painted_radii,
             glyphs: scene.primitives.mono_sprites.len() + scene.primitives.subpixel_sprites.len(),
         };
         self.renderer.draw(scene, damage);
@@ -238,7 +243,7 @@ fn compact_saved_rows_toggle_editing_delete_with_x_and_fill_window_height() {
     let source = log.catalogue[0].id.clone();
     let handler=app().with_size(1200.0,800.0)
         .with_renderer(Box::new(|_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
-        .with_stylesheet(include_str!("style.css"))
+        .with_stylesheet(crate::theme::stylesheet())
         .into_handler(move || {
             let workbench=Workbench::new();workbench.log.set(Some(log.clone()));workbench.filters_open.set(true);*built.borrow_mut()=Some(workbench);
             view! {ThemeProvider(scheme = ColorScheme::Dark) {column(class = "workbench") {row(class = "body") {FilterWorkspace(workbench = workbench)}}}}
@@ -376,7 +381,7 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
     let saved = model.clone();
     let handler = app().with_size(1200.0, 800.0)
         .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
-        .with_stylesheet(include_str!("style.css"))
+        .with_stylesheet(crate::theme::stylesheet())
         .into_handler(move || {
             let workbench = Workbench::new();
             workbench.set_filter_kind("rust".into());
@@ -423,6 +428,28 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
         Some(zgui::platform::CursorStyle::ResizeNorthSouth)
     );
     let window = &harness.app().windows()[0];
+    let actions = window.box_with_class("filter-actions").unwrap();
+    let editor_panel = window.box_with_class("filter-editor").unwrap();
+    let kind = window.box_with_class("filter-kind-picker").unwrap();
+    assert!(
+        actions.origin.y.0 < editor_panel.origin.y.0 + 40.0
+            && actions.origin.y.0 + actions.size.height.0 <= kind.origin.y.0,
+        "Actions belong directly below Filter heading, before type picker: {actions:?}, {editor_panel:?}, {kind:?}"
+    );
+    let create = window.box_with_class("save-derived-field").unwrap();
+    let footer = window.box_with_class("filter-create-action").unwrap();
+    assert!(
+        create.size.height.0 >= 40.0 && create.size.width.0 >= 220.0,
+        "Create action should be large and full width: {create:?}"
+    );
+    assert!(
+        (footer.origin.y.0 + footer.size.height.0
+            - editor_panel.origin.y.0
+            - editor_panel.size.height.0)
+            .abs()
+            <= 1.0,
+        "Create footer should stay at panel bottom: {footer:?}, {editor_panel:?}"
+    );
     assert!(window.box_with_class("script-output-names").is_some());
     assert!(window.box_with_class("check-script").is_some());
     assert_eq!(window.nodes_with_class("filter-input-handle").len(), 3);
@@ -484,8 +511,76 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
             .nodes_with_class("filter-type")
             .is_empty()
     );
+    let rust_width = harness.app().windows()[0]
+        .box_with_class("filter-editor")
+        .unwrap()
+        .size
+        .width
+        .0;
     click_class(&mut harness, "builtin-filter-mode");
     assert_eq!(workbench.filter_kind.get_untracked(), "magnitude");
+    assert_eq!(
+        harness.app().windows()[0]
+            .box_with_class("filter-editor")
+            .unwrap()
+            .size
+            .width
+            .0,
+        rust_width,
+        "Built-in/Rust must keep same settings width"
+    );
+    workbench.set_filter_kind("low".into());
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("filter-zero-phase")
+            .is_some()
+    );
+    click_class(&mut harness, "filter-zero-phase");
+    assert!(workbench.filter_zero_phase.get_untracked());
+    click_class(&mut harness, "filter-type");
+    click_class(&mut harness, "filter-type-average");
+    assert_eq!(workbench.filter_kind.get_untracked(), "average");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("filter-window")
+            .is_some()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("filter-zero-phase")
+            .is_none()
+    );
+    click_class(&mut harness, "filter-type");
+    click_class(&mut harness, "filter-type-integral");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("filter-integral-initial")
+            .is_some()
+    );
+    click_class(&mut harness, "filter-type");
+    click_class(&mut harness, "filter-type-derivative");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("filter-window")
+            .is_none()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("filter-integral-initial")
+            .is_none()
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .box_with_class("filter-editor")
+            .unwrap()
+            .size
+            .width
+            .0,
+        rust_width
+    );
+    workbench.set_filter_kind("magnitude".into());
+    harness.settle(128);
     click_class(&mut harness, "custom-rust-filter");
     let window = &harness.app().windows()[0];
     let output = window.box_with_class("script-output-name").unwrap();
@@ -513,6 +608,16 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
     assert!(
         list.size.height.0 > 400.0,
         "Outputs should get more space before scrolling: {list:?}"
+    );
+    let create = harness.app().windows()[0]
+        .box_with_class("save-derived-field")
+        .unwrap();
+    let panel = harness.app().windows()[0]
+        .box_with_class("filter-editor")
+        .unwrap();
+    assert!(
+        create.origin.y.0 + create.size.height.0 <= panel.origin.y.0 + panel.size.height.0,
+        "Long outputs must scroll without hiding create button: {create:?}, {panel:?}"
     );
     let diagnostics = harness.app().windows()[0].nodes_with_class("script-diagnostics-panel")[0];
     workbench.filter_error.set(
@@ -571,7 +676,7 @@ fn rust_code_editor_syncs_source_undo_and_read_only_state() {
     let saved = model.clone();
     let handler = app().with_size(900.0, 650.0)
         .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
-        .with_stylesheet(include_str!("style.css"))
+        .with_stylesheet(crate::theme::stylesheet())
         .into_handler(move || {
             let source = RwSignal::new_local("fn first() {}".to_owned());
             let locked = RwSignal::new_local(false);
@@ -647,7 +752,7 @@ fn combined_filter_editor_labels_inputs_reorders_and_switches_output_names() {
     let built = Rc::clone(&model);
     let handler = app().with_size(1200.0, 800.0)
         .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
-        .with_stylesheet(include_str!("style.css"))
+        .with_stylesheet(crate::theme::stylesheet())
         .into_handler(move || {
             let workbench = Workbench::new();
             workbench.filter_kind.set("rpy".into());
@@ -849,7 +954,7 @@ fn snapped_cross_links_and_readouts_match_and_checkboxes_toggle_links() {
     let captured = Rc::clone(&counts);
     let handler = app().with_size(900.0, 600.0)
         .with_renderer(Box::new(move |_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture { renderer, counts: Rc::clone(&captured) })) }))
-        .with_stylesheet(format!("{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), include_str!("style.css")))
+        .with_stylesheet(format!("{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), crate::theme::stylesheet()))
         .into_handler(move || {
             let workbench = Workbench::new();
             let first = workbench.pane();
@@ -1160,8 +1265,8 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
             let mut renderer = CaptureRenderer::new(); renderer.configure(target);
             Ok(Box::new(Capture { renderer, counts: Rc::clone(&captured) }))
         }))
-        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
-        .into_handler(|| view! { WorkbenchApp(initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) })
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
+        .into_handler(|| view! { WorkbenchApp(preferences = crate::preferences::ThemePreference::disabled(), initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) })
         .unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -1865,7 +1970,7 @@ fn legend_drag_reorders_moves_appends_and_cancels_without_toggling_visibility() 
             let mut renderer = CaptureRenderer::new(); renderer.configure(target);
             Ok(Box::new(Capture { renderer, counts: Rc::clone(&counts) }))
         }))
-        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
         .into_handler(move || {
             let workbench = Workbench::new();
             let first = workbench.pane();
@@ -2104,7 +2209,7 @@ fn splitter_drag_pushes_other_edge_only_at_minimum_and_restores_it_on_reverse() 
     let counts = Rc::new(RefCell::new(Counts::default()));
     let handler = app().with_size(1800.0, 900.0)
         .with_renderer(Box::new(move |_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture { renderer, counts: Rc::clone(&counts) })) }))
-        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
         .into_handler(move || {
             let workbench = Workbench::new(); let first = workbench.pane();
             let second = workbench.add_plot(first.id, false, false); let third = workbench.add_plot(second.id, false, false);
@@ -2165,7 +2270,7 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
         let counts = Rc::new(RefCell::new(Counts::default()));
         let handler = app().with_size(1600.0, 1000.0)
             .with_renderer(Box::new(move |_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture { renderer, counts: Rc::clone(&counts) })) }))
-            .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
+            .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench = Workbench::new(); let first = workbench.pane();
                 let second = workbench.add_plot(first.id, true, false);
@@ -2263,7 +2368,7 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
         let counts = Rc::new(RefCell::new(Counts::default()));
         let handler=app().with_size(2400.0,1200.0)
             .with_renderer(Box::new(move |_,target| { let mut renderer=CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture{renderer,counts:Rc::clone(&counts)})) }))
-            .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),include_str!("style.css")))
+            .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench=Workbench::new(); let first=workbench.pane(); let second=workbench.add_plot(first.id,false,false); let third=workbench.add_plot(second.id,false,false); let fourth=workbench.add_plot(second.id,true,false); let source=workbench.add_plot(first.id,false,true);
                 let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],false); assert!(layout.split(second.id,fourth.id,true)); assert!(layout.add_plot_tab(first.id,source.id)); workbench.layout.set(layout);
@@ -2357,7 +2462,7 @@ fn dense_step_lines_and_markers_use_bounded_render_payloads_after_zoom() {
     .unwrap();
     let handler=app().with_size(1000.0,700.0)
         .with_renderer(Box::new(move |_,target| { let mut renderer=CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture{renderer,counts:Rc::clone(&rendered)})) }))
-        .with_stylesheet(format!("{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),include_str!("style.css")))
+        .with_stylesheet(format!("{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),crate::theme::stylesheet()))
         .into_handler(move || {
             let workbench=Workbench::new(); let pane=workbench.pane();
             pane.lines.set((1..=3).map(|id|Line{id,source:format!("dense {id}"),name:format!("dense {id}"),data:data.clone(),revision:0}).collect());
@@ -2407,7 +2512,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
         let captured = Rc::clone(&saved);
         let handler=app().with_size(1200.0,900.0)
             .with_renderer(Box::new(|_,target|{let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
-            .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),include_str!("style.css")))
+            .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench=Workbench::new();let first=workbench.pane();let second=workbench.add_plot(first.id,true,false);let third=workbench.add_plot(second.id,true,false);let outside=if top {third}else{first};let source=workbench.add_plot(outside.id,false,true);
                 let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],true);assert!(layout.add_plot_tab(outside.id,source.id));workbench.layout.set(layout);
@@ -2536,7 +2641,7 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
         let captured = Rc::clone(&saved);
         let handler=app().with_size(1400.0,900.0)
             .with_renderer(Box::new(|_,target|{let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
-            .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),include_str!("style.css")))
+            .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench=Workbench::new();let first=workbench.pane();let second=workbench.add_plot(first.id,false,false);*captured.borrow_mut()=Some((workbench,first,second));
                 view!{ThemeProvider(scheme=ColorScheme::Dark){column(class="page workbench"){row(class="body"){PlotWorkspace(workbench=workbench)}}}}
@@ -2636,7 +2741,7 @@ fn hidden_legend_hover_previews_on_top_without_changing_visibility_or_bounds() {
     let captured = Rc::clone(&counts);
     let handler = app().with_size(900.0, 600.0)
         .with_renderer(Box::new(move |_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture { renderer, counts: Rc::clone(&captured) })) }))
-        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
         .into_handler(move || {
             let workbench = Workbench::new();
             let pane = workbench.pane();
@@ -2734,7 +2839,7 @@ fn legend_toggles_keep_bounds_and_axis_menu_double_click_and_full_height_drag_wo
     let built = Rc::clone(&model);
     let handler = app().with_size(900.0, 600.0)
         .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
-        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
         .into_handler(move || {
             let workbench = Workbench::new();
             let pane = workbench.pane();
@@ -2897,7 +3002,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
             plot::zgui_surface::stylesheet(),
             plot::zgui_time_series::stylesheet(),
             plot::zgui_workspace::stylesheet(),
-            include_str!("style.css")
+            crate::theme::stylesheet()
         ))
         .into_handler(move || {
             let workbench = Workbench::new();
@@ -2995,7 +3100,7 @@ fn line_settings_keep_geometry_fixed_during_selection_changes() {
         .with_renderer(Box::new(|_, target| {
             let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer))
         }))
-        .with_stylesheet(format!("{}\n.test-editor-root {{width:680px;}}", include_str!("style.css")))
+        .with_stylesheet(format!("{}\n.test-editor-root {{width:680px;}}", crate::theme::stylesheet()))
         .into_handler(|| {
             let workbench = Workbench::new();
             let pane = workbench.pane();
@@ -3093,6 +3198,25 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
             .1
             .clone()
     }
+    fn radii(
+        harness: &Harness<zgui::runtime::Runtime>,
+        paints: &Rc<RefCell<Counts>>,
+        class: &str,
+    ) -> [f32; 8] {
+        let rect = harness.app().windows()[0].box_with_class(class).unwrap();
+        let paints = paints.borrow();
+        paints
+            .painted_radii
+            .iter()
+            .find(|(bounds, _)| {
+                (bounds[0] - rect.origin.x.0).abs() < 0.1
+                    && (bounds[1] - rect.origin.y.0).abs() < 0.1
+                    && (bounds[2] - rect.size.width.0).abs() < 0.1
+                    && (bounds[3] - rect.size.height.0).abs() < 0.1
+            })
+            .expect("Rendered button radii")
+            .1
+    }
     let paints = Rc::new(RefCell::new(Counts::default()));
     let captured = Rc::clone(&paints);
     let handler = app().with_size(1500.0, 850.0)
@@ -3100,8 +3224,8 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
             let mut renderer = CaptureRenderer::new(); renderer.configure(target);
             Ok(Box::new(Capture { renderer, counts: Rc::clone(&captured) }))
         }))
-        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
-        .into_handler(|| view! { WorkbenchApp(initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) }).unwrap();
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
+        .into_handler(|| view! { WorkbenchApp(preferences = crate::preferences::ThemePreference::disabled(), initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
         DevicePx(1500.0),
@@ -3163,6 +3287,65 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
             "Hover mismatch: {class}"
         );
     }
+    click_class(&mut harness, "custom-rust-filter");
+    let editor = harness.app().windows()[0].nodes_with_class("script-source")[0];
+    click_class(&mut harness, "theme-picker");
+    click_class(&mut harness, "theme-slate");
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
+    harness.settle(128);
+    let slate = fill(&harness, &paints, "open-ulog");
+    assert_ne!(slate, idle, "Theme must update rendered button paint");
+    assert_eq!(fill(&harness, &paints, "filters-done"), slate);
+    assert_eq!(
+        harness.app().windows()[0].nodes_with_class("script-source")[0],
+        editor,
+        "Theme changes must preserve editor instance"
+    );
+    assert_eq!(
+        radii(&harness, &paints, "open-ulog"),
+        [0.0; 8],
+        "Slate should be sharp"
+    );
+    for (theme, radius) in [("ember", 2.0), ("amethyst", 10.0), ("dune", 6.0)] {
+        click_class(&mut harness, "theme-picker");
+        click_class(&mut harness, &format!("theme-{theme}"));
+        harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
+        harness.settle(128);
+        assert_ne!(
+            fill(&harness, &paints, "open-ulog"),
+            slate,
+            "Palette must change: {theme}"
+        );
+        assert_eq!(
+            fill(&harness, &paints, "open-ulog"),
+            fill(&harness, &paints, "filters-done"),
+            "Buttons must stay uniform: {theme}"
+        );
+        assert!(
+            radii(&harness, &paints, "open-ulog")
+                .iter()
+                .all(|actual| (*actual - radius).abs() < 0.1),
+            "Theme radii must update: {theme}"
+        );
+        assert_eq!(
+            harness.app().windows()[0].nodes_with_class("script-source")[0],
+            editor
+        );
+    }
+    click_class(&mut harness, "theme-picker");
+    click_class(&mut harness, "theme-forest");
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
+    harness.settle(128);
+    assert_eq!(
+        fill(&harness, &paints, "open-ulog"),
+        idle,
+        "Forest palette must restore original button paint"
+    );
+    assert_eq!(
+        radii(&harness, &paints, "open-ulog"),
+        [4.0; 8],
+        "Forest must restore its rounding"
+    );
     click_class(&mut harness, "sidebar-toggle");
     harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
     harness.settle(128);

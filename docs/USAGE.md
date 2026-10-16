@@ -8,7 +8,7 @@
 6. Gear inside legend box opens centered line-settings dialog. Legend and gear appear once plot has lines. Select legend entry in dialog to edit HSV color square, rainbow hue strip, hex RGB, width, sample markers (dots, square, triangle, diamond, cross), marker size, and linear/pre-step/post-step connection. Filters workspace manages derived fields separately from line appearance. Legend X removes its line; clicking label toggles visibility. Hovering hidden legend field previews its line above other lines until pointer leaves, without changing visibility or bounds.
 7. Pan, wheel/box zoom (release Shift to cancel selection), hover samples, toggle legend visibility. Wheel over bottom X band or left Y axis zooms only that axis around pointer; other axis stays fixed. Double-click inside plot fits both axes. Double-click bottom X axis or full-height left Y edge fits only that axis; right-click menu also offers Fit X axis, Fit Y axis, and Fit both axes. Drag upper/lower half of left Y edge to adjust that bound; Escape cancels axis drag. Legend toggles and removals preserve bounds; adding a field or moving a line into another panel fits destination. Automatic line colors use 16 contrasting colors, avoid reuse across panels until palette is exhausted, then prefer least-used colors. Each plot header's **Links** dropdown has checkboxes for All, X bounds, Y bounds, and pointer links. All enables or clears every link; toggling an individual link leaves other selections intact and updates All indicator. Only pointer links by default; opt into X/Y bounds independently. Linked pointer and coordinates below legend follow snapped sample cross; away from samples they follow free cross position. FPS appears in top-right toolbar and updates at 4 Hz (every 250 ms) from frame timestamps.
 
-**Filters** beside Collapse all in field browser switches plot area to filtering workspace while keeping left field tree visible. Drag raw or derived fields into source area; hover Filters button during a drag to open workspace, or drop directly onto button. Ctrl-click or Shift-click fields, then drag any selected field to add whole group. Clear fields empties source selector without changing editor mode or deleting saved fields. Sources have individually editable output names; low-pass/high-pass PT1 or gain/offset settings apply identically to every source. Create batch, edit shared settings without changing output identities, or use **Add next filter** to chain all batch outputs. **Plot outputs** returns to plots and adds outputs to active dock. Sources can be removed from batch individually. Outputs appear under **Derived fields** and support normal plotting and drag/drop.
+**Filters** beside Collapse all in field browser switches plot area to filtering workspace while keeping left field tree visible. Drag raw or derived fields into source area; hover Filters button during a drag to open workspace, or drop directly onto button. Ctrl-click or Shift-click fields, then drag any selected field to add whole group. Clear fields empties source selector without changing editor mode or deleting saved fields. Sources have individually editable output names; low/high-pass, moving average, derivative, integral, or gain/offset settings apply identically to every source. Create batch, edit shared settings without changing output identities, or use **Add next filter** to chain all batch outputs. **Plot outputs** returns to plots and adds outputs to active dock. Sources can be removed from batch individually. Outputs appear under **Derived fields** and support normal plotting and drag/drop.
 
 Choose **Magnitude** to combine all source fields into one named output, or
 **Quaternion → RPY** to create three named outputs. Choose radians (default) or
@@ -56,7 +56,24 @@ own output or a descendant. Finish editing to create a separate field from eithe
 
 Filter library lets you edit or rename individual stages. Upstream edits recompute descendants in background and update every plotted copy while preserving line appearance. Unrelated stages reuse cached samples. Batch validation is atomic: cycles, duplicate names, and invalid parameters leave existing definitions intact. Remove dependent stages before deleting their source. Definitions belong to current log and reset when loading another log.
 
-PT1 is causal, with alpha = 1 - exp(-2*pi*cutoff*dt), using actual sample timing. Nonfinite samples, duplicate timestamps, and gaps exceeding 10 times median positive interval reset filter state. High-pass subtracts low-pass result from input; gain/offset applies y = input * gain + offset. Its **rad → deg** and **deg → rad** presets fill the corresponding gain and reset offset to zero; both fields remain editable. Timestamps and gaps are preserved. No uniform resampling or zero-phase filtering.
+PT1 uses alpha = 1 - exp(-2*pi*cutoff*dt), using actual sample timing. Low/high-pass
+are causal by default; **Zero phase (forward/backward)** applies each filter twice,
+with odd-reflected segment edges. High-pass performs high-pass on each pass rather
+than subtracting a zero-phase low-pass. No uniform resampling is used. As with
+[forward/backward filtering](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.filtfilt.html),
+combined attenuation is stronger and edge transients can remain. Reflection covers
+up to three time constants, capped at 65536 samples and segment length minus one.
+
+**Moving average** uses a configurable trailing sample-count window (partial windows
+at segment starts). **Derivative** uses nonuniform centered differences inside each
+segment and one-sided differences at its ends; a single sample has no derivative.
+**Integral** uses trapezoidal integration with configurable initial value.
+Nonfinite samples, duplicate timestamps, and gaps exceeding 10 times median
+positive interval separate segments; integration and averaging restart there.
+
+Gain/offset applies y = input * gain + offset. Its **rad → deg** and
+**deg → rad** presets fill gain and reset offset to zero; both remain editable.
+Timestamps and gaps are preserved.
 
 One log at a time; dynamic docked plots and tabs. Plot area fills available workspace, with a green theme and docked panels. Topic timestamps use elapsed seconds from ULog header. Incomplete logs show recovered samples with load warning. Missing/unsupported timestamps, decreasing timestamps, and mismatched field lengths also produce load warnings. Numeric and boolean fields are plottable; character and padding fields are omitted. Raw typed values remain in memory; plot values use f64. Linear and step rendering use column LOD. Visible samples are reduced before step corners are generated, retaining extrema and gaps. Sparse pre/post steps retain exact corners. Markers use bounded visible samples; cursor snapping uses full original samples. Preparation runs off UI thread with one worker per pane, coalesces viewport changes, publishes compatible completed buffers during continuous pans, and reuses unchanged lines. Preparation includes one extra viewport on either side so nearby pans reveal cached samples immediately. Exact rendering falls back to columns above 65,536 visible samples to limit GPU geometry. Filtering always uses full samples. Large logs retain all decoded fields, plus buffers for selected signals.
 
@@ -68,3 +85,19 @@ target; see [setup, examples, and limits](RUST_FILTERS.md). Source is local trus
 code, compiled on demand; failed runs preserve existing saved fields.
 
 Legend gear opens line settings. Click selects one line; Ctrl-click toggles lines; Shift-click selects a range. Check marks, borders, and selection count show active lines. Width, marker shape/radius, and connection controls apply to every selected line; color editing requires one selected line. Color controls stay visible but disabled for multiple selections; at least one line remains selected. Hover info icon for selection help. **Add filters** closes settings and opens a fresh filter batch containing every field from that legend, including derived fields.
+
+## Themes
+
+Choose theme from dropdown beside FPS counter: **Forest** (green, soft corners),
+**Slate** (blue-gray, sharp), **Ember** (red, crisp), **Amethyst** (purple, rounded),
+or **Dune** (warm amber, gently rounded). Palette
+updates toolbar, Fields, Filters, code editor surfaces, and plot chrome together.
+Switching preserves open plots, selection, and filter draft. Theme choice is saved automatically across launches; line colors remain unchanged.
+
+Filter creation uses larger button pinned below settings. Editing existing fields
+keeps **Save changes** and **Done editing** beside top actions.
+
+Theme preference stores one ID in `Enlumi/theme` under Windows `%APPDATA%`,
+`~/Library/Application Support/Enlumi/theme` on macOS, or
+`$XDG_CONFIG_HOME/enlumi/theme` (default `~/.config/enlumi/theme`) on Linux.
+No plots, log paths, scripts, or filter drafts are restored across launches.

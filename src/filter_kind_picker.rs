@@ -40,6 +40,9 @@ pub fn FilterKindPicker(workbench: Workbench) -> impl IntoView {
                     SelectContent(class = "filter-type-surface") {
                         SelectItem(value = "low") { "Low-pass (PT1)" }
                         SelectItem(value = "high") { "High-pass (PT1)" }
+                        SelectItem(value = "average", class = "filter-type-average") { "Moving average" }
+                        SelectItem(value = "derivative", class = "filter-type-derivative") { "Derivative" }
+                        SelectItem(value = "integral", class = "filter-type-integral") { "Integral" }
                         SelectItem(value = "affine") { "Gain / offset" }
                         SelectItem(value = "magnitude") { "Magnitude" }
                         SelectItem(value = "rpy") { "Quaternion \u{2192} RPY" }

@@ -6,6 +6,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn ActionButton(
     #[prop(default = false)] icon: bool,
+    #[prop(default = false)] prominent: bool,
     #[prop(into, default = Signal::stored_local(false))] disabled: Signal<bool, LocalStorage>,
     #[prop(optional)] node_ref: Option<NodeRef>,
     #[prop(into, optional)] class: Classes,
@@ -15,6 +16,9 @@ pub fn ActionButton(
     install_stylesheet("enlumi-action-button", include_str!("action_button.css"));
     let mut class = class;
     class.push(zgui::view::ClassName::new("app-action"));
+    if prominent {
+        class.push(zgui::view::ClassName::new("action-prominent"));
+    }
     let element = node_ref.unwrap_or_default();
     let size = if icon {
         ButtonSize::IconXs

@@ -12,6 +12,11 @@ use std::{
 pub enum FilterSpec {
     LowPass(f64),
     HighPass(f64),
+    ZeroPhaseLowPass(f64),
+    ZeroPhaseHighPass(f64),
+    MovingAverage(usize),
+    Derivative,
+    Integral(f64),
     Affine { gain: f64, offset: f64 },
     Magnitude,
     Rust(Arc<crate::script::Script>, usize),
@@ -57,6 +62,11 @@ impl FilterSpec {
         match self {
             Self::LowPass(hz) => format!("Low-pass · {hz} Hz"),
             Self::HighPass(hz) => format!("High-pass · {hz} Hz"),
+            Self::ZeroPhaseLowPass(hz) => format!("Low-pass / zero phase / {hz} Hz"),
+            Self::ZeroPhaseHighPass(hz) => format!("High-pass / zero phase / {hz} Hz"),
+            Self::MovingAverage(window) => format!("Moving average / {window} samples"),
+            Self::Derivative => "Derivative".into(),
+            Self::Integral(initial) => format!("Integral / initial {initial}"),
             Self::Affine { gain, offset } => format!("Gain {gain} · offset {offset}"),
             Self::Magnitude => "Magnitude".into(),
             Self::Rust(..) => "Rust / WASM".into(),
@@ -79,19 +89,12 @@ impl FilterSpec {
                 .cloned()
                 .ok_or("Rust output index out of range".into()),
             Self::LowPass(hz) => filter::low_pass(data, *hz),
-            Self::HighPass(hz) => {
-                let low = filter::low_pass(data, *hz)?;
-                SeriesData::new(
-                    data.samples()
-                        .iter()
-                        .zip(low.samples())
-                        .map(|(raw, low)| plot::PlotPoint {
-                            x: raw.x,
-                            y: raw.y - low.y,
-                        })
-                        .collect::<Vec<_>>(),
-                )
-            }
+            Self::HighPass(hz) => filter::high_pass(data, *hz),
+            Self::ZeroPhaseLowPass(hz) => crate::filter_zero_phase::apply(data, *hz, false),
+            Self::ZeroPhaseHighPass(hz) => crate::filter_zero_phase::apply(data, *hz, true),
+            Self::MovingAverage(window) => crate::filter_extra::moving_average(data, *window),
+            Self::Derivative => crate::filter_extra::derivative(data),
+            Self::Integral(initial) => crate::filter_extra::integral(data, *initial),
             Self::Affine { gain, offset } => {
                 if !gain.is_finite() || !offset.is_finite() {
                     return Err("Gain and offset must be finite".into());
@@ -128,7 +131,16 @@ impl FilterSpec {
                 Err("Quaternion needs exactly four inputs: w, x, y, z".into())
             }
             Self::Magnitude if count == 0 => Err("Magnitude needs at least one input".into()),
-            Self::LowPass(_) | Self::HighPass(_) | Self::Affine { .. } if count != 1 => {
+            Self::LowPass(_)
+            | Self::HighPass(_)
+            | Self::ZeroPhaseLowPass(_)
+            | Self::ZeroPhaseHighPass(_)
+            | Self::MovingAverage(_)
+            | Self::Derivative
+            | Self::Integral(_)
+            | Self::Affine { .. }
+                if count != 1 =>
+            {
                 Err("This filter needs one input per output".into())
             }
             _ => Ok(()),

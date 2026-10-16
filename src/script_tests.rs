@@ -270,3 +270,29 @@ fn script_contract_rejects_mismatched_counts_before_compilation() {
         2
     );
 }
+
+#[test]
+fn script_syntax_errors_report_source_locations_and_excerpt() {
+    let source =
+        "pub const OUTPUTS: usize = 1;\nfn filter() {\n    let value = 1\n    let next = 2;\n}\n";
+    let error = crate::script_contract::output_count(source).unwrap_err();
+    assert!(error.contains("expected `;`"), "{error}");
+    assert!(error.contains("filter.rs:4:5"), "{error}");
+    assert!(error.contains("3 |     let value = 1"), "{error}");
+    assert!(
+        error.contains("4 |     let next = 2;") && error.contains("|     ^"),
+        "{error}"
+    );
+    let shifted =
+        crate::script_contract::output_count(&format!("// comment\n\n{source}")).unwrap_err();
+    assert!(shifted.contains("filter.rs:6:5"), "{shifted}");
+    let unicode = crate::script_contract::output_count(
+        "pub const OUTPUTS: usize = 1;\nfn filter() { let caf\u{00e9} = ; }\n",
+    )
+    .unwrap_err();
+    assert!(unicode.contains("filter.rs:2:26"), "{unicode}");
+    assert!(
+        unicode.contains("let caf\u{00e9} = ;") && unicode.contains('^'),
+        "{unicode}"
+    );
+}

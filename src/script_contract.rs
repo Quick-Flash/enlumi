@@ -1,7 +1,6 @@
 //! Explicit output arity: arbitrary Rust loops/indices cannot be inferred safely.
 pub fn output_count(source: &str) -> Result<usize, String> {
-    let module = syn::parse_file(source)
-        .map_err(|error| format!("Rust compilation failed: filter.rs: syntax error: {error}"))?;
+    let module = syn::parse_file(source).map_err(|error| syntax_diagnostics(source, error))?;
     let declarations: Vec<_> = module
         .items
         .iter()
@@ -36,4 +35,35 @@ pub fn output_count(source: &str) -> Result<usize, String> {
         return Err("OUTPUTS must be a number from 1 to 16".into());
     }
     Ok(count)
+}
+
+fn syntax_diagnostics(source: &str, errors: syn::Error) -> String {
+    let mut diagnostics = String::from("Rust compilation failed:\n");
+    for error in errors {
+        let position: proc_macro2::LineColumn = error.span().start();
+        let line = position.line.max(1);
+        let text = source.lines().nth(line - 1).unwrap_or("");
+        let gutter = line.to_string().len();
+        // Editor and parser count UTF-8 characters, not bytes. Expand tabs for caret alignment.
+        let padding: usize = text
+            .chars()
+            .take(position.column)
+            .map(|c| if c == '\t' { 4 } else { 1 })
+            .sum();
+        let context = if line > 1 {
+            let previous = source
+                .lines()
+                .nth(line - 2)
+                .unwrap_or("")
+                .replace('\t', "    ");
+            format!("{:>gutter$} | {previous}\n", line - 1)
+        } else {
+            String::new()
+        };
+        diagnostics.push_str(&format!(
+            "error: {error}\n --> filter.rs:{line}:{}\n{:gutter$} |\n{context}{line} | {}\n{:gutter$} | {}^\n",
+            position.column + 1, "", text.replace('\t', "    "), "", " ".repeat(padding),
+        ));
+    }
+    diagnostics
 }

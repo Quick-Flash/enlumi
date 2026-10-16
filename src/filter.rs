@@ -7,15 +7,7 @@ pub fn low_pass(source: &SeriesData, cutoff_hz: f64) -> Result<SeriesData, Strin
         return Err("Cutoff must be finite and greater than zero Hz".into());
     }
     let points = source.samples();
-    let mut intervals: Vec<_> = points
-        .windows(2)
-        .map(|p| p[1].x - p[0].x)
-        .filter(|dt| dt.is_finite() && *dt > 0.0)
-        .collect();
-    intervals.sort_unstable_by(f64::total_cmp);
-    let gap = intervals
-        .get(intervals.len() / 2)
-        .map_or(f64::INFINITY, |dt| dt * 10.0);
+    let gap = gap_threshold(points);
     let mut previous: Option<PlotPoint> = None;
     let filtered = points
         .iter()
@@ -37,6 +29,32 @@ pub fn low_pass(source: &SeriesData, cutoff_hz: f64) -> Result<SeriesData, Strin
         })
         .collect::<Vec<_>>();
     SeriesData::new(filtered)
+}
+
+pub(crate) fn gap_threshold(points: &[PlotPoint]) -> f64 {
+    let mut intervals: Vec<_> = points
+        .windows(2)
+        .map(|p| p[1].x - p[0].x)
+        .filter(|dt| dt.is_finite() && *dt > 0.0)
+        .collect();
+    intervals.sort_unstable_by(f64::total_cmp);
+    intervals
+        .get(intervals.len() / 2)
+        .map_or(f64::INFINITY, |dt| dt * 10.0)
+}
+pub fn high_pass(source: &SeriesData, cutoff_hz: f64) -> Result<SeriesData, String> {
+    let low = low_pass(source, cutoff_hz)?;
+    SeriesData::new(
+        source
+            .samples()
+            .iter()
+            .zip(low.samples())
+            .map(|(raw, low)| PlotPoint {
+                x: raw.x,
+                y: raw.y - low.y,
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 #[cfg(test)]

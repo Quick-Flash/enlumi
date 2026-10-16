@@ -1,10 +1,12 @@
 /* Single visual contract for app commands, independent of parent or sheet order. */
-.app-action.zui-button[data-variant="ghost"] { height: 24px; min-height: 24px; padding: 0 8px; border: 1px solid #42554a; border-radius: 4px; background: #25322f; color: #bdcbc1; box-shadow: none; font-size: 12px; line-height: 16px; cursor: pointer; transition: none; }
-.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"] { width: 24px; min-width: 24px; padding: 0; }
-.app-action.zui-button[data-variant="ghost"]:hover { background: #375239; color: #ffffff; border-color: #75a77b; }
-.app-action.zui-button[data-variant="ghost"].setting-active { background: #35553e; color: #ebf2ec; border-color: #75a77b; }
-.app-action.zui-button[data-variant="ghost"].setting-active:hover { background: #43664b; }
-.app-action.zui-button[data-variant="ghost"]:active, .app-action.zui-button[data-variant="ghost"].setting-active:active { background: #15231b; color: #ffffff; border-color: #a0dbad; }
-.app-action.zui-button[data-variant="ghost"]:focus-visible { outline: 1px solid #77b9e8; outline-offset: -1px; border-color: #77b9e8; }
-.app-action.zui-button[data-variant="ghost"]:disabled { background: #1a2220; color: #78877d; border-color: #303d35; opacity: 1; cursor: default; }
-.app-action.zui-button[data-variant="ghost"].remove-saved-field:hover, .app-action.zui-button[data-variant="ghost"].remove-filter-source:hover, .app-action.zui-button[data-variant="ghost"].remove-script-output:hover { background: #49312b; color: #efc0b1; border-color: #80564b; }
+.app-action.zui-button[data-variant="ghost"] { height: var(--app-control-height); min-height: var(--app-control-height); padding: 0 8px; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-control); color: var(--app-control-text); box-shadow: none; font-size: var(--app-font-sm); line-height: 16px; cursor: pointer; transition: none; }
+.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"] { width: var(--app-control-height); min-width: var(--app-control-height); padding: 0; }
+.app-action.zui-button[data-variant="ghost"]:hover { background: var(--app-hover); color: var(--app-strong); border-color: var(--app-accent); }
+.app-action.zui-button[data-variant="ghost"].setting-active { background: var(--app-selected); color: var(--app-selected-text); border-color: var(--app-accent); }
+.app-action.zui-button[data-variant="ghost"].setting-active:hover { background: var(--app-selected-hover); }
+.app-action.zui-button[data-variant="ghost"]:active, .app-action.zui-button[data-variant="ghost"].setting-active:active { background: var(--app-pressed); color: var(--app-strong); border-color: var(--app-accent-text); }
+.app-action.zui-button[data-variant="ghost"]:focus-visible { outline: 1px solid var(--app-focus); outline-offset: -1px; border-color: var(--app-focus); }
+.app-action.zui-button[data-variant="ghost"]:disabled { background: var(--app-disabled); color: var(--app-dim); border-color: var(--app-border); opacity: 1; cursor: default; }
+.app-action.zui-button[data-variant="ghost"].remove-saved-field:hover, .app-action.zui-button[data-variant="ghost"].remove-filter-source:hover, .app-action.zui-button[data-variant="ghost"].remove-script-output:hover { background: var(--app-danger); color: var(--app-danger-text); border-color: var(--app-danger-border); }
+
+.app-action.zui-button[data-variant="ghost"].action-prominent { width: 100%; height: 40px; min-height: 40px; padding: 8px 12px; font-size: var(--app-font-md); font-weight: 600; }

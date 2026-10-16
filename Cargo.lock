@@ -1265,6 +1265,7 @@ name = "enlumi"
 version = "0.1.0"
 dependencies = [
  "kurbo",
+ "proc-macro2",
  "px4-ulog",
  "rfd",
  "syn 2.0.119",

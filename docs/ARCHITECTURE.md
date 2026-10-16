@@ -21,6 +21,21 @@ panel records, field-drop fitting policy, duplicate-source validation, and
 application callbacks such as Add filters. `Pane::display()` exposes a durable
 plot-facing view without giving plotting code access to ULog state.
 
+## Design tokens and themes
+
+`theme::stylesheet()` supplies shared tokens and app styles. `themes/forest.css`
+and other palette files define the same semantic color and corner-radius roles;
+`themes/common.css` owns typography, control height, and code syntax colors. Components use
+`var(--app-...)` references rather than literal palette colors. Add new palette
+roles to every theme; register presets once in `Palette::ALL`. Keep layout and interaction rules out of palette files.
+
+`AppTheme` changes palette declarations on window root, including portalled menus,
+without rebuilding UI. Zgui UI tokens reference those same roles through
+`theme.css`; `plot_theme.css` adapts upstream plot chrome to app tokens. Series
+colors and code syntax colors remain distinct from interface accent. Plot canvas
+rendering/grid colors still belong to upstream plotting library; current
+presets use dark surfaces. Only theme ID is persisted; logs, scripts, plots, and drafts remain session-only.
+
 ## UI action buttons
 
 Use `ActionButton` (`src/action_button.rs`) for application commands, including
