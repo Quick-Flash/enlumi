@@ -233,3 +233,83 @@
 .filter-type-surface .zui-select__item { flex: none; min-height: 26px; padding: 5px 32px 5px 8px; font-size: var(--app-font-sm); line-height: 16px; }
 .filter-option .filter-option-label { font-size: var(--app-font-sm); }
 .filter-workspace field { height: 26px; min-height: 26px; padding: 3px 5px; font-size: var(--app-font-sm); line-height: 16px; }
+
+/* Named data-space geometry: library, legend rows, nonmodal plot editor. */
+.geometry-library { flex-shrink: 0; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--app-border); max-height: 28%; min-height: 0; }
+.geometry-heading { align-items: center; gap: 6px; }
+.geometry-heading .heading { flex: 1; }
+.geometry-rows { max-height: 140px; overflow-y: auto; flex-shrink: 1; min-height: 0; gap: 0; }
+.geometry-row { flex: none; height: 28px; }
+.geometry-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.geometry-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.geometry-interaction { position: absolute; inset: 0; pointer-events: auto; cursor: crosshair; z-index: 1; }
+.geometry-edit-hint { position: absolute; left: 12px; bottom: 26px; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--app-radius); background: var(--app-control); color: var(--app-control-text); pointer-events: auto; z-index: 2; }
+.geometry-drop-target { outline: 2px solid var(--app-accent); outline-offset: -3px; }
+.geometry-inspector { position: absolute; left: 12px; bottom: 30px; width: 372px; max-width: calc(100% - 24px); max-height: calc(100% - 70px); padding: 12px; gap: 10px; min-height: 0; overflow-y: auto; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-surface); color: var(--app-foreground); pointer-events: auto; z-index: 3; }
+.geometry-editor-heading { align-items: center; gap: 8px; cursor: grab; }
+.geometry-editor-heading:active { cursor: grabbing; }
+.geometry-editor-heading > column { flex: 1; gap: 2px; }
+.geometry-title-mark { width: 5px; height: 28px; border-radius: var(--app-radius-sm); }
+.geometry-editor-tabs { gap: 4px; }
+.geometry-editor-tabs .app-action { flex: 1; }
+.geometry-editor-body { gap: 10px; min-height: 0; }
+.geometry-coordinate-grid { gap: 8px; }
+.geometry-coordinate-row { gap: 8px; align-items: center; }
+.geometry-point-name, .geometry-option-name { width: 56px; flex: none; }
+.geometry-coordinate-row > column { flex: 1; min-width: 0; gap: 3px; }
+.geometry-coordinate-row .zui-input { width: 100%; min-width: 0; }
+.geometry-line-extent, .geometry-shade { gap: 5px; align-items: center; }
+.geometry-line-extent .app-action, .geometry-shade .app-action { flex: 1; }
+.geometry-help { white-space: normal; line-height: 17px; }
+.geometry-appearance { gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.geometry-style-controls { flex: 1; min-width: 120px; gap: 12px; }
+.geometry-style-controls .zui-slider { width: auto; }
+.geometry-editor-footer { gap: 8px; align-items: center; padding-top: 8px; border-top: 1px solid var(--app-border); }
+.geometry-editor-footer > text { flex: 1; }
+.geometry-legend { gap: 0; }
+.geometry-legend-editing { box-shadow: inset 2px 0 0 0 var(--app-accent); }
+.workbench-legend .geometry-legend-toggle { cursor: pointer; }
+.workbench-legend .geometry-legend-edit.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"], .workbench-legend .geometry-legend-remove.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"] { height: 18px; min-height: 18px; width: 18px; min-width: 18px; padding: 1px; border: none; background: transparent; color: var(--app-muted); }
+.workbench-legend .geometry-legend-edit.app-action:hover { background: var(--app-hover); color: var(--app-foreground); }
+.workbench-legend .geometry-legend-remove.app-action:hover { background: var(--app-danger); color: var(--app-danger-text); }
+.geometry-legend-edit vector { width: 14px; height: 14px; color: transparent; --zgui-stroke: var(--app-muted); --zgui-stroke-width: 1.5px; }
+
+.geometry-legend-edit:hover vector { --zgui-stroke: var(--app-foreground); }
+
+.geometry-handle { position: absolute; width: 18px; height: 18px; align-items: center; justify-content: center; pointer-events: auto; z-index: 1; cursor: nwse-resize; }
+.geometry-move-handle { border-radius: var(--app-radius-sm); background: var(--app-inset); border: 1px solid currentColor; cursor: grab; }
+.geometry-move-handle:active { cursor: grabbing; }
+.geometry-move-handle vector { width: 16px; height: 16px; --zgui-stroke: currentColor; --zgui-stroke-width: 1.5px; pointer-events: none; }
+.geometry-resize-mark { width: 8px; height: 8px; background: currentColor; border: 1px solid var(--app-inset); pointer-events: none; }
+.geometry-handle:hover, .geometry-handle:focus-visible { outline: 1px solid var(--app-focus); outline-offset: 1px; }
+.geometry-line-mode { align-items: center; gap: 4px; }
+.geometry-line-mode .app-action { flex: 1; padding: 0 5px; }
+
+.geometry-collapse-icon { width: 14px; height: 14px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.geometry-inspector .zui-input { height: 28px; min-height: 28px; }
+
+.geometry-create-tools { gap: 5px; }
+.geometry-create-tools .app-action { flex: 1; padding: 0 5px; }
+.band-source-drop { gap: 6px; padding: 8px; border: 1px dashed var(--app-border-strong); border-radius: var(--app-radius); }
+.band-source-drop.band-source-hover { background: var(--app-selected); border-color: var(--app-accent); }
+.band-mapping { gap: 8px; min-height: 0; min-width: 0; width: 100%; }
+.band-source-name { font-size: var(--app-font-sm); overflow: hidden; }
+.band-rule-list { gap: 4px; max-height: 240px; overflow-y: auto; min-height: 0; }
+.band-rule-row, .band-add-row { gap: 6px; align-items: center; min-width: 0; width: 100%; }
+.band-set-value.app-action { width: 30px; padding: 0 3px; flex: none; }
+.band-remove-rule.app-action { width: 22px; min-width: 22px; padding: 0; flex: none; }
+.band-mapping-add { gap: 5px; min-width: 0; width: 100%; }
+.band-mapping-add > text { white-space: normal; }
+.band-mapping .band-rule-value, .band-mapping .band-new-value { width: 65px; min-width: 0; flex: none; }
+.band-mapping .band-rule-name { flex: 1; width: 0; min-width: 0; }
+.band-color-trigger.zui-button { width: 24px; min-width: 24px; height: 24px; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius-sm); }
+.band-color-popover { padding: 10px; background: var(--app-surface); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); }
+.band-background, .band-fill-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+.band-label { position: absolute; font-size: 11px; line-height: 16px; height: 18px; padding: 1px 4px; color: var(--app-foreground); background: var(--app-overlay); border-radius: var(--app-radius-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+
+.geometry-library.band-source-open { max-height: 45%; }
+
+.band-mapping, .band-source-name { min-width: 0; }
+.band-source-name { width: 100%; white-space: nowrap; text-overflow: ellipsis; }
+
+.band-mapping field { height: 28px; min-height: 28px; padding: 3px 6px; }

@@ -86,16 +86,28 @@ impl Workbench {
             } else {
                 None
             });
+        self.bands
+            .hover
+            .set(self.bands.open.get_untracked() && Self::inside(self.bands.drop, x, y));
         self.drop_target.set(self.hit_plot(x, y));
     }
     pub fn finish_field_drag(self) {
+        self.bands.hover.set(false);
         self.filter_drop_active.set(false);
         self.filter_input_ui.hover.set(None);
         self.drop_target.set(None);
     }
     pub fn drop_fields(self, source: String, x: f32, y: f32) {
         let sources = self.drag_fields(source);
-        if Self::inside(self.filter_button, x, y)
+        if self.bands.open.get_untracked() && Self::inside(self.bands.drop, x, y) {
+            if sources.len() == 1 {
+                self.generate_bands(sources[0].clone(), None);
+            } else {
+                self.bands
+                    .error
+                    .set("Drop one discrete source field".into());
+            }
+        } else if Self::inside(self.filter_button, x, y)
             || self.filters_open.get_untracked() && Self::inside(self.filter_drop, x, y)
         {
             self.filters_open.set(true);

@@ -101,3 +101,95 @@ Theme preference stores one ID in `Enlumi/theme` under Windows `%APPDATA%`,
 `~/Library/Application Support/Enlumi/theme` on macOS, or
 `$XDG_CONFIG_HOME/enlumi/theme` (default `~/.config/enlumi/theme`) on Linux.
 No plots, log paths, scripts, or filter drafts are restored across launches.
+
+
+## Geometry bounds
+
+**Geometry** sits above derived fields in Fields sidebar. Click **Rectangle** or
+**Line**, then drag inside plot. Shapes use data coordinates: pan/zoom changes
+view, while bounds stay anchored. Geometry does not change automatic axis fitting.
+
+Each plot's legend includes its geometry, even when plot contains no signals.
+Click geometry name to show/hide that plot's copy. Pencil opens live editor;
+**X** removes geometry from that plot while preserving saved definition.
+
+Live editor sits inside selected plot, leaving field browser available. Name and
+**Coordinates** update immediately. Drag arrow handle to move geometry; square
+handles resize corners/endpoints. Move handle stays on visible section of line
+when its defining endpoints are offscreen. Background drag pans, including
+rectangle interiors; scrolling zooms while editor stays open. Drag editor title
+to reposition controls, or collapse editor to expose covered handles. **Appearance** uses same color picker as signals, plus fill opacity and
+stroke width sliders. **Done** closes editor and handles;
+**Escape** cancels current drag and exits editing. Invalid coordinates leave
+last valid shape intact.
+
+Line direction controls choose **Free**, **Horizontal**, or **Vertical**.
+Horizontal/vertical modes expose single Y/X position input and preserve direction
+during endpoint drags. Across-plot horizontal/vertical move handles slide only
+along relevant axis; finite segments can also translate along their length.
+Focused handles support arrow-key nudging; Shift increases step to 10 pixels.
+
+Lines support **Above**/**Below** translucent shading in data Y coordinates.
+**Across plot** extends line across viewport; **Segment** keeps finite line and
+shading between endpoint X coordinates. Near-vertical lines use stable implicit
+clipping. Exactly vertical lines do not support above/below shading.
+
+Drag saved shape onto another plot to reuse definition. Edits update every copy;
+visibility and legend removal affect only one plot. **Duplicate** creates
+independent definition on active plot; editor's delete control removes saved
+definition and all copies. Duplicating plot includes geometry and visibility.
+Shapes remain available when opening another log, but are not saved across app
+restarts.
+
+
+## State bands and manual time highlights
+
+In **Geometry**, click **State bands**, then drag one discrete field onto source
+area. Each integer value starts with numeric label (`State N`) and automatic
+color. No field names or firmware enums select a mapping automatically.
+To build file without log, choose **Geometry > State bands > Blank mapping**.
+Add values/names/colors and export, then import file onto source-backed layer
+when plotting log. Blank mappings have no time intervals.
+
+Build mapping entirely in **Mapping**: source values already have rows. Type
+names and pick colors; use **Add** with integer value/name for states absent from
+log. Edit existing numeric value, then press **Enter** or **Set**. Row **X** removes
+mapping and its shading. Invalid or duplicate values leave existing rows intact.
+Source **Refresh** rediscovers observed values, restoring numeric rows for any
+observed values removed earlier. **Export mapping** saves shareable JSON file.
+**Import mapping** applies any user's mapping to current layer. Imported entries
+replace previous mapping; observed values missing from file keep numeric labels.
+Entries absent from current log stay available for editing/export and survive
+source refresh, so mapping remains useful across flights.
+
+Optional [PX4 example](../examples/state-mappings/px4-nav-state.json) provides
+starting point only: verify integer values against firmware used to record log.
+Copy/edit file for custom PX4 forks or other discrete fields. File contains no
+source paths and can be applied to any discrete raw or derived source. Changes
+to firmware enum require mapping edits, not application changes.
+See [mapping file format](../examples/state-mappings/README.md).
+
+State transitions produce labeled time spans along X, filled across plot height
+behind grid and signals. Names/colors edit live in **Mapping**; **Appearance**
+controls opacity and labels. Legend toggles/removal and reuse across plots work
+like other geometry. Source controls interval times; generated bands have no
+manual handles. Derived source changes regenerate bands while preserving names
+and colors. Invalid derived outputs hide stale shading and show error.
+
+Values hold until next update or log end. Duplicate timestamps use last value;
+missing/nonfinite values leave unshaded gaps. No state is inferred before first
+sample. Continuous values, more than 256 distinct states, and over 100000
+intervals are rejected. This complements numeric filters; Rust filters can emit
+integer states for custom classifications.
+
+Use **Time band** for manual highlights: drag start/end along X, name section,
+and choose color/opacity. Full height stays tied to viewport while start/end
+remain fixed. Move handle slides band along time; edge handles resize interval.
+Manual highlights coexist with data-driven layers. Successful log replacement
+clears generated layers to prevent stale source data; manual geometry remains.
+Geometry stays session-only; exported mapping files persist independently.
+
+During edits, cursor follows action: drawing uses crosshair; free move uses
+open/closed hand; axis locks and time-band edges use directional resize arrows;
+rectangle corner arrows follow actual corner after flips. Locked-line endpoint
+handles change length; move handle or position input changes line's X/Y level.

@@ -36,6 +36,8 @@ pub struct Pane {
     pub dock: DockPane,
     pub links: RwSignal<LinkOptions, LocalStorage>,
     pub lines: RwSignal<Vec<Line>, LocalStorage>,
+    pub geometry: RwSignal<BTreeSet<u64>, LocalStorage>,
+    pub hidden_geometry: RwSignal<BTreeSet<u64>, LocalStorage>,
     pub selected: RwSignal<Option<u64>, LocalStorage>,
     pub drawing: RwSignal<BTreeMap<u64, plot::line_draw::LineDraw>, LocalStorage>,
     pub plot: TimeSeriesState,
@@ -78,6 +80,8 @@ impl Pane {
                 pointer: true,
             }),
             lines,
+            geometry: RwSignal::new_local(BTreeSet::new()),
+            hidden_geometry: RwSignal::new_local(BTreeSet::new()),
             view_lines,
             selected: RwSignal::new_local(None),
             drawing: RwSignal::new_local(BTreeMap::new()),
@@ -119,6 +123,8 @@ pub struct Workbench {
     pub sidebar_width: RwSignal<f32, LocalStorage>,
     pub sidebar_visible: RwSignal<bool, LocalStorage>,
     pub derived: RwSignal<Vec<crate::derived::DerivedField>, LocalStorage>,
+    pub geometry: crate::geometry_state::GeometryUi,
+    pub bands: crate::band_state::BandUi,
     pub derived_busy: RwSignal<bool, LocalStorage>,
     pub filters_open: RwSignal<bool, LocalStorage>,
     pub filter_mode: RwSignal<crate::filter_mode::FilterMode, LocalStorage>,
@@ -173,6 +179,8 @@ impl Workbench {
             }),
         );
         Self {
+            geometry: crate::geometry_state::GeometryUi::new(),
+            bands: crate::band_state::BandUi::new(),
             log: RwSignal::new_local(None),
             status: RwSignal::new_local("Open a PX4 .ulg file to begin".into()),
             loading: RwSignal::new_local(false),
@@ -246,6 +254,8 @@ impl Workbench {
         pane.selected.set(Some(id));
     }
     pub fn open(self, path: PathBuf) {
+        self.cancel_band_source();
+        self.bands.jobs.update_value(BTreeMap::clear);
         self.generation.update(|id| *id += 1);
         let generation = self.generation.get_untracked();
         self.loading.set(true);
@@ -290,6 +300,7 @@ impl Workbench {
                         pane.plot.hover.set(None);
                         pane.plot.auto_fit.set(true);
                     }
+                    self.clear_generated_bands();
                     self.log.set(Some(Arc::new(log)));
                 }
                 Err(error) => self.status.set(error),
@@ -454,8 +465,20 @@ impl Workbench {
         copy.plot.ranges.set(source.plot.ranges.get_untracked());
         copy.plot.auto_fit.set(source.plot.auto_fit.get_untracked());
         copy.links.set(source.links.get_untracked());
+        copy.geometry.set(source.geometry.get_untracked());
+        copy.hidden_geometry
+            .set(source.hidden_geometry.get_untracked());
     }
     pub fn close_plot(self, id: u64) {
+        if self
+            .geometry
+            .drag
+            .get_untracked()
+            .is_some_and(|drag| drag.pane == id)
+        {
+            self.cancel_geometry_drag();
+        }
+
         self.line_drag.cancel();
         if self.find(id).is_none() {
             return;

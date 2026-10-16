@@ -455,11 +455,22 @@ impl Workbench {
             pane.plot.hover.set(None);
         }
         self.derived.set(fields);
+        self.refresh_derived_bands();
         if !self.loading.get_untracked() {
             self.status.set("Derived fields updated".into());
         }
     }
     pub fn delete_filter(self, id: u64) -> Result<(), String> {
+        if self.geometry.items.with_untracked(|items| {
+            items.iter().any(|item| {
+                item.states
+                    .as_ref()
+                    .is_some_and(|states| states.source == derived::key(id))
+            })
+        }) {
+            return Err("Remove dependent state bands first".into());
+        }
+
         if self.derived.with_untracked(|fields| {
             fields
                 .iter()

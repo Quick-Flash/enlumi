@@ -115,3 +115,13 @@ Enlumi source is dual-licensed under [MIT](LICENSE-MIT) or
 [BSD-3-Clause](LICENSE-BSD-3-Clause), at your option (`MIT OR BSD-3-Clause`).
 Dependencies and the bundled test fixture retain their own licenses; see
 [third-party notices](THIRD_PARTY_NOTICES.md).
+
+
+Reusable plot geometry: draw translucent rectangles or lines with above/below
+shading, edit bounds directly on plots, and share named shapes across panels.
+See [geometry controls](docs/USAGE.md#geometry-bounds).
+
+State bands map discrete raw or derived fields to named, colored time sections
+behind signals using editable, [shareable JSON mappings](examples/state-mappings/README.md).
+No firmware-specific mapping loads automatically. Manual time bands provide reusable labeled highlights alongside
+automatic layers. [State band controls](docs/USAGE.md#state-bands-and-manual-time-highlights).

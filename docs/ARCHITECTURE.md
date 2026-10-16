@@ -75,3 +75,30 @@ field ordering, and reduction bounds. Headless tests send keyboard/pointer event
 through retained UI and inspect geometry and draw commands. Windows startup smoke
 test checks native window and presented GPU frames. Headless tests do not establish
 that every desktop and graphics-driver combination works.
+
+
+Plot geometry uses session-only named definitions (`geometry`, `geometry_state`),
+with ID membership and hidden-ID sets per pane. `geometry_library` and `geometry_inspector`
+manage shared definitions; `geometry_legend` supplies caller-owned rows through
+upstream `SeriesPlot` legend child slot, and `geometry_overlay` projects clipped data-space paths
+through public plotting geometry and draws a transparent canvas. Editing exposes small retained handles (`geometry_handle`) over pass-through
+canvas; background pan/zoom remains active. Persistent overlay owns gesture
+capture, including movable editor (`geometry_editor_drag`), so canceling edits
+can unmount controls safely. `geometry_interaction` handles data-space changes
+and horizontal/vertical constraints. Geometry never contributes to signal fit bounds.
+
+
+`state_bands` compresses discrete sample-and-hold values into source-owned
+intervals; mappings remain separate from interval timing. `band_state` runs
+preparation off UI thread, rejects stale generations/jobs, refreshes derived
+sources, and preserves mappings. `band_background` clips visible intervals,
+batches fills by color within each layer, and caps labels. Public plot
+`background_layer` slot forwards through series/time/data shells and renders
+before grid and signals. Generated layers use ordinary geometry membership and
+legend controls; manual time bands use same backdrop renderer with editable X
+bounds. `geometry_cursor` shares hover/active cursor policy with capture owner.
+
+`band_mapping_file` validates versioned JSON mappings and performs file I/O off
+UI thread. Runtime contains no PX4 enum lookup or source-name detection.
+Mappings retain unobserved values across refresh; optional firmware examples
+live under `examples/state-mappings` and load only through explicit import.

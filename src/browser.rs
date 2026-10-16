@@ -1,4 +1,5 @@
 use crate::action_button::ActionButtonProps;
+use crate::geometry_library::GeometryLibraryProps;
 use crate::{field_row::FieldRowProps, field_tree::FieldTree, state::Workbench};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
@@ -78,6 +79,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                     }
                 }
                 text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Open a log to browse fields".into(), |log| format!("{} fields | drag onto a plot", log.catalogue.len())))}}
+                GeometryLibrary(workbench = workbench)
                 VirtualList(count = Signal::derive_local(move || rows.with(Vec::len)), row_size = 28.0, label = "ULog field tree", class = "signal-list",
                     row = move |index: usize| view! { FieldRow(workbench = workbench, row = Memo::new(move |_| rows.with(|rows| rows.get(index).cloned())), visible_fields = visible_fields) })
                 text(class = "selected-field") {{move || workbench.selected_field.get().map_or_else(|| "Select a field or drag it onto a plot".into(), |field| workbench.field_name(&field))}}

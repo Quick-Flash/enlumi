@@ -1268,6 +1268,8 @@ dependencies = [
  "proc-macro2",
  "px4-ulog",
  "rfd",
+ "serde",
+ "serde_json",
  "syn 2.0.119",
  "tempfile",
  "wasmtime",
@@ -6268,7 +6270,6 @@ dependencies = [
 [[package]]
 name = "zgui-plot"
 version = "0.1.0"
-source = "git+https://github.com/Quick-Flash/zgui-plot?rev=40e0ad7d6263f89765e0cf439ea48d5a7b7ee5ec#40e0ad7d6263f89765e0cf439ea48d5a7b7ee5ec"
 dependencies = [
  "kurbo",
  "zgui",

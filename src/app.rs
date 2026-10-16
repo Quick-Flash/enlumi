@@ -22,6 +22,9 @@ pub fn WorkbenchApp(
         AppTheme(palette = palette) {
             column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
                 on:key_down:capture = move |event| {
+                    if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && (workbench.geometry.editing.get_untracked() || workbench.geometry.library_drag.get_untracked().is_some() || workbench.bands.open.get_untracked()) {
+                        workbench.cancel_band_source(); workbench.finish_geometry_editing(); event.prevent_default(); event.stop_propagation(); return;
+                    }
                     if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && workbench.filter_input_ui.drag.get_untracked().is_some() {
                         workbench.finish_filter_input_drag(true); event.prevent_default(); event.stop_propagation(); return;
                     }

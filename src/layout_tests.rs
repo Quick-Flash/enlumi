@@ -3355,3 +3355,827 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
         "Toggle must retain selected state"
     );
 }
+
+fn geometry_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workbench) {
+    use crate::{browser::BrowserProps, theme::AppThemeProps, workspace::PlotWorkspaceProps};
+    let model = Rc::new(RefCell::new(None));
+    let built = Rc::clone(&model);
+    let counts = Rc::new(RefCell::new(Counts::default()));
+    let captured = Rc::clone(&counts);
+    let handler=app().with_size(1200.,800.)
+        .with_renderer(Box::new(move |_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(Capture{renderer,counts:Rc::clone(&captured)}))}))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
+        .into_handler(move || {let workbench=crate::state::Workbench::new();*built.borrow_mut()=Some(workbench);
+            view!{AppTheme(palette=crate::theme::Palette::Forest){column(class="workbench page"){row(class="body"){Browser(workbench=workbench) PlotWorkspace(workbench=workbench)}}}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.),
+        DevicePx(800.),
+    )));
+    harness.settle(256);
+    let workbench = model.borrow().unwrap();
+    (harness, workbench)
+}
+
+#[test]
+fn geometry_draw_edit_reuse_and_cancel_keep_plot_bounds() {
+    use crate::geometry::GeometryKind;
+    let (mut harness, workbench) = geometry_harness();
+    let pane = workbench.pane();
+    pane.plot
+        .set_view(plot::Ranges::new((0., 10.), (0., 10.)))
+        .unwrap();
+    click_class(&mut harness, "draw-rectangle");
+    let bounds = harness.app().windows()[0]
+        .box_with_class("geometry-overlay")
+        .unwrap();
+    assert!(
+        bounds.size.width.0 > 700. && bounds.size.height.0 > 700.,
+        "{bounds:?}"
+    );
+    let x = bounds.origin.x.0;
+    let y = bounds.origin.y.0;
+    let w = bounds.size.width.0;
+    let h = bounds.size.height.0;
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x + w * 0.2, y + h * 0.2));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x + w * 0.6, y + h * 0.6));
+    harness.settle(128);
+    harness.deliver_to_first(pointer(PointerAction::Released, x + w * 0.6, y + h * 0.6));
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .pointer_capture(zgui::vocab::PointerId::MOUSE)
+            .is_none(),
+        "Drawing release clears pointer capture"
+    );
+    let items = workbench.geometry.items.get_untracked();
+    assert_eq!(items.len(), 1, "Pointer drag creates geometry");
+    let item = items[0].clone();
+    assert!(item.nonempty());
+    for (v, expected) in item.coordinates.iter().zip([2., 8., 6., 4.]) {
+        assert!((v - expected).abs() < 0.03, "{:?}", item.coordinates);
+    }
+    assert!(pane.geometry.with_untracked(|ids| ids.contains(&item.id)));
+    assert_eq!(
+        pane.plot.ranges.get_untracked(),
+        plot::Ranges::new((0., 10.), (0., 10.))
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("geometry-inspector")
+            .is_some()
+    );
+    let legend = harness.app().windows()[0]
+        .box_with_class("workbench-legend")
+        .unwrap();
+    let geom_row = harness.app().windows()[0]
+        .box_with_class("geometry-legend-row")
+        .unwrap();
+    assert!(
+        geom_row.origin.x.0 >= legend.origin.x.0
+            && geom_row.origin.y.0 >= legend.origin.y.0
+            && geom_row.origin.y.0 + geom_row.size.height.0
+                <= legend.origin.y.0 + legend.size.height.0,
+        "Geometry belongs inside graph legend"
+    );
+    let original_bounds = pane.plot.ranges.get_untracked();
+    click_class(&mut harness, "geometry-legend-toggle");
+    assert!(
+        pane.hidden_geometry
+            .with_untracked(|ids| ids.contains(&item.id))
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("geometry-interaction")
+            .is_empty()
+    );
+    assert_eq!(pane.plot.ranges.get_untracked(), original_bounds);
+    click_class(&mut harness, "geometry-legend-toggle");
+    assert!(
+        !pane
+            .hidden_geometry
+            .with_untracked(|ids| ids.contains(&item.id))
+    );
+    click_class(&mut harness, "geometry-legend-edit");
+    click_class(&mut harness, "geometry-appearance-tab");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("geometry-opacity")
+            .is_some()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("color-square")
+            .is_some()
+    );
+    click_class(&mut harness, "geometry-coordinates-tab");
+    click_class(&mut harness, "geometry-edit-toggle");
+    click_class(&mut harness, "geometry-legend-remove");
+    assert!(!pane.geometry.with_untracked(|ids| ids.contains(&item.id)));
+    assert!(
+        workbench.geometry_item(item.id).is_some(),
+        "Legend X preserves reusable definition"
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("workbench-legend")
+            .is_empty(),
+        "No empty legend after removing final geometry"
+    );
+    assert_eq!(pane.plot.ranges.get_untracked(), original_bounds);
+    workbench.attach_geometry(item.id, pane, true);
+    harness.settle(128);
+    click_class(&mut harness, "geometry-legend-edit");
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("geometry-handle")
+            .len(),
+        5
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("geometry-interaction")
+            .is_empty(),
+        "Editing must not cover plot with blocking surface"
+    );
+    // Interior background remains available for pan and wheel zoom during editing.
+    let before_navigation = pane.plot.ranges.get_untracked();
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x + w * 0.3, y + h * 0.3));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x + w * 0.32, y + h * 0.32));
+    harness.deliver_to_first(pointer(PointerAction::Released, x + w * 0.32, y + h * 0.32));
+    harness.settle(128);
+    assert_ne!(
+        pane.plot.ranges.get_untracked(),
+        before_navigation,
+        "Pan remains active inside rectangle while editing"
+    );
+    assert_eq!(
+        workbench.geometry_item(item.id).unwrap().coordinates,
+        item.coordinates
+    );
+    assert!(workbench.geometry.editing.get_untracked());
+    let before_wheel = pane.plot.ranges.get_untracked();
+    harness.deliver_to_first(SurfaceEvent::Wheel {
+        event: zgui::vocab::WheelEvent {
+            delta: zgui::vocab::ScrollDelta::Pixels(Size::new(CssPx(0.), CssPx(-100.))),
+            phase: zgui::vocab::ScrollPhase::Moved,
+            position: Point::new(CssPx(x + w * 0.3), CssPx(y + h * 0.3)),
+            id: zgui::vocab::PointerId::MOUSE,
+            kind: zgui::vocab::PointerKind::Mouse,
+        },
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.settle(128);
+    assert_ne!(
+        pane.plot.ranges.get_untracked().x.span(),
+        before_wheel.x.span(),
+        "Wheel zoom stays active during editing"
+    );
+    assert_eq!(
+        workbench.geometry_item(item.id).unwrap().coordinates,
+        item.coordinates
+    );
+    pane.plot.set_view(before_navigation).unwrap();
+    harness.settle(128);
+    let editor_before = harness.app().windows()[0]
+        .box_with_class("geometry-inspector")
+        .unwrap();
+    let title = harness.app().windows()[0]
+        .box_with_class("geometry-editor-heading")
+        .unwrap();
+    harness.deliver_to_first(pointer(
+        PointerAction::Pressed,
+        title.origin.x.0 + 20.,
+        title.origin.y.0 + 10.,
+    ));
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        title.origin.x.0 + 120.,
+        title.origin.y.0 - 40.,
+    ));
+    harness.deliver_to_first(pointer(
+        PointerAction::Released,
+        title.origin.x.0 + 120.,
+        title.origin.y.0 - 40.,
+    ));
+    harness.settle(128);
+    let editor_after = harness.app().windows()[0]
+        .box_with_class("geometry-inspector")
+        .unwrap();
+    assert!(
+        editor_after.origin.x.0 > editor_before.origin.x.0 + 90.,
+        "Editor title drag moves controls away from data"
+    );
+    assert_eq!(pane.plot.ranges.get_untracked(), before_navigation);
+    // Drag rectangle body; cancellation restores original coordinates.
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x + w * 0.4, y + h * 0.4));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x + w * 0.5, y + h * 0.5));
+    harness.settle(128);
+    assert_ne!(
+        workbench.geometry_item(item.id).unwrap().coordinates,
+        item.coordinates
+    );
+    assert_eq!(
+        harness.platform().offscreens()[0].last_cursor(),
+        Some(zgui::platform::CursorStyle::Grabbing),
+        "Active move uses native grabbing cursor even under pointer capture"
+    );
+    workbench.cancel_geometry_drag();
+    harness.deliver_to_first(pointer(PointerAction::Released, x + w * 0.5, y + h * 0.5));
+    harness.settle(128);
+    assert_eq!(
+        workbench.geometry_item(item.id).unwrap().coordinates,
+        item.coordinates
+    );
+    workbench.finish_geometry_editing();
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("geometry-interaction")
+            .is_empty()
+    );
+    let before_pan = pane.plot.ranges.get_untracked();
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x + w * 0.4, y + h * 0.4));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x + w * 0.5, y + h * 0.5));
+    harness.deliver_to_first(pointer(PointerAction::Released, x + w * 0.5, y + h * 0.5));
+    harness.settle(128);
+    assert_ne!(
+        pane.plot.ranges.get_untracked(),
+        before_pan,
+        "Done restores normal plot panning"
+    );
+    assert_eq!(
+        workbench.geometry_item(item.id).unwrap().coordinates,
+        item.coordinates,
+        "Panning must not move data-space bounds"
+    );
+    let second = workbench.add_plot(pane.id, false, false);
+    harness.settle(128);
+    // Drag library definition onto second pane, preserving first membership.
+    let row = harness.app().windows()[0]
+        .box_with_class("geometry-row")
+        .unwrap();
+    let start = (
+        row.origin.x.0 + row.size.width.0 / 2.,
+        row.origin.y.0 + row.size.height.0 / 2.,
+    );
+    let host = workbench
+        .geometry
+        .hosts
+        .with_value(|hosts| hosts[&second.id]);
+    let target = host.window_bounds().unwrap();
+    let end = (
+        target.origin.x.0 + target.size.width.0 * 0.5,
+        target.origin.y.0 + target.size.height.0 * 0.5,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, start.0, start.1));
+    harness.deliver_to_first(pointer(PointerAction::Moved, end.0, end.1));
+    harness.settle(128);
+    assert_eq!(workbench.geometry.target.get_untracked(), Some(second.id));
+    harness.deliver_to_first(pointer(PointerAction::Released, end.0, end.1));
+    harness.settle(128);
+    assert!(second.geometry.with_untracked(|ids| ids.contains(&item.id)));
+    assert!(pane.geometry.with_untracked(|ids| ids.contains(&item.id)));
+    workbench.toggle_geometry(second, item.id);
+    assert!(
+        second
+            .hidden_geometry
+            .with_untracked(|ids| ids.contains(&item.id))
+    );
+    assert!(
+        !pane
+            .hidden_geometry
+            .with_untracked(|ids| ids.contains(&item.id))
+    );
+    workbench.remove_geometry_from(second, item.id);
+    assert!(workbench.geometry_item(item.id).is_some());
+    assert!(pane.geometry.with_untracked(|ids| ids.contains(&item.id)));
+    assert!(!second.geometry.with_untracked(|ids| ids.contains(&item.id)));
+    assert!(
+        !second
+            .hidden_geometry
+            .with_untracked(|ids| ids.contains(&item.id))
+    );
+    workbench.attach_geometry(item.id, second, true);
+    workbench.select_geometry(item.id);
+    workbench.geometry_coordinates(0, "3.0".into());
+    assert_eq!(workbench.geometry_item(item.id).unwrap().coordinates[0], 3.);
+    workbench.geometry_coordinates(0, "NaN".into());
+    assert_eq!(workbench.geometry_item(item.id).unwrap().coordinates[0], 3.);
+    workbench.duplicate_geometry(item.id);
+    assert_eq!(workbench.geometry.items.with_untracked(Vec::len), 2);
+    let copy = workbench.geometry.selected.get_untracked().unwrap();
+    assert_ne!(copy, item.id);
+    workbench.delete_geometry(copy);
+    assert_eq!(workbench.geometry.items.with_untracked(Vec::len), 1);
+    workbench.arm_geometry(GeometryKind::Line);
+    let g = plot::PlotGeometry::with_bounds(0., 0., 100., 100., 100., 100.).unwrap();
+    assert!(workbench.begin_geometry(pane, kurbo::Point::new(20., 20.), g));
+    workbench.move_geometry(pane, kurbo::Point::new(80., 80.), g);
+    assert_eq!(workbench.geometry.items.with_untracked(Vec::len), 2);
+    workbench.cancel_geometry_drag();
+    assert_eq!(workbench.geometry.items.with_untracked(Vec::len), 1);
+    workbench.delete_geometry(item.id);
+    assert!(pane.geometry.with_untracked(|ids| ids.is_empty()));
+    assert!(second.geometry.with_untracked(|ids| ids.is_empty()));
+    workbench.arm_geometry(GeometryKind::Line);
+    assert!(workbench.begin_geometry(pane, kurbo::Point::new(20., 20.), g));
+    workbench.move_geometry(pane, kurbo::Point::new(80., 80.), g);
+    workbench.end_geometry();
+    harness.settle(128);
+    let line = workbench.geometry.selected.get_untracked().unwrap();
+    click_class(&mut harness, "geometry-horizontal");
+    let horizontal = workbench.geometry_item(line).unwrap();
+    assert_eq!(
+        horizontal.orientation,
+        crate::geometry::LineOrientation::Horizontal
+    );
+    assert_eq!(horizontal.coordinates[1], horizontal.coordinates[3]);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("geometry-level")
+            .is_some()
+    );
+    workbench.geometry_coordinates(1, "4.25".into());
+    assert_eq!(workbench.geometry_item(line).unwrap().coordinates[3], 4.25);
+    click_class(&mut harness, "geometry-vertical");
+    let vertical = workbench.geometry_item(line).unwrap();
+    assert_eq!(
+        vertical.orientation,
+        crate::geometry::LineOrientation::Vertical
+    );
+    assert_eq!(vertical.coordinates[0], vertical.coordinates[2]);
+    workbench.geometry_coordinates(0, "5.0".into());
+    assert_eq!(workbench.geometry_item(line).unwrap().coordinates[2], 5.0);
+    harness.settle(128);
+    click_class(&mut harness, "geometry-editor-collapse");
+    let handle = harness.app().windows()[0]
+        .box_with_class("geometry-move-handle")
+        .unwrap();
+    let center = (
+        handle.origin.x.0 + handle.size.width.0 / 2.,
+        handle.origin.y.0 + handle.size.height.0 / 2.,
+    );
+    let original_line = workbench.geometry_item(line).unwrap();
+    let original_view = pane.plot.ranges.get_untracked();
+    harness.deliver_to_first(pointer(PointerAction::Pressed, center.0, center.1));
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        center.0 + 30.,
+        center.1 + 60.,
+    ));
+    harness.deliver_to_first(pointer(
+        PointerAction::Released,
+        center.0 + 30.,
+        center.1 + 60.,
+    ));
+    harness.settle(128);
+    let moved = workbench.geometry_item(line).unwrap();
+    assert_ne!(moved.coordinates[0], original_line.coordinates[0]);
+    assert_eq!(moved.coordinates[0], moved.coordinates[2]);
+    assert_eq!(moved.coordinates[1], original_line.coordinates[1]);
+    assert_eq!(moved.coordinates[3], original_line.coordinates[3]);
+    assert_eq!(pane.plot.ranges.get_untracked(), original_view);
+    let handle = harness.app().windows()[0]
+        .box_with_class("geometry-move-handle")
+        .unwrap();
+    let center = (
+        handle.origin.x.0 + handle.size.width.0 / 2.,
+        handle.origin.y.0 + handle.size.height.0 / 2.,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, center.0, center.1));
+    harness.deliver_to_first(pointer(PointerAction::Moved, center.0 + 20., center.1));
+    harness.settle(128);
+    assert_ne!(
+        workbench.geometry_item(line).unwrap().coordinates,
+        moved.coordinates
+    );
+    workbench.finish_geometry_editing();
+    harness.settle(128);
+    harness.deliver_to_first(pointer(PointerAction::Released, center.0 + 20., center.1));
+    harness.settle(128);
+    assert_eq!(
+        workbench.geometry_item(line).unwrap().coordinates,
+        moved.coordinates,
+        "Cancel restores coordinates while unmounting handles"
+    );
+    assert!(
+        harness.app().windows()[0]
+            .pointer_capture(zgui::vocab::PointerId::MOUSE)
+            .is_none(),
+        "Canceled handle release must clear persistent capture"
+    );
+}
+
+#[test]
+fn state_bands_map_sources_render_labels_refresh_and_keep_manual_highlights() {
+    use crate::{
+        geometry::{Geometry, GeometryKind},
+        state_bands::StateBands,
+    };
+    use plot::{PlotPoint, time_series::SeriesData};
+    let (mut harness, workbench) = geometry_harness();
+    let pane = workbench.pane();
+    let log = crate::log::LogStore::read(std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/esc_status_log.ulg"
+    )))
+    .unwrap();
+    let source = log.catalogue[0].id.clone();
+    let end = log.duration;
+    assert!(end > 0.);
+    workbench.log.set(Some(std::sync::Arc::new(log)));
+    let data = SeriesData::new(vec![
+        PlotPoint { x: 0., y: 0. },
+        PlotPoint {
+            x: end * 0.3,
+            y: 3.,
+        },
+        PlotPoint {
+            x: end * 0.6,
+            y: 4.,
+        },
+    ])
+    .unwrap();
+    workbench.cache.update(|cache| {
+        cache.insert(source.clone(), data.clone());
+    });
+    pane.plot
+        .set_view(plot::Ranges::new((0., end), (-10., 10.)))
+        .unwrap();
+    harness.settle(128);
+    click_class(&mut harness, "open-state-bands");
+    let drop = harness.app().windows()[0]
+        .box_with_class("band-source-drop")
+        .unwrap();
+    workbench.drop_fields(source.clone(), drop.origin.x.0 + 10., drop.origin.y.0 + 10.);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.bands.busy.get_untracked() {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(256);
+    let item = workbench
+        .geometry
+        .items
+        .get_untracked()
+        .into_iter()
+        .find(|item| item.states.is_some())
+        .unwrap();
+    let id = item.id;
+    assert_eq!(item.states.as_ref().unwrap().intervals.len(), 3);
+    assert!(pane.geometry.with_untracked(|ids| ids.contains(&id)));
+    let window = &harness.app().windows()[0];
+    assert_eq!(window.nodes_with_class("band-label").len(), 3);
+    assert_eq!(window.nodes_with_class("band-rule-row").len(), 3);
+    assert!(
+        window.nodes_with_class("geometry-handle").is_empty(),
+        "Generated intervals have no manual handles"
+    );
+    let bg = window.box_with_class("band-background").unwrap();
+    let plot = window.box_with_class("time-series-plot").unwrap();
+    assert_eq!(bg, plot, "Background spans data area");
+    crate::geometry_inspector::change(workbench, id, |item| {
+        std::sync::Arc::make_mut(item.states.as_mut().unwrap()).rules[0].name = "Pilot".into()
+    });
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("band-label")
+            .iter()
+            .any(|node| harness.app().windows()[0].dom().text_content(*node) == "Pilot"),
+        "Label reacts without recreating interval"
+    );
+    workbench.geometry_coordinates(0, "9".into());
+    assert!(
+        workbench
+            .geometry
+            .error
+            .get_untracked()
+            .contains("Source controls")
+    );
+    workbench.toggle_geometry(pane, id);
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("band-label")
+            .is_empty()
+    );
+    workbench.toggle_geometry(pane, id);
+    harness.settle(128);
+    let mut manual = Geometry::new(workbench.id(), GeometryKind::Band, kurbo::Point::ZERO);
+    manual.name = "Review".into();
+    manual.coordinates = [end * 0.1, 0., end * 0.2, 0.];
+    let manual_id = manual.id;
+    workbench.geometry.items.update(|items| items.push(manual));
+    workbench.attach_geometry(manual_id, pane, true);
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("band-label")
+            .iter()
+            .any(|node| harness.app().windows()[0].dom().text_content(*node) == "Review")
+    );
+    // Derived state changes regenerate intervals and preserve mappings; invalid output hides stale shading.
+    let derived_id = workbench.id();
+    let key = crate::derived::key(derived_id);
+    workbench.derived.set(vec![crate::derived::DerivedField {
+        id: derived_id,
+        name: "Discrete".into(),
+        sources: vec![source.clone()],
+        group: derived_id,
+        filter: crate::derived::FilterSpec::Affine {
+            gain: 1.,
+            offset: 0.,
+        },
+        data: Some(data.clone()),
+    }]);
+    crate::geometry_inspector::change(workbench, id, |item| {
+        let states = std::sync::Arc::make_mut(item.states.as_mut().unwrap());
+        states.source = key.clone();
+    });
+    assert!(
+        workbench
+            .delete_filter(derived_id)
+            .unwrap_err()
+            .contains("state bands")
+    );
+    let changed = SeriesData::new(vec![
+        PlotPoint { x: 0., y: 0. },
+        PlotPoint {
+            x: end * 0.5,
+            y: 4.,
+        },
+    ])
+    .unwrap();
+    let mut fields = workbench.derived.get_untracked();
+    fields[0].data = Some(changed);
+    workbench.publish_filter_fields(fields);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench
+        .bands
+        .jobs
+        .with_value(|jobs| jobs.contains_key(&id))
+    {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    let updated = workbench.geometry_item(id).unwrap();
+    assert_eq!(updated.states.as_ref().unwrap().intervals.len(), 2);
+    assert_eq!(updated.states.as_ref().unwrap().rules[0].name, "Pilot");
+    let mut fields = workbench.derived.get_untracked();
+    fields[0].data = Some(SeriesData::new(vec![PlotPoint { x: 0., y: 0.5 }]).unwrap());
+    workbench.publish_filter_fields(fields);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench
+        .bands
+        .jobs
+        .with_value(|jobs| jobs.contains_key(&id))
+    {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert!(
+        workbench
+            .geometry_item(id)
+            .unwrap()
+            .states
+            .unwrap()
+            .error
+            .is_some()
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("band-label")
+            .len(),
+        1,
+        "Invalid derived source leaves only manual highlight"
+    );
+    // Recovery must also work when undo restores exact previous input allocation.
+    let restored = updated.states.as_ref().unwrap().input.clone();
+    let mut fields = workbench.derived.get_untracked();
+    fields[0].data = Some(restored);
+    workbench.publish_filter_fields(fields);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench
+        .bands
+        .jobs
+        .with_value(|jobs| jobs.contains_key(&id))
+    {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert!(
+        workbench
+            .geometry_item(id)
+            .unwrap()
+            .states
+            .unwrap()
+            .error
+            .is_none()
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("band-label")
+            .len(),
+        3
+    );
+    // Canceling creation invalidates queued work; missing sources do not create geometry.
+    let count = workbench.geometry.items.with_untracked(Vec::len);
+    workbench.bands.open.set(true);
+    workbench.generate_bands(source.clone(), None);
+    workbench.cancel_band_source();
+    for _ in 0..20 {
+        harness.settle(128);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(workbench.geometry.items.with_untracked(Vec::len), count);
+    workbench.clear_generated_bands();
+    assert!(workbench.geometry_item(id).is_none());
+    assert!(workbench.geometry_item(manual_id).is_some());
+    workbench.generate_bands("missing/0/state".into(), None);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.bands.busy.get_untracked() {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(!workbench.bands.error.get_untracked().is_empty());
+    assert_eq!(workbench.geometry.items.with_untracked(Vec::len), 1);
+    workbench.generate_bands(source, None);
+    workbench.open(std::path::PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/no-such-band-test.ulg"
+    )));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.loading.get_untracked() {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert!(!workbench.bands.busy.get_untracked());
+    assert_eq!(
+        workbench.geometry.items.with_untracked(Vec::len),
+        1,
+        "Stale generation cannot attach bands after log switch"
+    );
+    workbench.edit_geometry_on(pane, manual_id);
+    harness.settle(128);
+    let handle = harness.app().windows()[0]
+        .box_with_class("geometry-move-handle")
+        .unwrap();
+    let center = (
+        handle.origin.x.0 + handle.size.width.0 / 2.,
+        handle.origin.y.0 + handle.size.height.0 / 2.,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Moved, center.0, center.1));
+    harness.settle(128);
+    assert_eq!(
+        harness.platform().offscreens()[0].last_cursor(),
+        Some(zgui::platform::CursorStyle::ResizeEastWest)
+    );
+    let previous = workbench.geometry_item(manual_id).unwrap().coordinates;
+    harness.deliver_to_first(pointer(PointerAction::Pressed, center.0, center.1));
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        center.0 + 30.,
+        center.1 + 40.,
+    ));
+    harness.deliver_to_first(pointer(
+        PointerAction::Released,
+        center.0 + 30.,
+        center.1 + 40.,
+    ));
+    harness.settle(128);
+    let moved = workbench.geometry_item(manual_id).unwrap().coordinates;
+    assert_ne!(moved[0], previous[0]);
+    assert_eq!(moved[1], previous[1]);
+    assert_eq!(moved[3], previous[3]);
+    workbench.finish_geometry_editing();
+    harness.settle(128);
+    click_class(&mut harness, "draw-time-band");
+    let plot = harness.app().windows()[0]
+        .box_with_class("time-series-plot")
+        .unwrap();
+    let (x, y, w, h) = (
+        plot.origin.x.0,
+        plot.origin.y.0,
+        plot.size.width.0,
+        plot.size.height.0,
+    );
+    let before = pane.plot.ranges.get_untracked();
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x + w * 0.7, y + h * 0.3));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x + w * 0.85, y + h * 0.6));
+    harness.settle(128);
+    assert_eq!(
+        harness.platform().offscreens()[0].last_cursor(),
+        Some(zgui::platform::CursorStyle::Crosshair)
+    );
+    harness.deliver_to_first(pointer(PointerAction::Released, x + w * 0.85, y + h * 0.6));
+    harness.settle(128);
+    let drawn = workbench
+        .geometry_item(workbench.geometry.selected.get_untracked().unwrap())
+        .unwrap();
+    assert_eq!(drawn.kind, GeometryKind::Band);
+    assert!(drawn.states.is_none() && drawn.nonempty());
+    assert_eq!(pane.plot.ranges.get_untracked(), before);
+    assert!(StateBands::build("bad".into(), SeriesData::new(vec![]).unwrap(), end).is_err());
+}
+
+#[test]
+fn mapping_builder_adds_custom_values_reports_duplicates_and_removes_rows() {
+    let (mut harness, workbench) = geometry_harness();
+    click_class(&mut harness, "open-state-bands");
+    click_class(&mut harness, "blank-state-mapping");
+    let id = workbench.geometry.selected.get_untracked().unwrap();
+    assert!(workbench.log.get_untracked().is_none());
+    click_class(&mut harness, "band-add-state");
+    assert!(
+        !workbench.geometry.error.get_untracked().is_empty(),
+        "add {:?}, editor {:?}",
+        harness.app().windows()[0].box_with_class("band-add-state"),
+        harness.app().windows()[0].box_with_class("geometry-inspector")
+    );
+    for (class, text) in [("band-new-value", "42"), ("band-new-name", "Custom hover")] {
+        click_class(&mut harness, class);
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character(text),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
+    click_class(&mut harness, "band-add-state");
+    assert!(
+        workbench.geometry.error.get_untracked().is_empty(),
+        "{}",
+        workbench.geometry.error.get_untracked()
+    );
+    let item = workbench.geometry_item(id).unwrap();
+    assert_eq!(item.states.as_ref().unwrap().rules[0].name, "Custom hover");
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("band-rule-row")
+            .len(),
+        1
+    );
+    click_class(&mut harness, "band-rule-value");
+    for (text, modifiers) in [("a", Modifiers::CONTROL), ("-2", Modifiers::NONE)] {
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character(text),
+            modifiers,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
+    click_class(&mut harness, "band-set-value");
+    assert_eq!(
+        workbench
+            .geometry_item(id)
+            .unwrap()
+            .states
+            .as_ref()
+            .unwrap()
+            .rules[0]
+            .value,
+        -2
+    );
+    assert!(!workbench.edit_mapping_rule(id, None, "-2", "Duplicate"));
+    assert!(
+        workbench
+            .geometry
+            .error
+            .get_untracked()
+            .contains("already exists")
+    );
+    click_class(&mut harness, "band-remove-rule");
+    assert_eq!(
+        workbench
+            .geometry_item(id)
+            .unwrap()
+            .states
+            .as_ref()
+            .unwrap()
+            .rules
+            .len(),
+        0
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("band-rule-row")
+            .len(),
+        0
+    );
+}
