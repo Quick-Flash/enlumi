@@ -1,9 +1,9 @@
+use crate::action_button::ActionButtonProps;
 use crate::{
     filter_quaternion_slot::FilterQuaternionSlotProps, filter_source_row::FilterSourceRowProps,
     state::Workbench,
 };
 use zgui::prelude::*;
-use zgui_ui::prelude::*;
 
 #[component]
 pub fn FilterSources(workbench: Workbench) -> impl IntoView {
@@ -16,7 +16,7 @@ pub fn FilterSources(workbench: Workbench) -> impl IntoView {
         column(class = "filter-sources", node_ref = workbench.filter_drop, class:filter-sources-hover = move || workbench.filter_drop_active.get()) {
             row(class = "filter-source-heading") {
                 text(class = "filter-section-title") {{move || if workbench.combined_filter() { "Inputs" } else { "Inputs / outputs" }}}
-                Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "clear-filter-sources", disabled = Signal::derive_local(move || workbench.filter_inputs.with(|inputs| inputs.iter().all(|input| input.source.is_empty()))), on:click = move |_| workbench.clear_filter_sources()) { "Clear fields" }
+                ActionButton(class = "clear-filter-sources", disabled = Signal::derive_local(move || workbench.filter_inputs.with(|inputs| inputs.iter().all(|input| input.source.is_empty()))), on:click = move |_| workbench.clear_filter_sources()) { "Clear fields" }
             }
             if move || workbench.filter_kind.get() != "rpy" && workbench.filter_inputs.with(Vec::is_empty) {
                 text(class = "filter-drop-empty") { "Drop fields here" }

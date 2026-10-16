@@ -1,0 +1,26 @@
+pub const OUTPUTS: usize = 1;
+
+#[derive(Default)]
+pub struct State {
+    // Store history here. State survives chunks, resets each run.
+}
+
+pub fn filter(
+    time: &[f64],
+    inputs: &[&[f64]],
+    outputs: &mut [&mut [f64]],
+    _state: &mut State,
+) {
+    // Sum every input field into the first named output.
+    // With one input, this copies its values unchanged.
+    outputs[0].fill(0.0);
+    for input in inputs {
+        // Each input is one field, in the Inputs list order.
+        for (i, &value) in input.iter().enumerate() {
+            let _time_seconds = time[i]; // Timestamp for this sample.
+            outputs[0][i] += value;
+        }
+    }
+    // NaN in any input leaves a gap at that sample.
+    // More outputs: update OUTPUTS and add matching named rows.
+}

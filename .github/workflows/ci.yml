@@ -42,3 +42,7 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --locked --workspace
+      - name: Rust filter toolchain
+        run: rustup target add wasm32-unknown-unknown
+      - name: Rust / WASM integration tests
+        run: cargo test --locked -p enlumi script_e2e -- --ignored --nocapture

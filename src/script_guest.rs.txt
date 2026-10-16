@@ -1,0 +1,43 @@
+// Generated ABI v1. User code stays in filter.rs for useful compiler locations.
+#[path = "filter.rs"]
+mod user;
+
+const CHUNK: usize = 4096;
+struct Context {
+    state: user::State,
+    inputs: usize,
+    outputs: usize,
+    buffer: Vec<f64>,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn init(inputs: usize, outputs: usize) -> *mut Context {
+    assert!((1..=64).contains(&inputs) && (1..=16).contains(&outputs));
+    assert_eq!(outputs, user::OUTPUTS);
+    Box::into_raw(Box::new(Context {
+        state: user::State::default(),
+        inputs,
+        outputs,
+        buffer: vec![f64::NAN; CHUNK * (1 + inputs + outputs)],
+    }))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn buffer(context: *mut Context) -> *mut f64 {
+    unsafe { (*context).buffer.as_mut_ptr() }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn process(context: *mut Context, len: usize) {
+    let context = unsafe { &mut *context };
+    assert!(len <= CHUNK);
+    let (time, rest) = context.buffer.split_at_mut(CHUNK);
+    let (inputs, outputs) = rest.split_at_mut(context.inputs * CHUNK);
+    let inputs: Vec<_> = inputs.chunks_exact(CHUNK).map(|column| &column[..len]).collect();
+    let mut outputs: Vec<_> = outputs.chunks_exact_mut(CHUNK).map(|column| {
+        column[..len].fill(f64::NAN);
+        &mut column[..len]
+    }).collect();
+    assert_eq!(outputs.len(), context.outputs);
+    user::filter(&time[..len], &inputs, &mut outputs, &mut context.state);
+}

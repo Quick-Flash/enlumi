@@ -21,6 +21,19 @@ panel records, field-drop fitting policy, duplicate-source validation, and
 application callbacks such as Add filters. `Pane::display()` exposes a durable
 plot-facing view without giving plotting code access to ULog state.
 
+## UI action buttons
+
+Use `ActionButton` (`src/action_button.rs`) for application commands, including
+navigation, toolbars, filter actions, and remove buttons. It fixes the underlying
+Zgui variant and shares idle, hover, pressed, selected, disabled, and focus styling
+in `src/action_button.css`. Caller classes identify actions and set geometry;
+do not add parent-specific button palettes or choose variants at call sites.
+Use `setting-active` for persistent toggle state. Ordinary commands do not latch.
+
+Saved-field/new-field rows remain selection controls with their list appearance.
+Plot library controls keep upstream behavior and styling. Headless tests compare
+actual rendered app-button colors across locations and interaction states.
+
 ## Data and lifetime rules
 
 `LogStore` retains typed columns. Plot series keep full f64 samples and shared

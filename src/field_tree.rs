@@ -378,7 +378,7 @@ mod tests {
         assert!(leaf.last);
         assert_eq!(
             leaf.guides,
-            [],
+            Vec::<usize>::new(),
             "Last field branch leaves no ancestor trunk"
         );
         let filtered = tree.rows("xyz[2]", &expanded);

@@ -1,5 +1,5 @@
 use crate::{derived::FilterInput, state::Workbench};
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 use zgui::prelude::*;
 use zgui::view::FrameHandle;
 use zgui::vocab::Timestamp;
@@ -7,6 +7,7 @@ use zgui::vocab::Timestamp;
 #[derive(Clone, Copy)]
 pub struct FilterInputUi {
     pub slots: [NodeRef; 4],
+    pub rows: StoredValue<BTreeMap<String, NodeRef>, LocalStorage>,
     pub hover: RwSignal<Option<usize>, LocalStorage>,
     pub drag: RwSignal<Option<InputDrag>, LocalStorage>,
     pub rebase: RwSignal<bool, LocalStorage>,
@@ -17,6 +18,7 @@ impl FilterInputUi {
     pub fn new() -> Self {
         Self {
             slots: std::array::from_fn(|_| NodeRef::new()),
+            rows: StoredValue::new_local(BTreeMap::new()),
             hover: RwSignal::new_local(None),
             drag: RwSignal::new_local(None),
             rebase: RwSignal::new_local(false),
@@ -35,6 +37,8 @@ pub struct InputDrag {
     target: Option<usize>,
     rects: Vec<(f32, f32, f32, f32)>,
     original: Vec<FilterInput>,
+    swap: bool,
+    clip: Option<(f32, f32, f32, f32)>,
 }
 pub fn empty_input() -> FilterInput {
     FilterInput {
@@ -54,6 +58,12 @@ fn bounds(node: NodeRef) -> Option<(f32, f32, f32, f32)> {
 }
 impl InputDrag {
     fn hit(&self, x: f32, y: f32) -> Option<usize> {
+        if self
+            .clip
+            .is_some_and(|r| x < r.0 || x > r.0 + r.2 || y < r.1 || y > r.1 + r.3)
+        {
+            return None;
+        }
         let first = self.rects.first()?;
         let last = self.rects.last()?;
         if x < first.0 || x > first.0 + first.2 || y < first.1 || y > last.1 + last.3 {
@@ -72,7 +82,12 @@ impl InputDrag {
     fn order(&self) -> Vec<usize> {
         let mut order: Vec<_> = (0..self.original.len()).collect();
         if let Some(target) = self.target {
-            order.swap(self.from, target);
+            if self.swap {
+                order.swap(self.from, target);
+            } else {
+                let moved = order.remove(self.from);
+                order.insert(target, moved);
+            }
         }
         order
     }
@@ -104,7 +119,8 @@ impl Workbench {
         if self.filter_input_ui.drag.get_untracked().is_some() {
             return;
         }
-        if self.filter_kind.get_untracked() != "rpy" {
+        let kind = self.filter_kind.get_untracked();
+        if !matches!(kind.as_str(), "rpy" | "rust") || self.script_busy.get_untracked() {
             return;
         }
         let mut original = self.filter_inputs.get_untracked();
@@ -114,13 +130,21 @@ impl Workbench {
         {
             return;
         }
-        original.resize_with(4, empty_input);
-        let rects: Option<Vec<_>> = self
-            .filter_input_ui
-            .slots
-            .iter()
-            .map(|&node| bounds(node))
-            .collect();
+        let rects: Option<Vec<_>> = if kind == "rpy" {
+            original.resize_with(4, empty_input);
+            self.filter_input_ui
+                .slots
+                .iter()
+                .map(|&node| bounds(node))
+                .collect()
+        } else {
+            self.filter_input_ui.rows.with_value(|rows| {
+                original
+                    .iter()
+                    .map(|input| rows.get(&input.source).copied().and_then(bounds))
+                    .collect()
+            })
+        };
         let Some(rects) = rects else {
             return;
         };
@@ -133,6 +157,8 @@ impl Workbench {
             target: Some(index),
             rects,
             original,
+            swap: kind == "rpy",
+            clip: bounds(self.filter_drop),
         }));
     }
     pub fn move_filter_input_drag(self, x: f32, y: f32) {
@@ -156,9 +182,10 @@ impl Workbench {
     pub fn filter_input_offset(self, index: usize) -> String {
         format!(
             "translateY({}px)",
-            self.filter_input_ui
-                .drag
-                .with(|drag| drag.as_ref().map_or(0.0, |drag| drag.offset(index)))
+            self.filter_input_ui.drag.with(|drag| drag
+                .as_ref()
+                .filter(|drag| index < drag.original.len())
+                .map_or(0.0, |drag| drag.offset(index)))
         )
     }
     pub fn finish_filter_input_drag(self, cancel: bool) {

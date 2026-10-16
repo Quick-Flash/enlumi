@@ -1,13 +1,20 @@
 use crate::{filter, log::LogStore};
 use plot::time_series::SeriesData;
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FilterSpec {
     LowPass(f64),
     HighPass(f64),
     Affine { gain: f64, offset: f64 },
     Magnitude,
+    Rust(Arc<crate::script::Script>, usize),
     Quaternion(RpyAxis, AngleUnit),
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -46,28 +53,34 @@ impl RpyAxis {
     }
 }
 impl FilterSpec {
-    pub fn label(self) -> String {
+    pub fn label(&self) -> String {
         match self {
             Self::LowPass(hz) => format!("Low-pass · {hz} Hz"),
             Self::HighPass(hz) => format!("High-pass · {hz} Hz"),
             Self::Affine { gain, offset } => format!("Gain {gain} · offset {offset}"),
             Self::Magnitude => "Magnitude".into(),
+            Self::Rust(..) => "Rust / WASM".into(),
             Self::Quaternion(axis, unit) => {
                 format!("Quaternion → {} ({})", axis.name(), unit.symbol())
             }
         }
     }
-    pub fn apply(self, data: &SeriesData) -> Result<SeriesData, String> {
+    pub fn apply(&self, data: &SeriesData) -> Result<SeriesData, String> {
         self.apply_inputs(&[data])
     }
-    pub fn apply_inputs(self, inputs: &[&SeriesData]) -> Result<SeriesData, String> {
+    pub fn apply_inputs(&self, inputs: &[&SeriesData]) -> Result<SeriesData, String> {
         self.validate_inputs(inputs.len())?;
         let data = inputs[0];
         match self {
             Self::Magnitude | Self::Quaternion(..) => crate::filter_multi::apply(self, inputs),
-            Self::LowPass(hz) => filter::low_pass(data, hz),
+            Self::Rust(script, output) => script
+                .apply(inputs, Arc::new(AtomicBool::new(false)))?
+                .get(*output)
+                .cloned()
+                .ok_or("Rust output index out of range".into()),
+            Self::LowPass(hz) => filter::low_pass(data, *hz),
             Self::HighPass(hz) => {
-                let low = filter::low_pass(data, hz)?;
+                let low = filter::low_pass(data, *hz)?;
                 SeriesData::new(
                     data.samples()
                         .iter()
@@ -95,14 +108,22 @@ impl FilterSpec {
             }
         }
     }
-    pub fn validate(self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         match self {
             Self::Magnitude | Self::Quaternion(..) => Ok(()),
+            Self::Rust(script, output) => {
+                script.validate(1)?;
+                if *output >= script.outputs {
+                    return Err("Rust output index out of range".into());
+                }
+                Ok(())
+            }
             _ => self.apply(&SeriesData::new(Vec::new())?).map(|_| ()),
         }
     }
-    pub fn validate_inputs(self, count: usize) -> Result<(), String> {
+    pub fn validate_inputs(&self, count: usize) -> Result<(), String> {
         match self {
+            Self::Rust(script, _) => script.validate(count),
             Self::Quaternion(..) if count != 4 => {
                 Err("Quaternion needs exactly four inputs: w, x, y, z".into())
             }
@@ -186,10 +207,11 @@ pub fn validate(fields: &[DerivedField], log: &LogStore) -> Result<(), String> {
     Ok(())
 }
 
-pub fn compute(
+pub fn compute_cancelled(
     mut fields: Vec<DerivedField>,
     log: &LogStore,
     mut cache: BTreeMap<String, SeriesData>,
+    cancel: Arc<AtomicBool>,
 ) -> Result<Vec<DerivedField>, String> {
     validate(&fields, log)?;
     let mut pending = BTreeSet::new();
@@ -200,7 +222,11 @@ pub fn compute(
             pending.insert(field.id);
         }
     }
+    let mut scripts = BTreeMap::<u64, Vec<SeriesData>>::new();
     while !pending.is_empty() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Filter run cancelled".into());
+        }
         let mut progress = false;
         for field in &mut fields {
             if !pending.contains(&field.id) {
@@ -228,7 +254,19 @@ pub fn compute(
                         .ok_or("Source field unavailable".to_owned())
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let data = field.filter.apply_inputs(&inputs)?;
+            let data = if let FilterSpec::Rust(script, output) = &field.filter {
+                if let std::collections::btree_map::Entry::Vacant(entry) =
+                    scripts.entry(field.group)
+                {
+                    entry.insert(script.apply(&inputs, cancel.clone())?);
+                }
+                scripts[&field.group]
+                    .get(*output)
+                    .cloned()
+                    .ok_or("Rust output index out of range")?
+            } else {
+                field.filter.apply_inputs(&inputs)?
+            };
             cache.insert(field.key(), data.clone());
             field.data = Some(data);
             pending.remove(&field.id);

@@ -941,3 +941,220 @@ fn legend_filter_handoff_starts_new_batch_with_raw_and_derived_sources() {
         "Opening editor must not apply filter yet"
     );
 }
+
+#[test]
+#[ignore = "requires rustc with wasm32-unknown-unknown installed"]
+fn script_e2e_editor_saves_groups_atomically_and_recomputes_descendants() {
+    let window = Window::open();
+    let (workbench, source) = loaded(&window);
+    workbench.edit_filter(None, None);
+    workbench.set_filter_kind("rust".into());
+    workbench
+        .accept_filter_sources(vec![source.clone()])
+        .unwrap();
+    workbench.script_names.set("Double\nTriple".into());
+    let code = r#"pub const OUTPUTS: usize = 2;
+#[derive(Default)]
+pub struct State;
+pub fn filter(time: &[f64], inputs: &[&[f64]], outputs: &mut [&mut [f64]], _state: &mut State) {
+    for i in 0..time.len() {
+        outputs[0][i] = inputs[0][i] * 2.0; outputs[1][i] = inputs[0][i] * 3.0;
+    }
+}
+"#
+    .to_owned();
+    workbench.script_source.set(code.clone());
+    window.scope.with(|| workbench.save_filter());
+    assert!(workbench.script_busy.get_untracked());
+    assert!(
+        workbench.derived.get_untracked().is_empty(),
+        "No partial save before worker finishes"
+    );
+    settle(&window, || !workbench.script_busy.get_untracked());
+    assert!(
+        workbench.filter_error.get_untracked().is_empty(),
+        "{}",
+        workbench.filter_error.get_untracked()
+    );
+    let ids = workbench.filter_outputs.get_untracked();
+    assert_eq!(ids.len(), 2);
+    assert!(workbench.filter_inputs.get_untracked().is_empty());
+    let raw = workbench
+        .log
+        .get_untracked()
+        .unwrap()
+        .prepare(&source)
+        .unwrap();
+    let fields = workbench.derived.get_untracked();
+    assert_eq!(fields[0].group, fields[1].group);
+    same(
+        fields[1].data.as_ref().unwrap(),
+        &FilterSpec::Affine {
+            gain: 3.0,
+            offset: 0.0,
+        }
+        .apply(&raw)
+        .unwrap(),
+    );
+
+    let child = window
+        .scope
+        .with(|| {
+            workbench.upsert_filter(
+                None,
+                "Child".into(),
+                derived::key(ids[0]),
+                FilterSpec::Affine {
+                    gain: 10.0,
+                    offset: 0.0,
+                },
+            )
+        })
+        .unwrap();
+    settle(&window, || !workbench.derived_busy.get_untracked());
+    workbench.edit_filter(Some(ids[1]), None);
+    assert_eq!(workbench.script_source.get_untracked(), code);
+    assert_eq!(workbench.script_names.get_untracked(), "Double\nTriple");
+    assert_eq!(workbench.filter_mode.get_untracked().ids(), ids);
+    assert!(
+        workbench
+            .accept_filter_sources(vec![derived::key(child)])
+            .is_err()
+    );
+    let before = workbench.derived.get_untracked();
+    workbench.script_source.set("invalid Rust".into());
+    window.scope.with(|| workbench.save_filter());
+    settle(&window, || !workbench.script_busy.get_untracked());
+    assert!(
+        workbench
+            .filter_error
+            .get_untracked()
+            .contains("compilation failed")
+    );
+    let after = workbench.derived.get_untracked();
+    for (before, after) in before.iter().zip(&after) {
+        assert_eq!(before.filter, after.filter);
+        same(before.data.as_ref().unwrap(), after.data.as_ref().unwrap());
+    }
+    workbench.script_source.set(code.replace("* 2.0", "* 4.0"));
+    window.scope.with(|| workbench.save_filter());
+    settle(&window, || !workbench.script_busy.get_untracked());
+    assert!(
+        workbench.filter_error.get_untracked().is_empty(),
+        "{}",
+        workbench.filter_error.get_untracked()
+    );
+    assert_eq!(workbench.filter_outputs.get_untracked(), ids);
+    let fields = workbench.derived.get_untracked();
+    let child = fields.iter().find(|field| field.id == child).unwrap();
+    same(
+        child.data.as_ref().unwrap(),
+        &FilterSpec::Affine {
+            gain: 40.0,
+            offset: 0.0,
+        }
+        .apply(&raw)
+        .unwrap(),
+    );
+
+    // Edit inputs and grow saved group without changing existing IDs.
+    let extra_source = workbench
+        .log
+        .get_untracked()
+        .unwrap()
+        .catalogue
+        .iter()
+        .find(|field| field.id != source)
+        .unwrap()
+        .id
+        .clone();
+    workbench
+        .accept_filter_sources(vec![extra_source.clone()])
+        .unwrap();
+    workbench.add_script_output();
+    workbench.rename_script_output(2, "Extra".into());
+    let three = code
+        .replace("OUTPUTS: usize = 2", "OUTPUTS: usize = 3")
+        .replace("* 2.0", "* 4.0")
+        .replace(
+            "outputs[1][i] = inputs[0][i] * 3.0;",
+            "outputs[1][i] = inputs[0][i] * 3.0; outputs[2][i] = inputs[1][i];",
+        );
+    // Mismatched declaration fails synchronously; compiler never starts.
+    window.scope.with(|| workbench.run_script(true));
+    assert!(!workbench.script_busy.get_untracked());
+    assert!(
+        workbench
+            .filter_error
+            .get_untracked()
+            .contains("named rows")
+    );
+    assert_eq!(workbench.derived.get_untracked().len(), 3);
+    workbench.script_source.set(three.clone());
+    window.scope.with(|| workbench.save_filter());
+    settle(&window, || !workbench.script_busy.get_untracked());
+    assert!(
+        workbench.filter_error.get_untracked().is_empty(),
+        "{}",
+        workbench.filter_error.get_untracked()
+    );
+    let grown = workbench.filter_outputs.get_untracked();
+    assert_eq!(&grown[..2], &ids);
+    assert_eq!(grown.len(), 3);
+    assert!(
+        workbench
+            .derived
+            .get_untracked()
+            .iter()
+            .filter(|field| grown.contains(&field.id))
+            .all(|field| field.sources == [source.clone(), extra_source.clone()])
+    );
+    // Remove middle row; last output retains ID when its output index changes.
+    workbench.remove_script_output(1);
+    workbench.filter_inputs.update(|inputs| {
+        inputs.remove(0);
+    });
+    let two = code.replace("* 2.0", "* 1.0").replace("* 3.0", "* 5.0");
+    workbench.script_source.set(two.clone());
+    window.scope.with(|| workbench.save_filter());
+    settle(&window, || !workbench.script_busy.get_untracked());
+    assert!(
+        workbench.filter_error.get_untracked().is_empty(),
+        "{}",
+        workbench.filter_error.get_untracked()
+    );
+    assert_eq!(workbench.filter_outputs.get_untracked(), [ids[0], grown[2]]);
+    workbench.edit_filter(Some(grown[2]), None);
+    assert_eq!(workbench.script_names.get_untracked(), "Double\nExtra");
+    assert_eq!(workbench.filter_inputs.get_untracked().len(), 1);
+    // Referenced output cannot be deleted; graph and descendants remain intact.
+    workbench.remove_script_output(0);
+    workbench
+        .script_source
+        .set(crate::script_compile::EXAMPLE.into());
+    window.scope.with(|| workbench.save_filter());
+    assert!(!workbench.script_busy.get_untracked());
+    assert!(
+        workbench
+            .filter_error
+            .get_untracked()
+            .contains("Child depends on it")
+    );
+    assert_eq!(workbench.derived.get_untracked().len(), 3);
+
+    workbench.finish_filter_editing();
+    workbench.set_filter_kind("rust".into());
+    workbench.script_names.set("Cancelled output".into());
+    workbench
+        .script_source
+        .set(crate::script_compile::EXAMPLE.into());
+    workbench.accept_filter_sources(vec![source]).unwrap();
+    window.scope.with(|| workbench.save_filter());
+    workbench.cancel_script();
+    for _ in 0..20 {
+        window.frame();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(workbench.derived.get_untracked().len(), 3);
+    assert!(!workbench.script_busy.get_untracked());
+}

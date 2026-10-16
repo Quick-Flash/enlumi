@@ -134,6 +134,11 @@ pub struct Workbench {
     pub filter_cutoff: RwSignal<String, LocalStorage>,
     pub filter_gain: RwSignal<String, LocalStorage>,
     pub filter_offset: RwSignal<String, LocalStorage>,
+    pub script_source: RwSignal<String, LocalStorage>,
+    pub script_names: RwSignal<String, LocalStorage>,
+    pub script_output_ids: RwSignal<Vec<Option<u64>>, LocalStorage>,
+    pub script_busy: RwSignal<bool, LocalStorage>,
+    pub filter_cancel: RwSignal<Arc<std::sync::atomic::AtomicBool>, LocalStorage>,
     pub filter_error: RwSignal<String, LocalStorage>,
     pub(crate) filter_generation: RwSignal<u64, LocalStorage>,
     pub active: RwSignal<u64, LocalStorage>,
@@ -191,6 +196,11 @@ impl Workbench {
             filter_cutoff: RwSignal::new_local("5".into()),
             filter_gain: RwSignal::new_local("1".into()),
             filter_offset: RwSignal::new_local("0".into()),
+            script_source: RwSignal::new_local(crate::script_compile::EXAMPLE.into()),
+            script_names: RwSignal::new_local("Result".into()),
+            script_output_ids: RwSignal::new_local(Vec::new()),
+            script_busy: RwSignal::new_local(false),
+            filter_cancel: RwSignal::new_local(Arc::new(std::sync::atomic::AtomicBool::new(false))),
             filter_error: RwSignal::new_local(String::new()),
             filter_generation: RwSignal::new_local(0),
             active: RwSignal::new_local(1),
@@ -242,8 +252,7 @@ impl Workbench {
             self.loading.set(false);
             match result {
                 Ok(log) => {
-                    self.filter_generation.update(|id| *id += 1);
-                    self.derived_busy.set(false);
+                    self.cancel_filter_run();
                     self.status.set(format!(
                         "{} signals | {:.2}s | {} warnings",
                         log.catalogue.len(),

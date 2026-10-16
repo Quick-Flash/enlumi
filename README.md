@@ -3,7 +3,7 @@
 **Enlumi** comes from Esperanto, meaning **to enlighten**.
 
 A native desktop viewer for PX4 ULog (`.ulg`) flight logs. Browse fields, drag them
-onto docked plots, and build named filter chains without writing scripts.
+onto docked plots, and build named filter chains with built-in operations or custom Rust functions.
 
 Enlumi is an early-stage project inspired by
 [PlotJuggler](https://github.com/PlotJuggler/PlotJuggler). It uses
@@ -26,6 +26,8 @@ Zgui temporarily pins a public text-selection fork; see [Contributing](CONTRIBUT
 - Named low-pass, high-pass, and gain/offset fields with shared batch settings.
 - Multi-input magnitude and quaternion-to-RPY transforms, with named outputs
   that can feed later filter stages.
+- Custom Rust filters compiled to WebAssembly, with loops, state, multiple inputs,
+  and named outputs. See [Rust filter setup and examples](docs/RUST_FILTERS.md).
 - Bounded column rendering; filters and cursor lookup use full samples.
 
 ## Build and run

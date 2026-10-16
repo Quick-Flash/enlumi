@@ -23,6 +23,7 @@ struct Counts {
     seen_steps: bool,
     seen_dots: bool,
     line_strokes: Vec<f32>,
+    painted_boxes: Vec<([f32; 4], String)>,
 }
 struct Capture {
     renderer: CaptureRenderer,
@@ -67,12 +68,26 @@ impl Renderer for Capture {
                 .map(|p| p.vertices.len())
                 .sum(),
         );
+        // Render deltas contain changed quads; preserve unchanged button paints.
+        let mut painted_boxes = std::mem::take(&mut self.counts.borrow_mut().painted_boxes);
+        for quad in &scene.primitives.quads {
+            if let Some(color) = quad
+                .fill
+                .id()
+                .and_then(|id| scene.paints.get(id))
+                .and_then(|paint| paint.solid_color())
+            {
+                painted_boxes.retain(|(bounds, _)| *bounds != quad.bounds);
+                painted_boxes.push((quad.bounds, format!("{color:?}")));
+            }
+        }
         *self.counts.borrow_mut() = Counts {
             peak_marks,
             peak_vertices,
             seen_steps,
             seen_dots,
             line_strokes: Vec::new(),
+            painted_boxes,
             glyphs: scene.primitives.mono_sprites.len() + scene.primitives.subpixel_sprites.len(),
         };
         self.renderer.draw(scene, damage);
@@ -250,10 +265,16 @@ fn compact_saved_rows_toggle_editing_delete_with_x_and_fill_window_height() {
     let row = window.box_with_class("derived-library-row").unwrap();
     assert!((30.0..=38.0).contains(&row.size.height.0), "{row:?}");
     let list = window.box_with_class("derived-library-list").unwrap();
+    let new = window.box_with_class("new-derived-field").unwrap();
     assert!(
-        list.size.height.0 > 650.0 && list.origin.y.0 + list.size.height.0 >= 788.0,
-        "{list:?}"
+        list.size.height.0 > 650.0 && new.origin.y.0 >= row.origin.y.0 + row.size.height.0,
+        "{list:?}, {new:?}"
     );
+    assert!(
+        new.origin.y.0 + new.size.height.0 < list.origin.y.0 + list.size.height.0 - 100.0,
+        "New field follows short list instead of sticking to window bottom"
+    );
+    assert_eq!(window.nodes_with_class("new-field-selected").len(), 1);
     click_class(&mut harness, "derived-library-item");
     assert_eq!(
         workbench.filter_mode.get_untracked().selected(),
@@ -268,6 +289,16 @@ fn compact_saved_rows_toggle_editing_delete_with_x_and_fill_window_height() {
         harness.app().windows()[0].nodes_with_class("chosen").len(),
         1
     );
+    click_class(&mut harness, "new-derived-field");
+    assert!(workbench.filter_mode.get_untracked().is_new());
+    assert_eq!(workbench.derived.get_untracked().len(), 1);
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("new-field-selected")
+            .len(),
+        1
+    );
+    click_class(&mut harness, "derived-library-item");
     click_class(&mut harness, "derived-library-item");
     assert!(workbench.filter_mode.get_untracked().is_new());
     assert!(
@@ -322,11 +353,290 @@ fn compact_saved_rows_toggle_editing_delete_with_x_and_fill_window_height() {
     assert_eq!(rows.len(), 30);
     let last =
         zgui::view::ViewHost::window_box(window.host().as_ref(), *rows.last().unwrap()).unwrap();
-    assert!(list.origin.y.0 + list.size.height.0 <= 791.0);
+    let new = window.box_with_class("new-derived-field").unwrap();
+    assert!(
+        new.origin.y.0 >= last.origin.y.0 + last.size.height.0,
+        "New field follows final saved row"
+    );
+    assert!(
+        new.origin.y.0 > list.origin.y.0 + list.size.height.0,
+        "New field scrolls with long list"
+    );
     assert!(
         last.origin.y.0 > list.origin.y.0 + list.size.height.0,
         "Saved list must scroll rather than grow window"
     );
+}
+
+#[test]
+fn rust_filter_editor_fills_workspace_and_input_order_updates() {
+    use crate::{derived::FilterInput, filter_workspace::FilterWorkspaceProps, state::Workbench};
+    use zgui_ui_tokens::prelude::*;
+    let model = Rc::new(RefCell::new(None));
+    let saved = model.clone();
+    let handler = app().with_size(1200.0, 800.0)
+        .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
+        .with_stylesheet(include_str!("style.css"))
+        .into_handler(move || {
+            let workbench = Workbench::new();
+            workbench.set_filter_kind("rust".into());
+            workbench.filter_inputs.set(vec![FilterInput { source: "first".into(), name: "First".into() }, FilterInput { source: "second".into(), name: "Second".into() }, FilterInput { source: "third".into(), name: "Third".into() }]);
+            *saved.borrow_mut() = Some(workbench);
+            view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "workbench") { row(class = "body") { FilterWorkspace(workbench = workbench) } } } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.0),
+        DevicePx(800.0),
+    )));
+    harness.settle(128);
+    let workbench = model.borrow().unwrap();
+    let window = &harness.app().windows()[0];
+    let source = window.box_with_class("script-source").unwrap();
+    assert!(
+        source.size.height.0 > 220.0 && source.size.width.0 > 400.0,
+        "Code editor needs usable space: {source:?}"
+    );
+    assert!(
+        source.origin.y.0 + source.size.height.0 <= 790.0,
+        "{source:?}"
+    );
+    assert!(
+        window
+            .box_with_class("script-diagnostics-panel")
+            .unwrap()
+            .size
+            .height
+            .0
+            >= 70.0
+    );
+    assert_eq!(window.nodes_with_class("script-diagnostics-empty").len(), 1);
+    let divider = window.box_with_class("script-diagnostics-resizer").unwrap();
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        divider.origin.x.0 + divider.size.width.0 / 2.0,
+        divider.origin.y.0 + divider.size.height.0 / 2.0,
+    ));
+    harness.settle(128);
+    assert_eq!(
+        harness.platform().offscreens()[0].last_cursor(),
+        Some(zgui::platform::CursorStyle::ResizeNorthSouth)
+    );
+    let window = &harness.app().windows()[0];
+    assert!(window.box_with_class("script-output-names").is_some());
+    assert!(window.box_with_class("check-script").is_some());
+    assert_eq!(window.nodes_with_class("filter-input-handle").len(), 3);
+    assert!(window.nodes_with_class("script-input-down").is_empty());
+    assert!(window.nodes_with_class("script-input-up").is_empty());
+    drag_filter_card(&mut harness, workbench, 0, 2, false);
+    assert_eq!(
+        workbench
+            .filter_inputs
+            .get_untracked()
+            .iter()
+            .map(|input| input.source.as_str())
+            .collect::<Vec<_>>(),
+        ["second", "third", "first"]
+    );
+    drag_filter_card(&mut harness, workbench, 2, 0, true);
+    assert_eq!(workbench.filter_inputs.get_untracked()[0].source, "second");
+    let window = &harness.app().windows()[0];
+    let rows = window.nodes_with_class("filter-source-row");
+    let text = |node| window.dom().text_content(node);
+    assert!(text(rows[0]).contains("inputs[0]") && text(rows[0]).contains("second"));
+    assert!(text(rows[1]).contains("inputs[1]") && text(rows[1]).contains("third"));
+    assert!(text(rows[2]).contains("inputs[2]") && text(rows[2]).contains("first"));
+    click_class(&mut harness, "add-script-output");
+    assert_eq!(workbench.script_names.get_untracked(), "Result\n");
+    assert!(crate::script_state::output_names(&workbench.script_names.get_untracked()).is_err());
+    workbench.rename_script_output(1, "Velocity".into());
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    let labels: Vec<_> = window
+        .nodes_with_class("script-output-index")
+        .iter()
+        .map(|node| window.dom().text_content(*node))
+        .collect();
+    assert_eq!(labels, ["outputs[0]", "outputs[1]"]);
+    assert_eq!(
+        crate::script_state::output_names(&workbench.script_names.get_untracked()).unwrap(),
+        ["Result", "Velocity"]
+    );
+    click_class(&mut harness, "remove-script-output");
+    assert_eq!(workbench.script_names.get_untracked(), "Velocity");
+    click_class(&mut harness, "remove-script-output");
+    assert_eq!(
+        workbench.script_names.get_untracked(),
+        "Velocity",
+        "Keep at least one output row"
+    );
+    workbench.set_filter_kind("magnitude".into());
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("script-editor")
+            .is_empty()
+    );
+    click_class(&mut harness, "custom-rust-filter");
+    assert_eq!(workbench.filter_kind.get_untracked(), "rust");
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("filter-type")
+            .is_empty()
+    );
+    click_class(&mut harness, "builtin-filter-mode");
+    assert_eq!(workbench.filter_kind.get_untracked(), "magnitude");
+    click_class(&mut harness, "custom-rust-filter");
+    let window = &harness.app().windows()[0];
+    let output = window.box_with_class("script-output-name").unwrap();
+    assert!(
+        output.size.height.0 <= 22.0 && output.size.width.0 >= 110.0,
+        "Output names should be short and wide: {output:?}"
+    );
+    let builtin = window.box_with_class("builtin-filter-mode").unwrap();
+    let custom = window.box_with_class("custom-rust-filter").unwrap();
+    assert!(custom.origin.x.0 - builtin.origin.x.0 - builtin.size.width.0 >= 5.0);
+    assert!(
+        custom.size.width.0 >= 110.0 && custom.size.width.0 > builtin.size.width.0,
+        "Rust function needs room for its longer label and side padding: {custom:?}, {builtin:?}"
+    );
+    workbench.script_names.set(
+        (0..16)
+            .map(|index| format!("Result {index}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    harness.settle(128);
+    let list = harness.app().windows()[0]
+        .box_with_class("script-output-list")
+        .unwrap();
+    assert!(
+        list.size.height.0 > 400.0,
+        "Outputs should get more space before scrolling: {list:?}"
+    );
+    let diagnostics = harness.app().windows()[0].nodes_with_class("script-diagnostics-panel")[0];
+    workbench.filter_error.set(
+        (0..40)
+            .map(|index| format!("error {index}: example diagnostic"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    assert_eq!(
+        window.nodes_with_class("script-diagnostics-panel")[0],
+        diagnostics
+    );
+    let before = window.box_with_class("script-diagnostics-panel").unwrap();
+    let handle = window.box_with_class("script-diagnostics-resizer").unwrap();
+    let (x, y) = (
+        handle.origin.x.0 + handle.size.width.0 / 2.0,
+        handle.origin.y.0 + handle.size.height.0 / 2.0,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x, y - 65.0));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y - 65.0));
+    harness.settle(128);
+    let after = harness.app().windows()[0]
+        .box_with_class("script-diagnostics-panel")
+        .unwrap();
+    assert!(
+        after.size.height.0 > before.size.height.0 + 40.0,
+        "Diagnostics should resize: {before:?} -> {after:?}"
+    );
+    workbench.filter_error.set(String::new());
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    assert_eq!(
+        window.nodes_with_class("script-diagnostics-panel")[0],
+        diagnostics
+    );
+    assert_eq!(
+        window.box_with_class("script-diagnostics-panel").unwrap(),
+        after,
+        "Clearing diagnostics keeps resized panel geometry"
+    );
+    assert_eq!(
+        workbench.script_source.get_untracked(),
+        crate::script_compile::EXAMPLE
+    );
+}
+
+#[test]
+fn rust_code_editor_syncs_source_undo_and_read_only_state() {
+    use crate::script_code_editor::ScriptCodeEditorProps;
+    use zgui_editor::{Command, EditorHandle};
+    use zgui_ui_tokens::prelude::*;
+    let model = Rc::new(RefCell::new(None));
+    let saved = model.clone();
+    let handler = app().with_size(900.0, 650.0)
+        .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
+        .with_stylesheet(include_str!("style.css"))
+        .into_handler(move || {
+            let source = RwSignal::new_local("fn first() {}".to_owned());
+            let locked = RwSignal::new_local(false);
+            let saved = saved.clone();
+            view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "workbench") {
+                ScriptCodeEditor(source = source, read_only = Signal::derive_local(move || locked.get()), on_ready = UnsyncCallback::new(move |editor| { *saved.borrow_mut() = Some((source, locked, editor)); }))
+            } } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(900.0),
+        DevicePx(650.0),
+    )));
+    harness.settle(128);
+    let (source, locked, editor): (_, _, EditorHandle) = model.borrow().clone().unwrap();
+    editor.commands([Command::SelectAll, Command::Insert("fn second() {}".into())]);
+    harness.settle(128);
+    assert_eq!(source.get_untracked(), "fn second() {}");
+    editor.command(Command::Undo);
+    harness.settle(128);
+    assert_eq!(source.get_untracked(), "fn first() {}");
+    source.set("fn external() {\n    let n = 42;\n}".into());
+    harness.settle(128);
+    assert_eq!(
+        editor.query(|snapshot| snapshot.rope().to_string()),
+        source.get_untracked()
+    );
+    // Click inside lower part of rendered second line. Root padding used to
+    // shift hit testing into following line, even though pointer stayed on text.
+    let window = &harness.app().windows()[0];
+    let code = window.nodes_with_class("script-source")[0];
+    let root = window.box_with_class("script-source").unwrap();
+    let child = window
+        .dom()
+        .children(code)
+        .into_iter()
+        .find_map(|node| {
+            zgui::view::ViewHost::window_box(window.host().as_ref(), node)
+                .filter(|rect| rect.size.height.0 > 0.0)
+        })
+        .unwrap();
+    assert_eq!(
+        root.origin, child.origin,
+        "Paint and pointer origins must match"
+    );
+    let caret = editor.point_for_byte(0).unwrap();
+    let (x, y) = (caret.x + 1.0, child.origin.y.0 + caret.height * 1.8);
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y));
+    harness.settle(128);
+    assert_eq!(editor.cursor_position().get_untracked().line, 1);
+    locked.set(true);
+    harness.settle(128);
+    let before = source.get_untracked();
+    editor.commands([Command::SelectAll, Command::Insert("blocked".into())]);
+    harness.settle(128);
+    assert_eq!(source.get_untracked(), before);
+    locked.set(false);
+    harness.settle(128);
+    editor.commands([
+        Command::SelectAll,
+        Command::Insert("fn unlocked() {}".into()),
+    ]);
+    harness.settle(128);
+    assert_eq!(source.get_untracked(), "fn unlocked() {}");
 }
 
 #[test]
@@ -403,6 +713,18 @@ fn combined_filter_editor_labels_inputs_reorders_and_switches_output_names() {
         window.nodes_with_class("filter-output-name").is_empty(),
         "Combined inputs must not show batch output names"
     );
+    let quaternion_rows: Vec<_> = window
+        .nodes_with_class("filter-source-row")
+        .iter()
+        .map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), *node).unwrap())
+        .collect();
+    for pair in quaternion_rows.windows(2) {
+        let gap = pair[1].origin.y.0 - pair[0].origin.y.0 - pair[0].size.height.0;
+        assert!(
+            (2.5..=3.5).contains(&gap),
+            "Quaternion rows should use same 3px gap as magnitude: {gap}"
+        );
+    }
     click_class(&mut harness, "filter-angle-unit");
     let window = &harness.app().windows()[0];
     let degrees = window
@@ -1191,7 +1513,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     assert!(filter_window.origin.x.0 >= browser.origin.x.0 + browser.size.width.0);
     assert!(filter_window.origin.y.0 + filter_window.size.height.0 <= 850.0);
     assert!(window.nodes_with_class("field-select-checkbox").is_empty());
-    assert!(window.nodes_with_class("new-derived-field").is_empty());
+    assert_eq!(window.nodes_with_class("new-derived-field").len(), 1);
     let collapse = window.box_with_class("collapse-fields").unwrap();
     let filters = window.box_with_class("open-filters").unwrap();
     assert!((collapse.origin.y.0 - filters.origin.y.0).abs() < 1.0);
@@ -2737,4 +3059,116 @@ fn line_settings_keep_geometry_fixed_during_selection_changes() {
             );
         }
     }
+}
+
+#[test]
+fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
+    fn fill(
+        harness: &Harness<zgui::runtime::Runtime>,
+        paints: &Rc<RefCell<Counts>>,
+        class: &str,
+    ) -> String {
+        let window = &harness.app().windows()[0];
+        let rect = window.box_with_class(class).unwrap();
+        let paints = paints.borrow();
+        paints
+            .painted_boxes
+            .iter()
+            .filter(|(bounds, _)| {
+                (bounds[2] - rect.size.width.0).abs() < 0.1
+                    && (bounds[3] - rect.size.height.0).abs() < 0.1
+            })
+            .min_by(|(a, _), (b, _)| {
+                let distance = |bounds: &[f32; 4]| {
+                    (bounds[0] - rect.origin.x.0).abs() + (bounds[1] - rect.origin.y.0).abs()
+                };
+                distance(a).total_cmp(&distance(b))
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "No painted button for {class}: {rect:?}, {:?}",
+                    paints.painted_boxes
+                )
+            })
+            .1
+            .clone()
+    }
+    let paints = Rc::new(RefCell::new(Counts::default()));
+    let captured = Rc::clone(&paints);
+    let handler = app().with_size(1500.0, 850.0)
+        .with_renderer(Box::new(move |_, target| {
+            let mut renderer = CaptureRenderer::new(); renderer.configure(target);
+            Ok(Box::new(Capture { renderer, counts: Rc::clone(&captured) }))
+        }))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), include_str!("style.css")))
+        .into_handler(|| view! { WorkbenchApp(initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1500.0),
+        DevicePx(850.0),
+    )));
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        harness.settle(128);
+        if !harness.app().windows()[0]
+            .nodes_with_class("topic-branch")
+            .is_empty()
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let disabled = fill(&harness, &paints, "equalize-panels");
+    click_class(&mut harness, "duplicate-plot-button");
+    click_class(&mut harness, "open-filters");
+    click_class(&mut harness, "sidebar-toggle");
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
+    harness.settle(128);
+    let idle = fill(&harness, &paints, "open-ulog");
+    assert_ne!(disabled, idle);
+    for class in [
+        "open-ulog",
+        "equalize-panels",
+        "sidebar-toggle",
+        "filters-done",
+    ] {
+        assert_eq!(
+            fill(&harness, &paints, class),
+            idle,
+            "Idle mismatch: {class}"
+        );
+        let rect = harness.app().windows()[0].box_with_class(class).unwrap();
+        assert_eq!(rect.size.height.0, 24.0, "Size mismatch: {class}");
+    }
+    let mut hover = None;
+    for class in [
+        "open-ulog",
+        "equalize-panels",
+        "sidebar-toggle",
+        "filters-done",
+    ] {
+        let rect = harness.app().windows()[0].box_with_class(class).unwrap();
+        harness.deliver_to_first(pointer(
+            PointerAction::Moved,
+            rect.origin.x.0 + rect.size.width.0 / 2.0,
+            rect.origin.y.0 + rect.size.height.0 / 2.0,
+        ));
+        harness.settle(128);
+        let color = fill(&harness, &paints, class);
+        assert_ne!(color, idle, "Missing hover: {class}");
+        assert_eq!(
+            *hover.get_or_insert(color.clone()),
+            color,
+            "Hover mismatch: {class}"
+        );
+    }
+    click_class(&mut harness, "sidebar-toggle");
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
+    harness.settle(128);
+    assert_ne!(
+        fill(&harness, &paints, "sidebar-toggle"),
+        idle,
+        "Toggle must retain selected state"
+    );
 }

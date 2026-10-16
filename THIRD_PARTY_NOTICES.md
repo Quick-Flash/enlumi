@@ -8,6 +8,8 @@ Dependencies keep their own license terms.
 | Zgui and its component crates | [zortax/zgui](https://github.com/zortax/zgui) | Apache-2.0 |
 | zgui-plot | [Quick-Flash/zgui-plot](https://github.com/Quick-Flash/zgui-plot) | MIT OR BSD-3-Clause |
 | px4-ulog | [PX4/px4-ulog-rs](https://github.com/PX4/px4-ulog-rs) | MIT |
+| Wasmtime | [bytecodealliance/wasmtime](https://github.com/bytecodealliance/wasmtime) | Apache-2.0 WITH LLVM-exception |
+| zgui-editor | [zortax/zgui-editor](https://github.com/zortax/zgui-editor) | Apache-2.0 |
 
 `tests/fixtures/esc_status_log.ulg` comes from PX4's parser tests. Its original
 MIT notice remains in [tests/fixtures/LICENSE](tests/fixtures/LICENSE);

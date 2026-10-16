@@ -1,10 +1,10 @@
+use crate::action_button::ActionButtonProps;
 use crate::{
     browser::BrowserProps, filter_workspace::FilterWorkspaceProps, fps::FpsProps, state::Workbench,
     workspace::PlotWorkspaceProps,
 };
 use std::path::PathBuf;
 use zgui::prelude::*;
-use zgui_ui::prelude::*;
 use zgui_ui_tokens::prelude::*;
 
 #[component]
@@ -27,17 +27,17 @@ pub fn WorkbenchApp(initial_path: Option<PathBuf>) -> impl IntoView {
                     }
                 }) {
                 row(class = "toolbar") {
-                    Button(size = ButtonSize::Xs, class = "sidebar-toggle", class:setting-active = move || workbench.sidebar_visible.get(),
+                    ActionButton(icon = true, class = "sidebar-toggle", class:setting-active = move || workbench.sidebar_visible.get(),
                         a11y:label = "Toggle fields sidebar", on:click = move |_| workbench.toggle_sidebar()) {
                         vector(class = "sidebar-toggle-icon", prop:viewBox = "0 0 20 20", prop:d = move || PropValue::from(if workbench.sidebar_visible.get() { "M2 3 H18 V17 H2 Z M7 3 V17 M14 7 L11 10 L14 13" } else { "M2 3 H18 V17 H2 Z M7 3 V17 M10 7 L13 10 L10 13" }), a11y:hidden = true)
                     }
-                    Button(size = ButtonSize::Sm, on:click = move |_| {
+                    ActionButton(class = "open-ulog", on:click = move |_| {
                         spawn_local(async move {
                             let path = blocking(|| rfd::FileDialog::new().add_filter("PX4 ULog", &["ulg"]).pick_file()).await;
                             if let Some(path) = path { workbench.open(path); }
                         });
                     }) { "Open ULog" }
-                    Button(size = ButtonSize::Sm, class = "equalize-panels", a11y:label = "Equalize dock panel sizes",
+                    ActionButton(class = "equalize-panels", a11y:label = "Equalize dock panel sizes",
                         disabled = Signal::derive_local(move || !matches!(workbench.layout.get(), plot::workspace::layout::Layout::Split { .. })),
                         on:click = move |_| workbench.equalize_panels()) { "Equalize panels" }
                     text(class = "file-name") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Enlumi".into(), |log| log.name.clone()))}}

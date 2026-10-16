@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+mod action_button;
 mod app;
 mod browser;
 mod derived;
@@ -12,6 +13,7 @@ mod filter;
 mod filter_commit;
 mod filter_editor;
 mod filter_input_drag;
+mod filter_kind_picker;
 mod filter_library;
 mod filter_library_card;
 mod filter_mode;
@@ -30,6 +32,15 @@ mod panel;
 mod plot_actions;
 mod plot_bounds;
 mod plot_cursor;
+mod script;
+mod script_code_editor;
+mod script_compile;
+mod script_contract;
+mod script_editor;
+mod script_output_names;
+mod script_state;
+#[cfg(test)]
+mod script_tests;
 mod startup;
 mod state;
 mod workspace;

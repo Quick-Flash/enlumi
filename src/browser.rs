@@ -1,3 +1,4 @@
+use crate::action_button::ActionButtonProps;
 use crate::{field_row::FieldRowProps, field_tree::FieldTree, state::Workbench};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
@@ -65,8 +66,8 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
             column(class = "signal-sidebar") {
                 row(class = "browser-heading") {
                     text(class = "heading") { "Fields" }
-                    Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "open-filters", node_ref = workbench.filter_button, class:setting-active = move || workbench.filters_open.get(), disabled = Signal::derive_local(move || workbench.log.get().is_none() || workbench.loading.get()), on:click = move |_| workbench.filters_open.update(|open| *open = !*open)) { "Filters" }
-                    Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
+                    ActionButton(class = "open-filters", node_ref = workbench.filter_button, class:setting-active = move || workbench.filters_open.get(), disabled = Signal::derive_local(move || workbench.log.get().is_none() || workbench.loading.get()), on:click = move |_| workbench.filters_open.update(|open| *open = !*open)) { "Filters" }
+                    ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
                 }
                 InputGroup(class = "field-search") {
                     InputGroupInput(value = workbench.query, placeholder = "Search topics and fields", a11y:label = "Search ULog fields")

@@ -2,7 +2,7 @@ use crate::derived::{FilterSpec, RpyAxis};
 use plot::{PlotPoint, time_series::SeriesData};
 
 /// First input supplies timestamps. Others interpolate inside finite, short segments only.
-pub fn apply(spec: FilterSpec, inputs: &[&SeriesData]) -> Result<SeriesData, String> {
+pub fn apply(spec: &FilterSpec, inputs: &[&SeriesData]) -> Result<SeriesData, String> {
     let reference = inputs[0].samples();
     let mut aligned: Vec<_> = inputs
         .iter()
@@ -22,7 +22,7 @@ pub fn apply(spec: FilterSpec, inputs: &[&SeriesData]) -> Result<SeriesData, Str
                         .iter()
                         .fold(0.0_f64, |norm, &value| norm.hypot(value)),
                     FilterSpec::Quaternion(axis, unit) => {
-                        unit.convert_radians(quaternion(&values, axis))
+                        unit.convert_radians(quaternion(&values, *axis))
                     }
                     _ => unreachable!("multi-input transform"),
                 }
@@ -50,14 +50,14 @@ fn quaternion(q: &[f64], axis: RpyAxis) -> f64 {
     }
 }
 
-struct Aligned<'a> {
+pub(crate) struct Aligned<'a> {
     samples: &'a [PlotPoint],
     matching: bool,
     cursor: usize,
     gap: f64,
 }
 impl<'a> Aligned<'a> {
-    fn new(data: &'a SeriesData, reference: &[PlotPoint]) -> Self {
+    pub(crate) fn new(data: &'a SeriesData, reference: &[PlotPoint]) -> Self {
         let samples = data.samples();
         let matching = samples.len() == reference.len()
             && samples.iter().zip(reference).all(|(a, b)| a.x == b.x);
@@ -78,7 +78,7 @@ impl<'a> Aligned<'a> {
             gap,
         }
     }
-    fn at(&mut self, index: usize, time: f64) -> f64 {
+    pub(crate) fn at(&mut self, index: usize, time: f64) -> f64 {
         if self.matching {
             return self.samples[index].y;
         }

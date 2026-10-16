@@ -9,6 +9,7 @@ impl Workbench {
     pub fn finish_filter_editing(self) {
         self.cancel_filter_input_drag();
         self.filter_mode.set(FilterMode::New);
+        self.script_output_ids.set(Vec::new());
         self.filter_inputs.set(Vec::new());
         self.filter_outputs.set(Vec::new());
         self.filter_error.set(String::new());
@@ -91,6 +92,7 @@ impl Workbench {
         self.cancel_filter_input_drag();
         self.reset_filter_names();
         self.filter_mode.set(FilterMode::New);
+        self.script_output_ids.set(Vec::new());
         self.filter_outputs.set(id.into_iter().collect());
         if let Some(field) = self
             .derived
@@ -110,7 +112,7 @@ impl Workbench {
                     })
                     .collect(),
             );
-            match field.filter {
+            match &field.filter {
                 FilterSpec::LowPass(hz) | FilterSpec::HighPass(hz) => {
                     self.filter_kind.set(
                         if matches!(field.filter, FilterSpec::LowPass(_)) {
@@ -121,6 +123,35 @@ impl Workbench {
                         .into(),
                     );
                     self.filter_cutoff.set(hz.to_string());
+                }
+                FilterSpec::Rust(script, _) => {
+                    self.filter_kind.set("rust".into());
+                    self.script_source.set(script.source.clone());
+                    let mut group: Vec<_> = self.derived.with_untracked(|fields| {
+                        fields
+                            .iter()
+                            .filter(|node| {
+                                node.group == field.group
+                                    && matches!(node.filter, FilterSpec::Rust(..))
+                            })
+                            .cloned()
+                            .collect()
+                    });
+                    group.sort_by_key(|node| match node.filter {
+                        FilterSpec::Rust(_, index) => index,
+                        _ => usize::MAX,
+                    });
+                    self.script_output_ids
+                        .set(group.iter().map(|node| Some(node.id)).collect());
+                    self.script_names.set(
+                        group
+                            .iter()
+                            .map(|node| node.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    );
+                    self.filter_outputs
+                        .set(group.iter().map(|node| node.id).collect());
                 }
                 FilterSpec::Magnitude => {
                     self.filter_kind.set("magnitude".into());
@@ -188,6 +219,7 @@ impl Workbench {
             .map(derived::key)
             .collect();
         self.filter_mode.set(FilterMode::New);
+        self.script_output_ids.set(Vec::new());
         self.filter_outputs.set(Vec::new());
         self.filter_inputs.set(Vec::new());
         self.cancel_filter_input_drag();
@@ -201,13 +233,20 @@ impl Workbench {
     }
     pub fn combined_filter(self) -> bool {
         self.filter_kind
-            .with(|kind| matches!(kind.as_str(), "magnitude" | "rpy"))
+            .with(|kind| matches!(kind.as_str(), "magnitude" | "rpy" | "rust"))
     }
     pub fn combined_filter_untracked(self) -> bool {
         self.filter_kind
-            .with_untracked(|kind| matches!(kind.as_str(), "magnitude" | "rpy"))
+            .with_untracked(|kind| matches!(kind.as_str(), "magnitude" | "rpy" | "rust"))
     }
     pub fn save_filter(self) {
+        if self.script_busy.get_untracked() || self.derived_busy.get_untracked() {
+            return;
+        }
+        if self.filter_kind.get_untracked() == "rust" {
+            self.run_script(false);
+            return;
+        }
         if self.filter_inputs.with_untracked(Vec::is_empty) {
             return;
         }
@@ -236,6 +275,15 @@ impl Workbench {
                     .filter(|_| mode.ids().len() == 1 && inputs.len() == 1);
                 let outputs = mode.ids();
                 let fields = self.derived.get_untracked();
+                if outputs.len() > 1
+                    && fields.iter().any(|field| {
+                        outputs.contains(&field.id) && matches!(field.filter, FilterSpec::Rust(..))
+                    })
+                {
+                    return Err(
+                        "Finish editing to turn Rust outputs into a built-in filter batch".into(),
+                    );
+                }
                 if !mode.is_new() && outputs.len() == 1 && inputs.len() != 1 {
                     return Err("Finish editing to create a batch from multiple inputs".into());
                 }
@@ -322,41 +370,22 @@ impl Workbench {
         let Some(log) = self.log.get_untracked() else {
             return;
         };
+        self.cancel_filter_run();
+        let cancel = self.filter_cancel.get_untracked();
         self.filter_generation.update(|generation| *generation += 1);
         let revision = self.filter_generation.get_untracked();
         let cache = self.cache.get_untracked();
         self.derived_busy.set(true);
         self.task(async move {
-            let result = blocking(move || derived::compute(fields, &log, cache)).await;
+            let result =
+                blocking(move || derived::compute_cancelled(fields, &log, cache, cancel)).await;
             if self.filter_generation.get_untracked() != revision {
                 return;
             }
             self.derived_busy.set(false);
             match result {
                 Ok(fields) => {
-                    for pane in self.panes.get_untracked() {
-                        pane.lines.update(|lines| {
-                            for line in lines {
-                                if let Some(field) =
-                                    fields.iter().find(|field| field.key() == line.source)
-                                {
-                                    let data = field.data.as_ref().expect("computed field");
-                                    if line.name != field.name
-                                        || line.data.samples().as_ptr() != data.samples().as_ptr()
-                                    {
-                                        line.name = field.name.clone();
-                                        line.data = data.clone();
-                                        line.revision += 1;
-                                    }
-                                }
-                            }
-                        });
-                        pane.plot.hover.set(None);
-                    }
-                    self.derived.set(fields);
-                    if !self.loading.get_untracked() {
-                        self.status.set("Derived fields updated".into());
-                    }
+                    self.publish_filter_fields(fields);
                 }
                 Err(error) => {
                     self.filter_error.set(error.clone());
@@ -364,6 +393,29 @@ impl Workbench {
                 }
             }
         });
+    }
+    pub(crate) fn publish_filter_fields(self, fields: Vec<DerivedField>) {
+        for pane in self.panes.get_untracked() {
+            pane.lines.update(|lines| {
+                for line in lines {
+                    if let Some(field) = fields.iter().find(|field| field.key() == line.source) {
+                        let data = field.data.as_ref().expect("computed field");
+                        if line.name != field.name
+                            || line.data.samples().as_ptr() != data.samples().as_ptr()
+                        {
+                            line.name = field.name.clone();
+                            line.data = data.clone();
+                            line.revision += 1;
+                        }
+                    }
+                }
+            });
+            pane.plot.hover.set(None);
+        }
+        self.derived.set(fields);
+        if !self.loading.get_untracked() {
+            self.status.set("Derived fields updated".into());
+        }
     }
     pub fn delete_filter(self, id: u64) -> Result<(), String> {
         if self.derived.with_untracked(|fields| {
@@ -400,6 +452,7 @@ impl Workbench {
             .with_untracked(|mode| mode.ids().contains(&id))
         {
             self.filter_mode.set(FilterMode::New);
+            self.script_output_ids.set(Vec::new());
         }
         self.recompute_filters(self.derived.get_untracked());
         self.filter_error.set(String::new());

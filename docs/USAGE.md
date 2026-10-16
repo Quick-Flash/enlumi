@@ -46,8 +46,11 @@ mode. The result's **Edit** action can reopen a whole newly created batch.
 Click a saved row to edit its field (or quaternion group). Selected rows highlight,
 heading names the edit target, and action changes to **Save changes**. Click a
 selected row again, or choose **Done editing**, to return to an empty creation
-draft. Saved rows have an **X** for removal; fields with dependents must be removed
-after their dependents. Saved list scrolls independently to the bottom of window.
+draft. Blue **New field** row follows saved fields at bottom of list and selects a fresh
+creation draft when leaving an edit. It highlights while creating fields; clicking
+it again preserves current draft. Saved rows have an **X** for removal; fields with
+dependents must be removed after their dependents. Saved list, including **New field**,
+scrolls independently.
 Cycle checks apply only to edit targets: an existing field cannot depend on its
 own output or a descendant. Finish editing to create a separate field from either.
 
@@ -58,5 +61,10 @@ PT1 is causal, with alpha = 1 - exp(-2*pi*cutoff*dt), using actual sample timing
 One log at a time; dynamic docked plots and tabs. Plot area fills available workspace, with a green theme and docked panels. Topic timestamps use elapsed seconds from ULog header. Incomplete logs show recovered samples with load warning. Missing/unsupported timestamps, decreasing timestamps, and mismatched field lengths also produce load warnings. Numeric and boolean fields are plottable; character and padding fields are omitted. Raw typed values remain in memory; plot values use f64. Linear and step rendering use column LOD. Visible samples are reduced before step corners are generated, retaining extrema and gaps. Sparse pre/post steps retain exact corners. Markers use bounded visible samples; cursor snapping uses full original samples. Preparation runs off UI thread with one worker per pane, coalesces viewport changes, publishes compatible completed buffers during continuous pans, and reuses unchanged lines. Preparation includes one extra viewport on either side so nearby pans reveal cached samples immediately. Exact rendering falls back to columns above 65,536 visible samples to limit GPU geometry. Filtering always uses full samples. Large logs retain all decoded fields, plus buffers for selected signals.
 
 Session persistence, exports, and multi-log comparison are not implemented yet.
+
+**Rust function** beside **Built-in** adds programmable filters with loops, persistent per-run
+state, multiple inputs, and named outputs. Requires a Rust compiler with WASM
+target; see [setup, examples, and limits](RUST_FILTERS.md). Source is local trusted
+code, compiled on demand; failed runs preserve existing saved fields.
 
 Legend gear opens line settings. Click selects one line; Ctrl-click toggles lines; Shift-click selects a range. Check marks, borders, and selection count show active lines. Width, marker shape/radius, and connection controls apply to every selected line; color editing requires one selected line. Color controls stay visible but disabled for multiple selections; at least one line remains selected. Hover info icon for selection help. **Add filters** closes settings and opens a fresh filter batch containing every field from that legend, including derived fields.

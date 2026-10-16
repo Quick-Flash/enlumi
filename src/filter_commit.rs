@@ -25,7 +25,7 @@ impl Workbench {
         );
     }
     pub fn move_filter_input(self, source: &str, offset: isize) {
-        if self.filter_kind.get_untracked() != "rpy" {
+        if !matches!(self.filter_kind.get_untracked().as_str(), "rpy" | "rust") {
             return;
         }
         self.cancel_filter_input_drag();
@@ -59,7 +59,7 @@ impl Workbench {
                     name: input.name.trim().into(),
                     sources: vec![input.source],
                     group: id,
-                    filter,
+                    filter: filter.clone(),
                     data: None,
                 }
             })
@@ -100,7 +100,7 @@ impl Workbench {
                 .find(|field| {
                     field.id == *id
                         && matches!(
-                            (rpy, field.filter),
+                            (rpy, &field.filter),
                             (true, FilterSpec::Quaternion(..)) | (false, FilterSpec::Magnitude)
                         )
                 })
@@ -126,7 +126,7 @@ impl Workbench {
                     .find(|field| {
                         Some(field.group) == group
                             && (!rpy && outputs.contains(&field.id)
-                                || match (field.filter, filter) {
+                                || match (&field.filter, &filter) {
                                     (
                                         FilterSpec::Quaternion(a, _),
                                         FilterSpec::Quaternion(b, _),
