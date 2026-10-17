@@ -63,8 +63,8 @@ mod plot_cursor;
 mod preferences;
 mod profile;
 mod profile_library;
-mod profile_picker;
 mod profile_state;
+mod profile_view_source;
 mod script;
 mod script_code_editor;
 mod script_compile;
@@ -77,6 +77,7 @@ mod script_tests;
 mod startup;
 mod state;
 mod state_bands;
+mod tab_name;
 mod theme;
 mod theme_picker;
 #[cfg(test)]

@@ -10,12 +10,13 @@ No Betaflight alias table or motor pole-count default is built into Enlumi.
 1. Open a log. Expand **Parameters** in field tree for every recorded entry.
    Numeric parameters drag into plots and filters; numeric arrays expand into elements.
    Select a parameter for full, selectable value and direct plot/filter buttons.
-   Open **Profiles** from sidebar **Fields ▾** menu.
-2. Open **Profiles**, then **Load file…** or **Apply** beside a discovered file.
-   Loading resolves references, validates requirements, computes filters, and
-   creates named geometry. Existing work is preserved. Profiles do not create
-   panels merely by loading.
-3. Under **Plot views**, use **New panel** or **Add to active plot**. Existing plot
+   Click **Profiles** directly in sidebar heading. **Fields** switches back.
+2. Browse folders and expand a profile. Drag one of its views onto a plot.
+   Enlumi loads profile if needed, computes available outputs, and adds that view.
+   **Load** prepares resources without placing plots; **Load file…** supports
+   profiles outside library directory. Existing work is preserved.
+3. Under **Loaded views**, drag a view onto any plot, or use **New panel** /
+   **Add to active**. Existing plot
    contents remain; fields already present are skipped. View geometry is attached
    too. Adding a view fits the destination axes. Views can be used repeatedly.
 
@@ -25,13 +26,18 @@ inside the time bands. Derived band sources refresh after filter recomputation.
 
 Profiles are additive. Conflicting output names, geometry names, or signal
 metadata reject the load. Each profile path loads once per log; reload the log
-to apply a revised file from scratch. A failed profile does not partly apply.
+to apply a revised file from scratch. Missing signals, failed filters and their
+dependents, and unavailable geometry are skipped with visible warnings. Views keep
+remaining lines/geometry; completely empty views are skipped. Raw `requires`
+entries report missing data without blocking unrelated resources. Firmware/settings
+conditions remain strict to prevent applying wrong units or version mappings.
+Invalid JSON/schema, duplicate IDs/view names, and commit conflicts reject load.
 Changing logs cancels in-flight preparation. Filters use existing cancellation,
 validation, and Rust/WASM execution limits.
 
 ## Profile directory
 
-The chooser scans this directory when opened, or when **Refresh list** is used:
+Sidebar scans this directory when opened, when log changes, or when **Refresh** is used:
 
 | Platform | Directory |
 | --- | --- |
@@ -41,25 +47,40 @@ The chooser scans this directory when opened, or when **Refresh list** is used:
 
 Create the directory and copy JSON files there. Rust source files referenced by a
 profile travel beside it or in a subdirectory. The chooser shows the exact path.
-Only JSON files directly in that directory are listed; **Load file…** works from
-any directory. No directory watcher runs.
+JSON files in nested directories form expandable tree. Symlinks are not followed;
+scan allows up to 32 directory levels and 4096 files. **Load file…** works from any
+directory. No directory watcher runs. Example organization:
+
+```text
+profiles/
+  betaflight/
+    2026.6/
+      pid.json
+      rate_error.rs
+      motor-rpm.json
+  px4/
+    modes.json
+```
 
 ## Firmware detection and defaults
 
-Set `"auto_apply": true` in selected profiles placed in profile directory. Default
-is false. Each successful log load scans files in filename order and matches
+Click **Auto** beside a profile to enable automatic firmware selection. **Auto ✓**
+means enabled; click again to disable. Toggle saves `"auto_apply"` in that JSON file.
+Reload log to use changed defaults. Editing `"auto_apply": true` manually also works;
+default is false. Each successful log load scans files in filename order and matches
 `requires_settings` against recorded metadata, including firmware revision/version.
-At least one setting condition is required for auto-apply. Raw `requires` fields
-must also exist. Unmatched profiles are skipped. Matching profiles apply serially;
-errors appear in status and Profiles window and stop remaining defaults. Earlier
-successful profiles remain applied. No panels open automatically.
+At least one setting condition is required for auto-apply. Unmatched firmware
+profiles are skipped. Matching profiles apply serially and open Profiles sidebar
+with available views ready to drag. Missing fields do not block them. Broken files
+or resources report warnings and do not stop unrelated defaults. No panels open
+automatically; drag a view or choose its panel action.
 
 Use narrow version prefixes, e.g. `Betaflight 2026.6.`, rather than guessing across
 firmware releases. Conditions include explicit flight number (default 1); examples
 configure first flight only. Additional flights need separately configured profiles.
 Scanning reads all JSON profiles; malformed files report errors. Rust filters in
 enabled matching profiles run through existing WASM engine. Only enable profiles
-you intend to run. Refresh list updates discovery; reload log to reapply defaults.
+you intend to run. Refresh updates discovery; reload log to reapply defaults.
 
 Latest-release examples target [Betaflight 2026.6.2](https://github.com/betaflight/betaflight/releases/tag/2026.6.2):
 `betaflight-2026.6-pid.json`, `betaflight-2026.6-pid-high-resolution.json`, and
@@ -69,8 +90,9 @@ example scales gyro/setpoint by 0.1 before error calculation. RPM example uses
 recorded motor pole count and requires motor 1 eRPM telemetry. Field definitions
 and scaling checked against [tagged firmware source](https://github.com/betaflight/betaflight/blob/2026.6.2/src/main/blackbox/blackbox.c).
 Examples remain disabled for auto-apply until configured. Normal-resolution PID and RPM examples were exercised against user-provided
-Betaflight 2026.6.2 Basher log. Yaw D is omitted from examples because firmware
-can omit `axisD[2]` when yaw D is disabled. No zero-valued field is fabricated.
+Betaflight 2026.6.2 Basher log. Yaw D appears only when `axisD[2]` exists. Firmware
+can omit it when yaw D is disabled; remaining PID terms still load. No zero-valued
+field is fabricated.
 High-resolution example requires `blackbox_high_resolution = 1`; normal logs use
 `betaflight-2026.6-pid.json`. Older 4.5 and ULog examples intentionally reject
 unrelated logs. Profile list shows compatibility and requirement failures.
@@ -105,7 +127,7 @@ inspectable; they cannot supply numeric filters.
 
 Signal definitions bind an ID and metadata to an existing source. Raw sample IDs
 stay unchanged; profile IDs exist within the file. Aliases may refer to earlier
-aliases. Filter references can point forward; cycles are rejected. A filter ID
+aliases. Filter references can point forward; cyclic branches are skipped with warnings. A filter ID
 represents one named output.
 
 ```json
@@ -231,3 +253,9 @@ See [examples/profiles](../examples/profiles):
 Betaflight examples are templates checked with synthetic matching data, not a
 claim of real-flight validation. Review required settings, units and state names
 against the actual firmware/log before using their interpretations.
+
+## Tab names
+
+Use **Rename** in plot strip, enter title, and press Enter or **Save**. **Reset**
+restores default name. Dragging a view onto unnamed empty plot uses view title.
+Names stay attached to plot IDs through docking; titles remain session-local.

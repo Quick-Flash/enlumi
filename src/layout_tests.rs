@@ -3379,7 +3379,7 @@ fn geometry_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workben
 }
 
 #[test]
-fn field_menu_settings_and_profile_view_buttons_work_in_real_layout() {
+fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     let (mut harness, workbench) = geometry_harness();
     let log = std::sync::Arc::new(
         crate::log::LogStore::read(std::path::Path::new(concat!(
@@ -3417,12 +3417,12 @@ fn field_menu_settings_and_profile_view_buttons_work_in_real_layout() {
     click_class(&mut harness, "profiles-trigger");
     harness.advance(Duration::from_millis(500));
     harness.settle(128);
-    let dialog = harness.app().windows()[0]
-        .box_with_class("profile-dialog")
+    let library = harness.app().windows()[0]
+        .box_with_class("profile-library")
         .unwrap();
     assert!(
-        dialog.size.width.0 > 600.0 && dialog.size.height.0 > 300.0,
-        "{dialog:?}"
+        library.size.width.0 > 200.0 && library.size.height.0 > 300.0,
+        "{library:?}"
     );
     click_class(&mut harness, "profile-view-new");
     assert_eq!(workbench.panes.with_untracked(Vec::len), 2);

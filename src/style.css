@@ -324,3 +324,5 @@
 .parameter-details > .heading { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .parameter-value { min-height: 48px; height: 64px; max-height: 80px; background: var(--app-control); color: var(--app-foreground); font-size: var(--app-font-xs); }
 .parameter-actions { gap: 6px; }
+
+.tab-name-editor { width: 250px; display: flex; flex-direction: column; gap: 6px; }

@@ -17,9 +17,11 @@ names and values. Select a parameter to read/copy its full value, or use **Add t
 plot** / **Use in filter**. Text records remain readable without plot actions. Settings
 absent from log cannot be reconstructed.
 
-**Fields ▾ → Profiles** loads JSON setups for named fields, filters,
-geometry and time bands. Each loaded plot view offers **New panel** or **Add to
-active plot**. See [profile setup and format](PROFILES.md).
+**Profiles** in sidebar heading opens folder tree of JSON setups for named fields, filters,
+geometry and time bands. Expand a profile and drag a view onto any plot; profile loads on demand. Missing
+fields skip affected outputs while remaining view works. Each loaded view also
+offers **New panel** or **Add to active**. **Auto** enables firmware-matched
+loading next time a log opens. **Rename** in plot strip edits tab title. See [profile setup and format](PROFILES.md).
 
 1. Click **Open log** or pass a local log path. File Explorer drag-and-drop is deferred to future work.
 2. Expand plain text topic-instance roots (for example `vehicle_imu.0`; single-instance topics omit suffix) and named field/array groups in scrollable left field tree. Numeric instances and array indices sort naturally. Search keeps matching ancestor paths in tree without opening branches. Matching topic-instance root or field group keeps its whole subtree; leaf matches prune unrelated fields. Expand results manually. Sidebar stays inside visible window; wheel scrolls fields independently.

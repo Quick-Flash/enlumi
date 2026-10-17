@@ -134,3 +134,10 @@ bounds. `geometry_cursor` shares hover/active cursor policy with capture owner.
 UI thread. Runtime contains no PX4 enum lookup or source-name detection.
 Mappings retain unobserved values across refresh; optional firmware examples
 live under `examples/state-mappings` and load only through explicit import.
+
+Profile discovery walks nested directories without following symlinks. Firmware
+conditions control automatic loading; missing data and failed resource branches
+produce warnings while independent resources remain available. Sidebar profile
+view payloads reuse signal drag transport and resolve destination plot on drop.
+Canonical profile paths and view names map repeated drops to existing resources.
+Plot title editing uses existing per-plot title map.

@@ -81,6 +81,22 @@ impl Workbench {
         }
     }
     pub fn field_name(self, source: &str) -> String {
+        if let Some(index) = source
+            .strip_prefix("@profile-view/")
+            .and_then(|index| index.parse::<usize>().ok())
+        {
+            return self.profiles.views.with(|views| {
+                views
+                    .get(index)
+                    .map_or_else(|| "Profile view".into(), |view| view.name.clone())
+            });
+        }
+        if let Some(payload) = source.strip_prefix("@profile-file-view/")
+            && let Ok((_, name)) = serde_json::from_str::<(std::path::PathBuf, String)>(payload)
+        {
+            return name;
+        }
+
         self.derived.with(|fields| {
             fields
                 .iter()

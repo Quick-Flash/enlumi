@@ -81,22 +81,35 @@ fn numeric_settings_are_regular_filter_sources() {
 }
 
 #[test]
-fn profile_failures_report_missing_fields_cycles_zero_division_and_typos() {
+fn profiles_skip_failed_resources_but_reject_schema_errors_and_firmware_mismatches() {
     let log = fixture();
     let mut value = recipe();
     value["filters"][0]["inputs"] = json!(["missing/0/field"]);
     assert!(
         prepare_json(value, &log)
-            .err()
             .unwrap()
-            .contains("Missing field")
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Missing field"))
     );
     let mut value = recipe();
     value["filters"][1]["inputs"] = json!(["$second"]);
-    assert!(prepare_json(value, &log).err().unwrap().contains("cycle"));
+    assert!(
+        prepare_json(value, &log)
+            .unwrap()
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("cyclic"))
+    );
     let mut value = recipe();
     value["filters"][0]["operation"]["gain"] = json!({"ratio":[1,0]});
-    assert!(prepare_json(value, &log).err().unwrap().contains("zero"));
+    assert!(
+        prepare_json(value, &log)
+            .unwrap()
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("zero"))
+    );
     let mut value = recipe();
     value["typo"] = json!(true);
     assert!(prepare_json(value, &log).is_err());
@@ -110,7 +123,7 @@ fn profile_failures_report_missing_fields_cycles_zero_division_and_typos() {
         prepare_json(value, &log)
             .err()
             .unwrap()
-            .contains("requirement")
+            .contains("profile requires")
     );
 }
 

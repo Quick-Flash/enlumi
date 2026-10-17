@@ -72,6 +72,16 @@ impl Workbench {
         }
     }
     pub fn field_drag_move(self, x: f32, y: f32) {
+        if self
+            .drag
+            .state
+            .get_untracked()
+            .is_some_and(|drag| drag.0.starts_with("@profile-"))
+        {
+            self.drop_target.set(self.hit_plot(x, y));
+            return;
+        }
+
         if self.drag.state.get_untracked().is_some_and(|drag| drag.3)
             && Self::inside(self.filter_button, x, y)
         {
@@ -98,6 +108,26 @@ impl Workbench {
         self.drop_target.set(None);
     }
     pub fn drop_fields(self, source: String, x: f32, y: f32) {
+        if let Some(index) = source
+            .strip_prefix("@profile-view/")
+            .and_then(|index| index.parse::<usize>().ok())
+        {
+            if let Some(pane) = self.hit_plot(x, y) {
+                self.add_profile_view_to(index, pane);
+            }
+            self.finish_field_drag();
+            return;
+        }
+        if let Some(payload) = source.strip_prefix("@profile-file-view/") {
+            if let Ok((path, name)) = serde_json::from_str::<(std::path::PathBuf, String)>(payload)
+                && let Some(pane) = self.hit_plot(x, y)
+            {
+                self.apply_profile_view(path, name, pane);
+            }
+            self.finish_field_drag();
+            return;
+        }
+
         let sources = self.drag_fields(source);
         if self.bands.open.get_untracked() && Self::inside(self.bands.drop, x, y) {
             if sources.len() == 1 {

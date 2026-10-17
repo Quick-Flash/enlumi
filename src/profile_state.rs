@@ -18,24 +18,30 @@ use zgui::prelude::*;
 
 #[derive(Clone, Copy)]
 pub struct ProfileUi {
+    pub browsing: RwSignal<bool, LocalStorage>,
     pub busy: RwSignal<bool, LocalStorage>,
     pub error: RwSignal<String, LocalStorage>,
+    pub warnings: RwSignal<Vec<String>, LocalStorage>,
     pub metadata: RwSignal<MetadataMap, LocalStorage>,
     pub titles: RwSignal<BTreeMap<u64, String>, LocalStorage>,
     pub views: RwSignal<Vec<PreparedView>, LocalStorage>,
     pub applied: RwSignal<BTreeSet<PathBuf>, LocalStorage>,
+    loaded_views: StoredValue<BTreeMap<PathBuf, Vec<(String, usize)>>, LocalStorage>,
     pending: StoredValue<Vec<PathBuf>, LocalStorage>,
     cancel: StoredValue<Option<Arc<AtomicBool>>, LocalStorage>,
 }
 impl ProfileUi {
     pub fn new() -> Self {
         Self {
+            browsing: RwSignal::new_local(false),
             busy: RwSignal::new_local(false),
             error: RwSignal::new_local(String::new()),
+            warnings: RwSignal::new_local(Vec::new()),
             metadata: RwSignal::new_local(BTreeMap::new()),
             titles: RwSignal::new_local(BTreeMap::new()),
             views: RwSignal::new_local(Vec::new()),
             applied: RwSignal::new_local(BTreeSet::new()),
+            loaded_views: StoredValue::new_local(BTreeMap::new()),
             pending: StoredValue::new_local(Vec::new()),
             cancel: StoredValue::new_local(None),
         }
@@ -50,10 +56,12 @@ impl ProfileUi {
     pub fn reset(self) {
         self.cancel();
         self.error.set(String::new());
+        self.warnings.set(Vec::new());
         self.metadata.set(BTreeMap::new());
         self.titles.set(BTreeMap::new());
         self.applied.set(BTreeSet::new());
         self.views.set(Vec::new());
+        self.loaded_views.set_value(BTreeMap::new());
     }
 }
 
@@ -69,23 +77,30 @@ impl Workbench {
         self.task(async move {
             let result = blocking(move || {
                 let mut paths = Vec::new();
+                let mut warnings = Vec::new();
                 for path in profile::discover()? {
-                    let profile = profile::load(&path)
-                        .map_err(|error| format!("{}: {error}", path.display()))?;
+                    let profile = match profile::load(&path) {
+                        Ok(profile) => profile,
+                        Err(error) => {
+                            warnings.push(format!("{}: {error}", path.display()));
+                            continue;
+                        }
+                    };
                     if !profile.auto_apply {
                         continue;
                     }
                     if profile.requires_settings.is_empty() {
-                        return Err(format!(
+                        warnings.push(format!(
                             "{}: auto_apply needs requires_settings",
                             path.display()
                         ));
+                        continue;
                     }
                     if profile::prepare::requirements(&profile, &log).is_ok() {
                         paths.push(path);
                     }
                 }
-                Ok::<_, String>(paths)
+                Ok::<_, String>((paths, warnings))
             })
             .await;
             if self.generation.get_untracked() != generation || cancel.load(Ordering::Relaxed) {
@@ -93,7 +108,11 @@ impl Workbench {
             }
             self.profiles.busy.set(false);
             match result {
-                Ok(mut paths) => {
+                Ok((mut paths, warnings)) => {
+                    if !paths.is_empty() {
+                        self.profiles.browsing.set(true);
+                    }
+                    self.profiles.warnings.update(|all| all.extend(warnings));
                     paths.reverse();
                     self.profiles.pending.set_value(paths);
                     self.next_default_profile();
@@ -114,6 +133,14 @@ impl Workbench {
     }
 
     pub fn apply_profile(self, path: PathBuf) {
+        self.load_profile(path, None);
+    }
+
+    pub fn apply_profile_view(self, path: PathBuf, name: String, pane: u64) {
+        self.load_profile(path, Some((name, pane)));
+    }
+
+    fn load_profile(self, path: PathBuf, destination: Option<(String, u64)>) {
         if self.profiles.busy.get_untracked()
             || self.derived_busy.get_untracked()
             || self.loading.get_untracked()
@@ -154,7 +181,13 @@ impl Workbench {
                 .applied
                 .with_untracked(|applied| applied.contains(&path))
             {
-                self.profile_failed("This profile is already applied to this log".into());
+                self.profiles.busy.set(false);
+                if let Some((name, pane)) = destination {
+                    self.place_file_view(&path, &name, pane);
+                } else {
+                    self.status
+                        .set("Profile already loaded; drag a view onto a plot".into());
+                }
                 return;
             }
             let count = (profile.filters.len() + profile.geometry.len()).max(1);
@@ -174,13 +207,37 @@ impl Workbench {
             if self.generation.get_untracked() != generation || cancel.load(Ordering::Relaxed) {
                 return;
             }
+            let view_start = self.profiles.views.with_untracked(Vec::len);
+            let view_names = result
+                .as_ref()
+                .map(|prepared| {
+                    prepared
+                        .views
+                        .iter()
+                        .map(|view| view.name.clone())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
             match result.and_then(|prepared| self.commit_profile(prepared)) {
                 Ok(name) => {
                     self.profiles.applied.update(|applied| {
-                        applied.insert(path);
+                        applied.insert(path.clone());
+                    });
+                    self.profiles.loaded_views.update_value(|loaded| {
+                        loaded.insert(
+                            path.clone(),
+                            view_names
+                                .into_iter()
+                                .enumerate()
+                                .map(|(index, name)| (name, view_start + index))
+                                .collect(),
+                        );
                     });
                     self.profiles.busy.set(false);
                     self.status.set(format!("Applied profile: {name}"));
+                    if let Some((name, pane)) = destination {
+                        self.place_file_view(&path, &name, pane);
+                    }
                     self.next_default_profile();
                 }
                 Err(error) => self.profile_failed(error),
@@ -188,11 +245,58 @@ impl Workbench {
         });
     }
 
+    fn place_file_view(self, path: &std::path::Path, name: &str, pane: u64) {
+        let index = self.profiles.loaded_views.with_value(|loaded| {
+            loaded.get(path).and_then(|views| {
+                views
+                    .iter()
+                    .find(|(label, _)| label == name)
+                    .map(|(_, index)| *index)
+            })
+        });
+        match index {
+            Some(index) => self.add_profile_view_to(index, pane),
+            None => self.profiles.error.set(format!(
+                "View {name} has no usable fields or geometry; other profile resources loaded"
+            )),
+        }
+    }
+
+    pub fn add_profile_view_to(self, index: usize, pane: u64) {
+        if self.find(pane).is_none() {
+            self.profiles
+                .error
+                .set("Destination plot was closed".into());
+            return;
+        }
+        let unnamed_empty = self
+            .find(pane)
+            .is_some_and(|pane| pane.lines.with_untracked(Vec::is_empty));
+        let name = self
+            .profiles
+            .views
+            .with_untracked(|views| views.get(index).map(|view| view.name.clone()));
+        self.activate(pane);
+        match self.place_profile_view(index, false) {
+            Ok(()) => {
+                if unnamed_empty && let Some(name) = name {
+                    self.profiles.titles.update(|titles| {
+                        titles.entry(pane).or_insert(name);
+                    });
+                }
+            }
+            Err(error) => self.profiles.error.set(error),
+        }
+    }
+
     fn profile_failed(self, error: String) {
-        self.profiles.pending.set_value(Vec::new());
         self.profiles.busy.set(false);
+        self.profiles
+            .warnings
+            .update(|warnings| warnings.push(error.clone()));
         self.profiles.error.set(error.clone());
         self.status.set(format!("Profile: {error}"));
+        self.next_default_profile();
     }
 
     fn commit_profile(self, prepared: Prepared) -> Result<String, String> {
@@ -221,6 +325,9 @@ impl Workbench {
                 return Err(format!("Geometry name already exists: {}", item.name));
             }
         }
+        self.profiles
+            .warnings
+            .update(|warnings| warnings.extend(prepared.warnings));
         // All fallible decoding, compilation, computation and validation finished.
         self.derived.set(fields);
         self.profiles
@@ -364,6 +471,7 @@ mod tests {
         item.coordinates = [0., 0., 1., 1.];
         Prepared {
             name: "Test setup".into(),
+            warnings: Vec::new(),
             fields: Vec::new(),
             metadata: BTreeMap::from([(
                 source.clone(),

@@ -1,7 +1,7 @@
 use crate::action_button::ActionButtonProps;
 use crate::geometry_library::GeometryLibraryProps;
 use crate::parameter_details::ParameterDetailsProps;
-use crate::profile_picker::ProfilePickerProps;
+use crate::profile_library::ProfileLibraryProps;
 use crate::{field_row::FieldRowProps, field_tree::FieldTree, state::Workbench};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
@@ -89,15 +89,16 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
         row(class = "browser", class:hidden = move || !workbench.sidebar_visible.get(), style:width = move || Some(format!("{}px", workbench.sidebar_width.get() + 6.0))) {
             column(class = "signal-sidebar") {
                 row(class = "browser-heading") {
-                    Popover {
-                        PopoverTrigger(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "app-action fields-menu", a11y:label = "Field tools") { "Fields ▾" }
-                        PopoverContent(class = "field-tools-menu") {
-                            ProfilePicker(workbench = workbench)
-                        }
-                    }
+                    ActionButton(class = "fields-menu", class:setting-active = move || !workbench.profiles.browsing.get(), on:click = move |_| workbench.profiles.browsing.set(false)) { "Fields" }
+                    ActionButton(class = "profiles-trigger", class:setting-active = move || workbench.profiles.browsing.get(), on:click = move |_| workbench.profiles.browsing.set(true)) { "Profiles" }
                     ActionButton(class = "open-filters", node_ref = workbench.filter_button, class:setting-active = move || workbench.filters_open.get(), disabled = Signal::derive_local(move || workbench.log.get().is_none() || workbench.loading.get()), on:click = move |_| workbench.filters_open.update(|open| *open = !*open)) { "Filters" }
-                    ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
+                    if move || !workbench.profiles.browsing.get() {
+                        ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
+                    }
                 }
+                if move || workbench.profiles.browsing.get() {
+                    ProfileLibrary(workbench = workbench)
+                } else {
                 InputGroup(class = "field-search") {
                     InputGroupInput(value = workbench.query, placeholder = "Search topics and fields", a11y:label = "Search log fields")
                     if move || !workbench.query.with(String::is_empty) {
@@ -116,6 +117,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 text(class = "muted") { "Ctrl-click toggles fields. Shift-click selects range. Drag selection onto plot or Filters. Enter plots focused field." }
                 if move || workbench.log.get().is_some_and(|log| !log.warnings.is_empty()) {
                     text(class = "warnings") {{move || workbench.log.with(|log| log.as_ref().map_or_else(String::new, |log| format!("{} load warnings", log.warnings.len())))}}
+                }
                 }
             }
             control(class = "sidebar-grip", tabindex = Focus::Sequential, a11y:label = "Resize field browser",

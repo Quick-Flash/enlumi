@@ -141,6 +141,15 @@
         "unit": "",
         "axis": "yaw"
       }
+    },
+    {
+      "id": "yaw_d",
+      "source": "blackbox/1/axisD[2]",
+      "metadata": {
+        "name": "Yaw D term",
+        "unit": "",
+        "axis": "yaw"
+      }
     }
   ],
   "filters": [
@@ -328,7 +337,8 @@
       "name": "Yaw PID",
       "fields": [
         "$yaw_p",
-        "$yaw_i"
+        "$yaw_i",
+        "$yaw_d"
       ]
     }
   ],

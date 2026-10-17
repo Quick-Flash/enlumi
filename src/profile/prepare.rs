@@ -17,6 +17,7 @@ use std::{
 
 pub struct Prepared {
     pub name: String,
+    pub warnings: Vec<String>,
     pub fields: Vec<DerivedField>,
     pub metadata: MetadataMap,
     pub geometry: Vec<Geometry>,
@@ -38,10 +39,16 @@ pub fn prepare(
     first_id: u64,
     cancel: Arc<AtomicBool>,
 ) -> Result<Prepared, String> {
+    let mut warnings = Vec::new();
     let mut symbols = BTreeMap::new();
     let mut metadata = MetadataMap::new();
     let mut ids = BTreeSet::new();
     requirements(&profile, log)?;
+    for field in &profile.requires {
+        if let Err(error) = resolve::source(log, &Source::Field(field.clone()), &symbols) {
+            warnings.push(error);
+        }
+    }
     for id in profile
         .signals
         .iter()
@@ -54,8 +61,14 @@ pub fn prepare(
         }
     }
     for signal in &profile.signals {
-        let source = resolve::source(log, &signal.source, &symbols)?;
         validate_metadata(&signal.metadata)?;
+        let source = match resolve::source(log, &signal.source, &symbols) {
+            Ok(source) => source,
+            Err(error) => {
+                warnings.push(format!("{}: {error}", signal.metadata.name));
+                continue;
+            }
+        };
         if metadata
             .insert(source.clone(), signal.metadata.clone())
             .is_some()
@@ -67,25 +80,65 @@ pub fn prepare(
     for (index, filter) in profile.filters.iter().enumerate() {
         symbols.insert(filter.id.clone(), derived::key(first_id + index as u64));
     }
-    let mut fields = Vec::new();
+    let mut pending = Vec::new();
     for (index, filter) in profile.filters.iter().enumerate() {
         let id = first_id + index as u64;
         validate_metadata(&filter.metadata)?;
-        metadata.insert(derived::key(id), filter.metadata.clone());
-        fields.push(DerivedField {
-            id,
-            group: id,
-            name: filter.metadata.name.clone(),
-            data: None,
-            sources: filter
-                .inputs
-                .iter()
-                .map(|s| resolve::source(log, s, &symbols))
-                .collect::<Result<_, _>>()?,
-            filter: resolve::operation(log, &filter.operation, base)?,
-        });
+        let candidate = (|| {
+            Ok::<_, String>(DerivedField {
+                id,
+                group: id,
+                name: filter.metadata.name.clone(),
+                data: None,
+                sources: filter
+                    .inputs
+                    .iter()
+                    .map(|s| resolve::source(log, s, &symbols))
+                    .collect::<Result<_, _>>()?,
+                filter: resolve::operation(log, &filter.operation, base)?,
+            })
+        })();
+        match candidate {
+            Ok(field) => pending.push(field),
+            Err(error) => warnings.push(format!("{}: {error}", filter.metadata.name)),
+        }
     }
-    let fields = derived::compute_cancelled(fields, log, BTreeMap::new(), cancel.clone())?;
+    let mut fields: Vec<DerivedField> = Vec::new();
+    while !pending.is_empty() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Profile cancelled".into());
+        }
+        let pending_ids: BTreeSet<_> = pending.iter().map(|f| f.id).collect();
+        let Some(index) = pending.iter().position(|f| {
+            f.sources
+                .iter()
+                .filter_map(|s| derived::id(s))
+                .all(|id| !pending_ids.contains(&id))
+        }) else {
+            warnings.extend(
+                pending.iter().map(|field| {
+                    format!("{}: unresolved or cyclic filter dependencies", field.name)
+                }),
+            );
+            break;
+        };
+        let candidate = pending.remove(index);
+        let name = candidate.name.clone();
+        let mut branch = fields.clone();
+        branch.push(candidate);
+        match derived::compute_cancelled(branch, log, BTreeMap::new(), cancel.clone()) {
+            Ok(computed) => fields = computed,
+            Err(error) => warnings.push(format!("{name}: {error}")),
+        }
+    }
+    fields.sort_by_key(|field| field.id);
+    for filter in &profile.filters {
+        if let Some(key) = symbols.get(&filter.id)
+            && fields.iter().any(|field| field.key() == *key)
+        {
+            metadata.insert(key.clone(), filter.metadata.clone());
+        }
+    }
     let mut data: BTreeMap<_, _> = fields
         .iter()
         .filter_map(|f| f.data.clone().map(|data| (f.key(), data)))
@@ -99,87 +152,116 @@ pub fn prepare(
         if definition.name.trim().is_empty() {
             return Err("Geometry needs a name".into());
         }
-        let id = first_id + fields.len() as u64 + index as u64;
-        let kind = match definition.shape {
-            Shape::Line { .. } => GeometryKind::Line,
-            Shape::Rectangle { .. } => GeometryKind::Rectangle,
-            _ => GeometryKind::Band,
-        };
-        let mut item = Geometry::new(id, kind, kurbo::Point::ZERO);
-        item.name = definition.name.clone();
-        item.color = definition.color;
-        item.opacity = definition.opacity;
-        match &definition.shape {
-            Shape::Line { coordinates } | Shape::Rectangle { coordinates } => {
-                for (out, value) in item.coordinates.iter_mut().zip(coordinates) {
-                    *out = resolve::scalar(log, value)?;
-                }
-            }
-            Shape::Band { start, end } => {
-                item.coordinates = [
-                    resolve::scalar(log, start)?,
-                    0.0,
-                    resolve::scalar(log, end)?,
-                    1.0,
-                ]
-            }
-            Shape::States { source, rules } => {
-                let source = resolve::source(log, source, &symbols)?;
-                let input = get_data(&source, log, &mut data)?;
-                let end = if derived::id(&source).is_some() && !log.blackbox_headers.is_empty() {
-                    input.samples().last().map_or(log.duration, |point| point.x)
-                } else {
-                    log.duration_for(&source)
-                };
-                let mut states = StateBands::build(source, input, end)?;
-                let mut values = BTreeSet::new();
-                if rules.len() > 256 {
-                    return Err("At most 256 state rules per geometry".into());
-                }
-                for rule in rules {
-                    if rule.name.trim().is_empty()
-                        || !values.insert(rule.value)
-                        || !(-9_007_199_254_740_991..=9_007_199_254_740_991).contains(&rule.value)
-                    {
-                        return Err("State rules need unique exact integer values and names".into());
+        let result = (|| -> Result<Geometry, String> {
+            let id = first_id + profile.filters.len() as u64 + index as u64;
+            let kind = match definition.shape {
+                Shape::Line { .. } => GeometryKind::Line,
+                Shape::Rectangle { .. } => GeometryKind::Rectangle,
+                _ => GeometryKind::Band,
+            };
+            let mut item = Geometry::new(id, kind, kurbo::Point::ZERO);
+            item.name = definition.name.clone();
+            item.color = definition.color;
+            item.opacity = definition.opacity;
+            match &definition.shape {
+                Shape::Line { coordinates } | Shape::Rectangle { coordinates } => {
+                    for (out, value) in item.coordinates.iter_mut().zip(coordinates) {
+                        *out = resolve::scalar(log, value)?;
                     }
                 }
-                states.apply_rules(rules.clone());
-                item.coordinates = [0.0, 0.0, end, 1.0];
-                item.states = Some(Arc::new(states));
+                Shape::Band { start, end } => {
+                    item.coordinates = [
+                        resolve::scalar(log, start)?,
+                        0.0,
+                        resolve::scalar(log, end)?,
+                        1.0,
+                    ]
+                }
+                Shape::States { source, rules } => {
+                    let source = resolve::source(log, source, &symbols)?;
+                    let input = get_data(&source, log, &mut data)?;
+                    let end = if derived::id(&source).is_some() && !log.blackbox_headers.is_empty()
+                    {
+                        input.samples().last().map_or(log.duration, |point| point.x)
+                    } else {
+                        log.duration_for(&source)
+                    };
+                    let mut states = StateBands::build(source, input, end)?;
+                    let mut values = BTreeSet::new();
+                    if rules.len() > 256 {
+                        return Err("At most 256 state rules per geometry".into());
+                    }
+                    for rule in rules {
+                        if rule.name.trim().is_empty()
+                            || !values.insert(rule.value)
+                            || !(-9_007_199_254_740_991..=9_007_199_254_740_991)
+                                .contains(&rule.value)
+                        {
+                            return Err(
+                                "State rules need unique exact integer values and names".into()
+                            );
+                        }
+                    }
+                    states.apply_rules(rules.clone());
+                    item.coordinates = [0.0, 0.0, end, 1.0];
+                    item.states = Some(Arc::new(states));
+                }
             }
+            if !item.valid() || !item.nonempty() {
+                return Err(format!("Invalid geometry {}", item.name));
+            }
+            Ok(item)
+        })();
+        match result {
+            Ok(item) => {
+                geometry_ids.insert(definition.id.clone(), item.id);
+                geometry.push(item);
+            }
+            Err(error) => warnings.push(format!("{}: {error}", definition.name)),
         }
-        if !item.valid() || !item.nonempty() {
-            return Err(format!("Invalid geometry {}", item.name));
-        }
-        geometry_ids.insert(definition.id.clone(), id);
-        geometry.push(item);
     }
     let mut views = Vec::new();
+    let mut view_names = BTreeSet::new();
     // Validate view references even when creating plots is unchecked.
     for view in profile.views {
+        if !view_names.insert(view.name.clone()) {
+            return Err(format!("Duplicate view name {}", view.name));
+        }
         if view.name.trim().is_empty() {
             return Err("Plot view needs a name".into());
         }
         let mut fields = Vec::new();
         let mut seen = BTreeSet::new();
         for source in &view.fields {
-            let key = resolve::source(log, source, &symbols)?;
+            let result = resolve::source(log, source, &symbols)
+                .and_then(|key| get_data(&key, log, &mut data).map(|data| (key, data)));
+            let (key, input) = match result {
+                Ok(value) => value,
+                Err(error) => {
+                    warnings.push(format!("{} / {source:?}: {error}", view.name));
+                    continue;
+                }
+            };
             if !seen.insert(key.clone()) {
                 return Err(format!("Duplicate field in view {}", view.name));
             }
-            fields.push((key.clone(), get_data(&key, log, &mut data)?));
+            fields.push((key, input));
         }
         let attached = view
             .geometry
             .iter()
-            .map(|id| {
-                geometry_ids
-                    .get(id.trim_start_matches('$'))
-                    .copied()
-                    .ok_or_else(|| format!("Unknown geometry {id}"))
+            .filter_map(|id| {
+                let found = geometry_ids.get(id.trim_start_matches('$')).copied();
+                if found.is_none() {
+                    warnings.push(format!("{}: unavailable geometry {id}", view.name));
+                }
+                found
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Vec<_>>();
+        if fields.is_empty() && attached.is_empty() {
+            warnings.push(format!("{}: no usable fields or geometry", view.name));
+            continue;
+        }
         views.push(PreparedView {
             name: view.name,
             fields,
@@ -190,6 +272,7 @@ pub fn prepare(
     }
     Ok(Prepared {
         name: profile.name,
+        warnings,
         fields,
         metadata,
         geometry,
@@ -250,30 +333,6 @@ pub fn requirements(profile: &Profile, log: &LogStore) -> Result<(), String> {
                     .unwrap()
             ));
         }
-    }
-    for field in &profile.requires {
-        resolve::source(log, &Source::Field(field.clone()), &BTreeMap::new())?;
-    }
-    let sources = profile
-        .signals
-        .iter()
-        .map(|signal| &signal.source)
-        .chain(profile.filters.iter().flat_map(|filter| &filter.inputs))
-        .chain(profile.views.iter().flat_map(|view| &view.fields))
-        .chain(
-            profile
-                .geometry
-                .iter()
-                .filter_map(|geometry| match &geometry.shape {
-                    Shape::States { source, .. } => Some(source),
-                    _ => None,
-                }),
-        );
-    for source in sources {
-        if matches!(source, Source::Field(id) if id.starts_with('$')) {
-            continue;
-        }
-        resolve::source(log, source, &BTreeMap::new())?;
     }
     Ok(())
 }
