@@ -8,6 +8,7 @@ use std::{
 struct Node {
     children: BTreeMap<String, Node>,
     signal: Option<SignalInfo>,
+    alias: Option<String>,
 }
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldTree(BTreeMap<String, Node>);
@@ -26,6 +27,9 @@ impl FieldTree {
     pub fn new(signals: &[SignalInfo]) -> Self {
         let mut tree = Self::default();
         for signal in signals {
+            if signal.id.starts_with("@setting/") {
+                continue;
+            }
             let mut path = signal.id.splitn(3, '/');
             let (Some(topic), Some(instance), Some(field)) =
                 (path.next(), path.next(), path.next())
@@ -67,6 +71,31 @@ impl FieldTree {
                 .collect(),
         )
     }
+    /// Drop a redundant wrapper while keeping raw signal identities intact.
+    pub fn without_single_root(self) -> Self {
+        if self.0.len() == 1 {
+            Self(self.0.into_values().next().unwrap().children)
+        } else {
+            self
+        }
+    }
+
+    pub fn with_labels(mut self, labels: &BTreeMap<String, String>) -> Self {
+        fn apply(node: &mut Node, labels: &BTreeMap<String, String>) {
+            node.alias = node
+                .signal
+                .as_ref()
+                .and_then(|signal| labels.get(&signal.id).cloned());
+            for child in node.children.values_mut() {
+                apply(child, labels);
+            }
+        }
+        for node in self.0.values_mut() {
+            apply(node, labels);
+        }
+        self
+    }
+
     pub fn rows(&self, query: &str, expanded: &BTreeSet<String>) -> Vec<TreeRow> {
         let query = query.trim().to_ascii_lowercase();
         let mut rows = Vec::new();
@@ -88,6 +117,10 @@ impl FieldTree {
 fn filter(node: &Node, label: &str, query: &str) -> Option<Node> {
     if label.to_ascii_lowercase().contains(query)
         || node
+            .alias
+            .as_ref()
+            .is_some_and(|alias| alias.to_ascii_lowercase().contains(query))
+        || node
             .signal
             .as_ref()
             .is_some_and(|signal| signal.id.to_ascii_lowercase().contains(query))
@@ -102,6 +135,7 @@ fn filter(node: &Node, label: &str, query: &str) -> Option<Node> {
     (!children.is_empty()).then_some(Node {
         children,
         signal: None,
+        alias: None,
     })
 }
 fn ordered(nodes: &BTreeMap<String, Node>) -> Vec<(&String, &Node)> {
@@ -214,7 +248,7 @@ fn append(
     } else if let Some(signal) = &node.signal {
         rows.push(TreeRow {
             id: signal.id.clone(),
-            label: label.into(),
+            label: node.alias.as_deref().unwrap_or(label).into(),
             depth,
             count: signal.count,
             field: Some(signal.id.clone()),

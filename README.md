@@ -2,14 +2,16 @@
 
 **Enlumi** comes from Esperanto, meaning **to enlighten**.
 
-A native desktop viewer for PX4 ULog (`.ulg`) flight logs. Browse fields, drag them
+A native desktop workbench for time-series logs, including ULog (`.ulg`) and
+Betaflight Blackbox (`.bbl`, `.bfl`, `.cfl`, `.txt`, `.log`). Browse fields, drag them
 onto docked plots, and build named filter chains with built-in operations or custom Rust functions.
 
 Enlumi is an early-stage project inspired by
 [PlotJuggler](https://github.com/PlotJuggler/PlotJuggler). It uses
 [Zgui](https://github.com/zortax/zgui),
-[zgui-plot](https://github.com/Quick-Flash/zgui-plot), and upstream
-[px4-ulog](https://crates.io/crates/px4-ulog). Zgui dependencies are pinned.
+[zgui-plot](https://github.com/Quick-Flash/zgui-plot), and log decoders
+[px4-ulog](https://crates.io/crates/px4-ulog) and
+[bbl_parser](https://crates.io/crates/bbl_parser). Zgui dependencies are pinned.
 
 Plotting code is fetched from a pinned public Git revision of `zgui-plot`.
 Zgui temporarily pins a public text-selection fork; see [Contributing](CONTRIBUTING.md#zgui-fork-development).
@@ -17,6 +19,13 @@ Zgui temporarily pins a public text-selection fork; see [Contributing](CONTRIBUT
 ## Features
 
 - Searchable field tree with nested arrays and numeric instance ordering.
+- Searchable recorded ULog parameters/metadata and Blackbox headers; numeric
+  parameters and numeric array elements can be dragged into plots/filters as
+  constant fields, with selectable full values and direct action buttons.
+- Editable JSON [profiles](docs/PROFILES.md) for names/units, built-in and Rust
+  filter graphs, named geometry/state bands, and reusable plot views. Add views
+  to new panels or the active plot.
+- Per-plot legend collapse/expand preserves plotted lines and geometry.
 - Ctrl/Shift selection and drag/drop of field groups onto plots or filters.
 - Split, tab, duplicate, resize, and equalize docks; dock beside groups of panels.
 - Independent links for pointers and X/Y bounds.
@@ -70,7 +79,7 @@ The GUI requires a desktop session and a graphics adapter supported by wgpu.
 
 ## First plot
 
-1. Click **Open ULog**, then expand a topic in the left field browser.
+1. Click **Open log**, then expand a topic in the left field browser.
 2. Drag a field into the plot. Ctrl-click toggles selection; Shift-click selects a
    visible range. Drag any selected field to add the group.
 3. Use **Duplicate** or tab **+** to add panels. Drag tabs onto docking guides to
@@ -84,11 +93,33 @@ The GUI requires a desktop session and a graphics adapter supported by wgpu.
 See [the usage guide](docs/USAGE.md) for docking, keyboard controls, filtering
 details, and rendering behavior.
 
+## Log formats
+
+- **ULog (`.ulg`):** numeric and boolean fields, nested arrays, topic instances,
+  and recovered samples from incomplete logs.
+- **Betaflight Blackbox (`.bbl`, `.bfl`, `.cfl`, `.txt`, `.log`):** main I/P fields and slow fields merged
+  by `bbl_parser`. Each embedded flight appears under `blackbox.N` when a file
+  contains multiple flights. Flights start at zero independently; duration is
+  the longest flight. Values retain raw log units, without engineering-unit
+  conversion until a profile/filter supplies it. Recorded firmware metadata is
+  available under Parameters. GPS/home records and event annotations are not
+  exposed. Missing values produce gaps rather than zeroes.
+
+Blackbox decoding currently stops at the parser's safety limit of more than
+1,000,000 processed frames or 10,000 failed frames per flight. Enlumi reports a
+load warning when that limit is reached. Real-flight compatibility depends on
+the firmware and encodings supported by `bbl_parser` 1.1.1.
+
+`bbl_parser` is AGPL-3.0-or-later; see [third-party notices](THIRD_PARTY_NOTICES.md)
+for distribution implications.
+
 ## Current limits
 
-One log is open at a time. Plots and filter definitions live in memory; loading
-another log resets them. Session saving, exports, file-explorer drops, and multi-log
-comparison are not implemented. All plotted lines in a panel share its Y axis.
+One log file is open at a time. Plots and filter definitions live in memory;
+loading another file resets them. Profiles recreate declared setups; full session
+saving, exports, file-explorer drops,
+and comparison across files are not implemented. All plotted lines in a panel
+share its Y axis.
 
 Incomplete logs display recovered samples with a warning. Invalid timestamps and
 mismatched field lengths can cause topics or fields to be skipped. Numeric and
@@ -123,5 +154,5 @@ See [geometry controls](docs/USAGE.md#geometry-bounds).
 
 State bands map discrete raw or derived fields to named, colored time sections
 behind signals using editable, [shareable JSON mappings](examples/state-mappings/README.md).
-No firmware-specific mapping loads automatically. Manual time bands provide reusable labeled highlights alongside
+Firmware mappings auto-apply only when explicitly enabled in profile files. Manual time bands provide reusable labeled highlights alongside
 automatic layers. [State band controls](docs/USAGE.md#state-bands-and-manual-time-highlights).

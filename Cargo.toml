@@ -3,10 +3,10 @@ name = "enlumi"
 version = "0.1.0"
 edition = "2024"
 authors = ["Kevin Plaizier"]
-description = "Native PX4 ULog viewer with docked plots and named filter chains"
+description = "Native time-series log viewer with docked plots and named filter chains"
 license = "MIT OR BSD-3-Clause"
 readme = "README.md"
-keywords = ["px4", "ulog", "plotting", "visualization"]
+keywords = ["logs", "time-series", "plotting", "visualization"]
 categories = ["visualization", "gui"]
 publish = false
 
@@ -15,36 +15,37 @@ members = [".", "xtask"]
 resolver = "3"
 
 [dependencies]
+bbl_parser = { version = "1.1.1", default-features = false }
 kurbo = "0.13.1"
-plot = { package = "zgui-plot", path = "../zgui-plot", features = ["workspace"] }
+plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "c73a80b265bb3158f3b9e058752e573a84fbc954", features = ["workspace"] }
 px4-ulog = "0.6.1"
 rfd = "0.17.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3.27.0"
-syn = { version = "2.0.119", features = ["full"] }
+syn = { version = "3.0.9", features = ["full"] }
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 wasmtime = { version = "49", default-features = false, features = ["cranelift", "runtime", "std"] }
-zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
+zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
 zgui-editor = { git = "https://github.com/zortax/zgui-editor", rev = "1f7aaec6e4e2dfaee4d26b049a719d9e88d16f8f", features = ["lang-rust"] }
-zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
+zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-zgui-platform-winit = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
+zgui-platform-winit = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
 
 [dev-dependencies]
-zgui-testkit-view = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
+zgui-testkit-view = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 # Keep editor and application on one framework revision until text-selection PR lands.
 [patch."https://github.com/zortax/zgui"]
-zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-interned = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-css = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-text-style = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
+zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-interned = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-css = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-text-style = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }

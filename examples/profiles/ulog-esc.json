@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "name": "ULog ESC overview",
+  "signals": [
+    {
+      "id": "rpm",
+      "source": "esc_status/0/esc[5].esc_rpm",
+      "metadata": {
+        "name": "ESC 6 RPM",
+        "unit": "rpm"
+      }
+    }
+  ],
+  "geometry": [
+    {
+      "id": "interval",
+      "name": "First second",
+      "shape": {
+        "kind": "band",
+        "start": 0,
+        "end": 1
+      }
+    }
+  ],
+  "views": [
+    {
+      "name": "ESC 6",
+      "fields": [
+        "$rpm"
+      ],
+      "geometry": [
+        "interval"
+      ]
+    }
+  ]
+}

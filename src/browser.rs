@@ -1,5 +1,7 @@
 use crate::action_button::ActionButtonProps;
 use crate::geometry_library::GeometryLibraryProps;
+use crate::parameter_details::ParameterDetailsProps;
+use crate::profile_picker::ProfilePickerProps;
 use crate::{field_row::FieldRowProps, field_tree::FieldTree, state::Workbench};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
@@ -8,8 +10,20 @@ use zgui_ui::prelude::*;
 pub fn Browser(workbench: Workbench) -> impl IntoView {
     let tree = Memo::new(move |_| {
         workbench.log.with(|log| {
-            log.as_ref()
-                .map_or_else(FieldTree::default, |log| FieldTree::new(&log.catalogue))
+            log.as_ref().map_or_else(FieldTree::default, |log| {
+                let labels = workbench.profiles.metadata.with(|metadata| {
+                    metadata
+                        .iter()
+                        .map(|(source, meta)| (source.clone(), meta.label()))
+                        .collect()
+                });
+                let tree = FieldTree::new(&log.catalogue).with_labels(&labels);
+                if log.blackbox_headers.len() == 1 {
+                    tree.without_single_root()
+                } else {
+                    tree
+                }
+            })
         })
     });
     let rows = Memo::new(move |_| {
@@ -21,7 +35,10 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
             .iter()
             .filter(|field| {
                 "derived fields".contains(&query.to_lowercase())
-                    || field.name.to_lowercase().contains(&query.to_lowercase())
+                    || workbench
+                        .field_name(&field.key())
+                        .to_lowercase()
+                        .contains(&query.to_lowercase())
             })
             .collect();
         if !matching.is_empty() {
@@ -40,7 +57,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 for (index, field) in matching.iter().enumerate() {
                     rows.push(crate::field_tree::TreeRow {
                         id: field.key(),
-                        label: field.name.clone(),
+                        label: workbench.field_name(&field.key()),
                         depth: 1,
                         count: field.data.as_ref().map_or(0, |data| data.samples().len()),
                         field: Some(field.key()),
@@ -51,12 +68,18 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 }
             }
         }
+        workbench.log.with(|log| {
+            if let Some(log) = log {
+                rows.extend(crate::parameter_rows::rows(log, &query, &expanded));
+            }
+        });
         rows.extend(tree.with(|tree| tree.rows(&query, &expanded)));
         rows
     });
     let visible_fields = Memo::new(move |_| {
         rows.with(|rows| {
             rows.iter()
+                .filter(|row| row.count > 0)
                 .filter_map(|row| row.field.clone())
                 .collect::<Vec<_>>()
         })
@@ -66,12 +89,17 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
         row(class = "browser", class:hidden = move || !workbench.sidebar_visible.get(), style:width = move || Some(format!("{}px", workbench.sidebar_width.get() + 6.0))) {
             column(class = "signal-sidebar") {
                 row(class = "browser-heading") {
-                    text(class = "heading") { "Fields" }
+                    Popover {
+                        PopoverTrigger(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "app-action fields-menu", a11y:label = "Field tools") { "Fields ▾" }
+                        PopoverContent(class = "field-tools-menu") {
+                            ProfilePicker(workbench = workbench)
+                        }
+                    }
                     ActionButton(class = "open-filters", node_ref = workbench.filter_button, class:setting-active = move || workbench.filters_open.get(), disabled = Signal::derive_local(move || workbench.log.get().is_none() || workbench.loading.get()), on:click = move |_| workbench.filters_open.update(|open| *open = !*open)) { "Filters" }
                     ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
                 }
                 InputGroup(class = "field-search") {
-                    InputGroupInput(value = workbench.query, placeholder = "Search topics and fields", a11y:label = "Search ULog fields")
+                    InputGroupInput(value = workbench.query, placeholder = "Search topics and fields", a11y:label = "Search log fields")
                     if move || !workbench.query.with(String::is_empty) {
                         InputGroupAddon(align = InputGroupAddonAlign::InlineEnd, on:click = move |_| workbench.query.set(String::new())) {
                             InputGroupButton(size = InputGroupButtonSize::IconXs, a11y:label = "Clear search") { "×" }
@@ -80,9 +108,10 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 }
                 text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Open a log to browse fields".into(), |log| format!("{} fields | drag onto a plot", log.catalogue.len())))}}
                 GeometryLibrary(workbench = workbench)
-                VirtualList(count = Signal::derive_local(move || rows.with(Vec::len)), row_size = 28.0, label = "ULog field tree", class = "signal-list",
+                VirtualList(count = Signal::derive_local(move || rows.with(Vec::len)), row_size = 28.0, label = "Log field tree", class = "signal-list",
                     row = move |index: usize| view! { FieldRow(workbench = workbench, row = Memo::new(move |_| rows.with(|rows| rows.get(index).cloned())), visible_fields = visible_fields) })
-                text(class = "selected-field") {{move || workbench.selected_field.get().map_or_else(|| "Select a field or drag it onto a plot".into(), |field| workbench.field_name(&field))}}
+                ParameterDetails(workbench = workbench)
+                text(class = "selected-field", class:hidden = move || workbench.selected_field.get().is_some_and(|id| id.starts_with("@setting/"))) {{move || workbench.selected_field.get().map_or_else(|| "Select a field or drag it onto a plot".into(), |field| workbench.field_name(&field))}}
                 text(class = "field-selection-count muted") {{move || format!("{} selected · drag selected fields together", workbench.selected_fields.with(|fields| fields.len()))}}
                 text(class = "muted") { "Ctrl-click toggles fields. Shift-click selects range. Drag selection onto plot or Filters. Enter plots focused field." }
                 if move || workbench.log.get().is_some_and(|log| !log.warnings.is_empty()) {

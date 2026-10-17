@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "name": "ULog navigation states",
+  "requires": [
+    "vehicle_status/0/nav_state"
+  ],
+  "geometry": [
+    {
+      "id": "modes",
+      "name": "Flight modes",
+      "shape": {
+        "kind": "states",
+        "source": "vehicle_status/0/nav_state",
+        "rules": [
+          {
+            "value": 0,
+            "name": "Manual",
+            "color": [
+              76,
+              168,
+              220
+            ]
+          },
+          {
+            "value": 1,
+            "name": "Altitude",
+            "color": [
+              235,
+              164,
+              66
+            ]
+          },
+          {
+            "value": 2,
+            "name": "Position",
+            "color": [
+              113,
+              192,
+              105
+            ]
+          },
+          {
+            "value": 3,
+            "name": "Mission",
+            "color": [
+              188,
+              121,
+              219
+            ]
+          },
+          {
+            "value": 4,
+            "name": "Hold",
+            "color": [
+              225,
+              99,
+              85
+            ]
+          },
+          {
+            "value": 5,
+            "name": "Return",
+            "color": [
+              81,
+              198,
+              182
+            ]
+          },
+          {
+            "value": 10,
+            "name": "Acro",
+            "color": [
+              76,
+              168,
+              220
+            ]
+          },
+          {
+            "value": 12,
+            "name": "Descend",
+            "color": [
+              235,
+              164,
+              66
+            ]
+          },
+          {
+            "value": 13,
+            "name": "Termination",
+            "color": [
+              113,
+              192,
+              105
+            ]
+          },
+          {
+            "value": 14,
+            "name": "Offboard",
+            "color": [
+              188,
+              121,
+              219
+            ]
+          },
+          {
+            "value": 15,
+            "name": "Stabilized",
+            "color": [
+              225,
+              99,
+              85
+            ]
+          },
+          {
+            "value": 17,
+            "name": "Takeoff",
+            "color": [
+              81,
+              198,
+              182
+            ]
+          },
+          {
+            "value": 18,
+            "name": "Land",
+            "color": [
+              76,
+              168,
+              220
+            ]
+          },
+          {
+            "value": 19,
+            "name": "Follow target",
+            "color": [
+              235,
+              164,
+              66
+            ]
+          },
+          {
+            "value": 20,
+            "name": "Precision land",
+            "color": [
+              113,
+              192,
+              105
+            ]
+          },
+          {
+            "value": 21,
+            "name": "Orbit",
+            "color": [
+              188,
+              121,
+              219
+            ]
+          },
+          {
+            "value": 22,
+            "name": "VTOL takeoff",
+            "color": [
+              225,
+              99,
+              85
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "views": [
+    {
+      "name": "Flight modes",
+      "fields": [
+        "vehicle_status/0/nav_state"
+      ],
+      "geometry": [
+        "modes"
+      ]
+    }
+  ]
+}

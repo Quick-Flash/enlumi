@@ -28,7 +28,7 @@ pub fn Panel(
             on_select = UnsyncCallback::new(move |id| workbench.activate(id))) {
             row(class = "plot-strip") {
                 PlotTabs(pane = pane.dock, dock = dock,
-                    title = UnsyncCallback::new(move |id| format!("Plot {id}")),
+                    title = UnsyncCallback::new(move |id| workbench.profiles.titles.with(|titles| titles.get(&id).cloned().unwrap_or_else(|| format!("Plot {id}")))),
                     on_select = UnsyncCallback::new(move |id| workbench.activate(id)),
                     on_close = UnsyncCallback::new(move |id| workbench.close_plot(id)),
                     on_add = UnsyncCallback::new(move |id| { workbench.add_plot(id, false, true); }))

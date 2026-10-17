@@ -125,6 +125,7 @@ pub struct Workbench {
     pub derived: RwSignal<Vec<crate::derived::DerivedField>, LocalStorage>,
     pub geometry: crate::geometry_state::GeometryUi,
     pub bands: crate::band_state::BandUi,
+    pub profiles: crate::profile_state::ProfileUi,
     pub derived_busy: RwSignal<bool, LocalStorage>,
     pub filters_open: RwSignal<bool, LocalStorage>,
     pub filter_mode: RwSignal<crate::filter_mode::FilterMode, LocalStorage>,
@@ -181,8 +182,9 @@ impl Workbench {
         Self {
             geometry: crate::geometry_state::GeometryUi::new(),
             bands: crate::band_state::BandUi::new(),
+            profiles: crate::profile_state::ProfileUi::new(),
             log: RwSignal::new_local(None),
-            status: RwSignal::new_local("Open a PX4 .ulg file to begin".into()),
+            status: RwSignal::new_local("Open a log file to begin".into()),
             loading: RwSignal::new_local(false),
             query: RwSignal::new_local(String::new()),
             sidebar_width: RwSignal::new_local(280.0),
@@ -254,6 +256,7 @@ impl Workbench {
         pane.selected.set(Some(id));
     }
     pub fn open(self, path: PathBuf) {
+        self.profiles.cancel();
         self.cancel_band_source();
         self.bands.jobs.update_value(BTreeMap::clear);
         self.generation.update(|id| *id += 1);
@@ -268,6 +271,7 @@ impl Workbench {
             self.loading.set(false);
             match result {
                 Ok(log) => {
+                    self.profiles.reset();
                     self.cancel_filter_run();
                     self.status.set(format!(
                         "{} signals | {:.2}s | {} warnings",
@@ -302,6 +306,7 @@ impl Workbench {
                     }
                     self.clear_generated_bands();
                     self.log.set(Some(Arc::new(log)));
+                    self.apply_default_profiles();
                 }
                 Err(error) => self.status.set(error),
             }
@@ -340,8 +345,8 @@ impl Workbench {
                 pane.lines.update(|lines| {
                     lines.push(Line {
                         id,
+                        name: self.field_name(&source),
                         source,
-                        name: field.name,
                         data,
                         revision: 0,
                     })
@@ -382,7 +387,7 @@ impl Workbench {
                         lines.push(Line {
                             id,
                             source: source.clone(),
-                            name: source.clone(),
+                            name: self.field_name(&source),
                             data,
                             revision: 0,
                         })

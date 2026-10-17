@@ -34,7 +34,7 @@ impl ThemePreference {
         Ok(())
     }
 }
-fn config_directory() -> Option<PathBuf> {
+pub(crate) fn config_directory() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("APPDATA")

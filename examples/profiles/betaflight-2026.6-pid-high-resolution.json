@@ -1,0 +1,352 @@
+{
+  "version": 1,
+  "name": "Betaflight 2026.6 PID rates high resolution",
+  "requires_settings": [
+    {
+      "setting": {
+        "name": "Firmware revision"
+      },
+      "starts_with": "Betaflight 2026.6."
+    },
+    {
+      "setting": {
+        "name": "blackbox_high_resolution"
+      },
+      "equals": "1"
+    }
+  ],
+  "signals": [
+    {
+      "id": "roll_gyro_raw",
+      "source": "blackbox/1/gyroADC[0]",
+      "metadata": {
+        "name": "Roll Gyro raw",
+        "unit": "0.1 deg/s",
+        "axis": "roll"
+      }
+    },
+    {
+      "id": "roll_setpoint_raw",
+      "source": "blackbox/1/setpoint[0]",
+      "metadata": {
+        "name": "Roll Rate setpoint raw",
+        "unit": "0.1 deg/s",
+        "axis": "roll"
+      }
+    },
+    {
+      "id": "roll_p",
+      "source": "blackbox/1/axisP[0]",
+      "metadata": {
+        "name": "Roll P term",
+        "unit": "",
+        "axis": "roll"
+      }
+    },
+    {
+      "id": "roll_i",
+      "source": "blackbox/1/axisI[0]",
+      "metadata": {
+        "name": "Roll I term",
+        "unit": "",
+        "axis": "roll"
+      }
+    },
+    {
+      "id": "roll_d",
+      "source": "blackbox/1/axisD[0]",
+      "metadata": {
+        "name": "Roll D term",
+        "unit": "",
+        "axis": "roll"
+      }
+    },
+    {
+      "id": "pitch_gyro_raw",
+      "source": "blackbox/1/gyroADC[1]",
+      "metadata": {
+        "name": "Pitch Gyro raw",
+        "unit": "0.1 deg/s",
+        "axis": "pitch"
+      }
+    },
+    {
+      "id": "pitch_setpoint_raw",
+      "source": "blackbox/1/setpoint[1]",
+      "metadata": {
+        "name": "Pitch Rate setpoint raw",
+        "unit": "0.1 deg/s",
+        "axis": "pitch"
+      }
+    },
+    {
+      "id": "pitch_p",
+      "source": "blackbox/1/axisP[1]",
+      "metadata": {
+        "name": "Pitch P term",
+        "unit": "",
+        "axis": "pitch"
+      }
+    },
+    {
+      "id": "pitch_i",
+      "source": "blackbox/1/axisI[1]",
+      "metadata": {
+        "name": "Pitch I term",
+        "unit": "",
+        "axis": "pitch"
+      }
+    },
+    {
+      "id": "pitch_d",
+      "source": "blackbox/1/axisD[1]",
+      "metadata": {
+        "name": "Pitch D term",
+        "unit": "",
+        "axis": "pitch"
+      }
+    },
+    {
+      "id": "yaw_gyro_raw",
+      "source": "blackbox/1/gyroADC[2]",
+      "metadata": {
+        "name": "Yaw Gyro raw",
+        "unit": "0.1 deg/s",
+        "axis": "yaw"
+      }
+    },
+    {
+      "id": "yaw_setpoint_raw",
+      "source": "blackbox/1/setpoint[2]",
+      "metadata": {
+        "name": "Yaw Rate setpoint raw",
+        "unit": "0.1 deg/s",
+        "axis": "yaw"
+      }
+    },
+    {
+      "id": "yaw_p",
+      "source": "blackbox/1/axisP[2]",
+      "metadata": {
+        "name": "Yaw P term",
+        "unit": "",
+        "axis": "yaw"
+      }
+    },
+    {
+      "id": "yaw_i",
+      "source": "blackbox/1/axisI[2]",
+      "metadata": {
+        "name": "Yaw I term",
+        "unit": "",
+        "axis": "yaw"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "yaw_setpoint",
+      "metadata": {
+        "name": "Yaw Rate setpoint",
+        "unit": "deg/s",
+        "axis": "yaw"
+      },
+      "inputs": [
+        "$yaw_setpoint_raw"
+      ],
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1
+      }
+    },
+    {
+      "id": "yaw_gyro",
+      "metadata": {
+        "name": "Yaw Gyro",
+        "unit": "deg/s",
+        "axis": "yaw"
+      },
+      "inputs": [
+        "$yaw_gyro_raw"
+      ],
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1
+      }
+    },
+    {
+      "id": "pitch_setpoint",
+      "metadata": {
+        "name": "Pitch Rate setpoint",
+        "unit": "deg/s",
+        "axis": "pitch"
+      },
+      "inputs": [
+        "$pitch_setpoint_raw"
+      ],
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1
+      }
+    },
+    {
+      "id": "pitch_gyro",
+      "metadata": {
+        "name": "Pitch Gyro",
+        "unit": "deg/s",
+        "axis": "pitch"
+      },
+      "inputs": [
+        "$pitch_gyro_raw"
+      ],
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1
+      }
+    },
+    {
+      "id": "roll_setpoint",
+      "metadata": {
+        "name": "Roll Rate setpoint",
+        "unit": "deg/s",
+        "axis": "roll"
+      },
+      "inputs": [
+        "$roll_setpoint_raw"
+      ],
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1
+      }
+    },
+    {
+      "id": "roll_gyro",
+      "metadata": {
+        "name": "Roll Gyro",
+        "unit": "deg/s",
+        "axis": "roll"
+      },
+      "inputs": [
+        "$roll_gyro_raw"
+      ],
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1
+      }
+    },
+    {
+      "id": "roll_error",
+      "metadata": {
+        "name": "Roll rate error",
+        "unit": "deg/s",
+        "axis": "roll"
+      },
+      "inputs": [
+        "$roll_setpoint",
+        "$roll_gyro"
+      ],
+      "operation": {
+        "kind": "rust",
+        "path": "rate_error.rs"
+      }
+    },
+    {
+      "id": "pitch_error",
+      "metadata": {
+        "name": "Pitch rate error",
+        "unit": "deg/s",
+        "axis": "pitch"
+      },
+      "inputs": [
+        "$pitch_setpoint",
+        "$pitch_gyro"
+      ],
+      "operation": {
+        "kind": "rust",
+        "path": "rate_error.rs"
+      }
+    },
+    {
+      "id": "yaw_error",
+      "metadata": {
+        "name": "Yaw rate error",
+        "unit": "deg/s",
+        "axis": "yaw"
+      },
+      "inputs": [
+        "$yaw_setpoint",
+        "$yaw_gyro"
+      ],
+      "operation": {
+        "kind": "rust",
+        "path": "rate_error.rs"
+      }
+    }
+  ],
+  "views": [
+    {
+      "name": "Roll rates",
+      "fields": [
+        "$roll_gyro",
+        "$roll_setpoint",
+        "$roll_error"
+      ]
+    },
+    {
+      "name": "Roll PID",
+      "fields": [
+        "$roll_p",
+        "$roll_i",
+        "$roll_d"
+      ]
+    },
+    {
+      "name": "Pitch rates",
+      "fields": [
+        "$pitch_gyro",
+        "$pitch_setpoint",
+        "$pitch_error"
+      ]
+    },
+    {
+      "name": "Pitch PID",
+      "fields": [
+        "$pitch_p",
+        "$pitch_i",
+        "$pitch_d"
+      ]
+    },
+    {
+      "name": "Yaw rates",
+      "fields": [
+        "$yaw_gyro",
+        "$yaw_setpoint",
+        "$yaw_error"
+      ]
+    },
+    {
+      "name": "Yaw PID",
+      "fields": [
+        "$yaw_p",
+        "$yaw_i"
+      ]
+    }
+  ],
+  "auto_apply": false,
+  "requires": [
+    "blackbox/1/gyroADC[0]",
+    "blackbox/1/setpoint[0]",
+    "blackbox/1/axisP[0]",
+    "blackbox/1/axisI[0]",
+    "blackbox/1/axisD[0]",
+    "blackbox/1/gyroADC[1]",
+    "blackbox/1/setpoint[1]",
+    "blackbox/1/axisP[1]",
+    "blackbox/1/axisI[1]",
+    "blackbox/1/axisD[1]",
+    "blackbox/1/gyroADC[2]",
+    "blackbox/1/setpoint[2]",
+    "blackbox/1/axisP[2]",
+    "blackbox/1/axisI[2]"
+  ]
+}

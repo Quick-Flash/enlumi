@@ -1,0 +1,10 @@
+.field-tools-menu { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+.profile-dialog.zui-dialog { width: 800px; max-width: 90vw; height: 70vh; max-height: 80vh; min-height: 0; overflow: hidden; background: var(--app-surface); color: var(--app-foreground); }
+.profile-library { flex: 1; min-height: 0; min-width: 0; gap: 10px; }
+.profile-directory { font-family: monospace; font-size: var(--app-font-xs); overflow-wrap: anywhere; }
+.profile-actions { flex: none; gap: 6px; flex-wrap: wrap; }
+.profile-files, .profile-views { flex: 1; height: 0; min-height: 0; overflow: auto; }
+.profile-file { align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid var(--app-border); }
+.profile-file-name { flex: 1; min-width: 0; font-size: var(--app-font-sm); overflow-wrap: anywhere; }
+.profile-file-info { flex: 1; min-width: 0; gap: 3px; }
+.profile-compatibility { font-size: var(--app-font-xs); overflow-wrap: anywhere; }

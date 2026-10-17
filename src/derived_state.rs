@@ -85,7 +85,27 @@ impl Workbench {
             fields
                 .iter()
                 .find(|field| field.key() == source)
-                .map_or_else(|| source.to_owned(), |field| field.name.clone())
+                .map_or_else(
+                    || {
+                        self.profiles
+                            .metadata
+                            .with(|metadata| metadata.get(source).map(|meta| meta.label()))
+                            .or_else(|| {
+                                self.log.with(|log| {
+                                    log.as_ref().and_then(|log| log.setting_label(source))
+                                })
+                            })
+                            .unwrap_or_else(|| source.to_owned())
+                    },
+                    |field| {
+                        self.profiles.metadata.with(|metadata| {
+                            metadata.get(source).map_or_else(
+                                || field.name.clone(),
+                                |meta| meta.label_for(&field.name),
+                            )
+                        })
+                    },
+                )
         })
     }
     pub fn edit_filter(self, id: Option<u64>, source: Option<String>) {
@@ -442,10 +462,16 @@ impl Workbench {
                 for line in lines {
                     if let Some(field) = fields.iter().find(|field| field.key() == line.source) {
                         let data = field.data.as_ref().expect("computed field");
-                        if line.name != field.name
+                        let label = self.profiles.metadata.with_untracked(|metadata| {
+                            metadata.get(&field.key()).map_or_else(
+                                || field.name.clone(),
+                                |meta| meta.label_for(&field.name),
+                            )
+                        });
+                        if line.name != label
                             || line.data.samples().as_ptr() != data.samples().as_ptr()
                         {
-                            line.name = field.name.clone();
+                            line.name = label;
                             line.data = data.clone();
                             line.revision += 1;
                         }

@@ -14,7 +14,7 @@ try {
         Start-Sleep -Milliseconds 250
         $viewer.Refresh()
         if ($viewer.HasExited) { throw "Startup exited: $($viewer.ExitCode)" }
-        $ready = $viewer.MainWindowTitle -eq 'Enlumi - PX4 log workbench' -and $viewer.Responding
+        $ready = $viewer.MainWindowTitle -eq 'Enlumi - Log workbench' -and $viewer.Responding
     } until ($ready -or [DateTime]::UtcNow -ge $deadline)
     if (-not $ready) { throw 'No responsive Enlumi window within 30 seconds' }
     Start-Sleep -Seconds 1

@@ -55,10 +55,16 @@ mod legend_drag;
 mod line_colors;
 mod log;
 mod panel;
+mod parameter_details;
+mod parameter_rows;
 mod plot_actions;
 mod plot_bounds;
 mod plot_cursor;
 mod preferences;
+mod profile;
+mod profile_library;
+mod profile_picker;
+mod profile_state;
 mod script;
 mod script_code_editor;
 mod script_compile;
@@ -85,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     startup::reveal_if_first_frame_stalls();
     app()
         .with_application_id("com.tealdrones.enlumi")
-        .with_title("Enlumi - PX4 log workbench")
+        .with_title("Enlumi - Log workbench")
         .with_size(1500.0, 850.0)
         .with_stylesheet(format!(
             "{}\n{}\n{}\n{}",

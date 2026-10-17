@@ -1,25 +1,57 @@
 # Architecture
 
-Enlumi loads one ULog at a time. UI-owned Zgui signals stay on the UI thread;
+Enlumi loads one log file at a time. UI-owned Zgui signals stay on the UI thread;
 decoding, filtering, and series preparation run on blocking workers.
+
+`log` detects ULog headers and routes Blackbox files to `log::blackbox`.
+Both decoders populate the same catalogue and numeric columns. Blackbox flights
+use `blackbox/<flight number>/<field>` identities, shared timestamps per flight,
+and independent zero origins. Main I/P frames include decoder-merged slow fields;
+missing column values become NaN gaps. Unsigned fields and 32-bit clock wraps
+are recovered from the decoder's i32 storage. No unit conversion is applied.
+Original Blackbox headers and settings remain available per flight.
+Both formats populate a shared settings catalogue with names, values, and record
+kinds. ULog settings use the decoder's public streaming callback API in a second
+pass because its column API omits parameters and metadata. Initial values,
+changes, defaults, and info fragments remain separate; no last-value merging is
+performed. Unknown metadata types display as hex. Single-flight
+files omit the redundant Blackbox tree wrapper. See [signal metadata plan](SIGNAL_METADATA.md)
+for names, unit handling, settings provenance, and conversion rollout.
 
 | Area | Modules | Responsibility |
 | --- | --- | --- |
 | Application | `app`, `state`, `startup` | Window composition, log lifecycle, durable pane state |
-| Log adapter | `log` | Upstream decoder, header origin, numeric columns, load warnings |
+| Log adapter | `log` | ULog/Blackbox decoders, time origins, numeric columns, load warnings |
 | Field browser | `browser`, `field_tree`, `field_row`, `field_selection` | Search, expansion, selection, group drag/drop |
 | Workspace | `workspace`, `panel` | Compose public docking, links, fitted geometry, and equalization APIs |
-| Plot adapter | `plot_cursor`, `plot_bounds` | Compose shared series plot; format PX4 elapsed time |
+| Plot adapter | `plot_cursor`, `plot_bounds` | Compose shared series plot; format elapsed time |
 | Membership/style policy | `legend_drag`, `line_colors` | Validate source identity, transfer fields, allocate colors across application panes |
 | Filters | `derived`, `derived_state`, `filter_*` | Named dependency graph, batch editor, background recomputation |
 
 Dependency name `plot` aliases upstream `zgui-plot`. Generic plotting and docking
 geometry, axis gestures, fit menus, bounded background rendering, steps/markers,
 snapped linked pointers, editable legends, appearance controls, color palette,
-and links controls live upstream. Enlumi owns PX4 identity, derived fields,
+and links controls live upstream. Enlumi owns signal identity, derived fields,
 panel records, field-drop fitting policy, duplicate-source validation, and
 application callbacks such as Add filters. `Pane::display()` exposes a durable
-plot-facing view without giving plotting code access to ULog state.
+plot-facing view without giving plotting code access to decoded log state.
+
+## Profiles and numeric settings
+
+`profile` defines the versioned JSON schema and local directory discovery;
+`profile::resolve` binds raw fields, settings, scalar ratios and existing filter
+operations. `profile::prepare` validates and computes an owned candidate off the
+UI thread. `profile_state` checks for concurrent conflicts before adding its
+fields, metadata and geometry. Log generation and cancellation discard stale
+work. Prepared view templates are registered separately; placing a view resolves
+current derived results and validates geometry before touching a target pane.
+
+`LogStore::prepare` exposes finite numeric settings as constant `@setting` sources
+listed in the catalogue. The browser shows them separately from sampled fields.
+Source identity remains distinct from profile display metadata. Field aliases
+and units propagate through browser, legends, and filter labels. State-band
+geometry uses the same mapping and refresh machinery as manually-created bands.
+See [profile format and limits](PROFILES.md).
 
 ## Design tokens and themes
 

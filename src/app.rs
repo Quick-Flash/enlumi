@@ -39,12 +39,21 @@ pub fn WorkbenchApp(
                         a11y:label = "Toggle fields sidebar", on:click = move |_| workbench.toggle_sidebar()) {
                         vector(class = "sidebar-toggle-icon", prop:viewBox = "0 0 20 20", prop:d = move || PropValue::from(if workbench.sidebar_visible.get() { "M2 3 H18 V17 H2 Z M7 3 V17 M14 7 L11 10 L14 13" } else { "M2 3 H18 V17 H2 Z M7 3 V17 M10 7 L13 10 L10 13" }), a11y:hidden = true)
                     }
-                    ActionButton(class = "open-ulog", on:click = move |_| {
+                    ActionButton(class = "open-log", on:click = move |_| {
                         spawn_local(async move {
-                            let path = blocking(|| rfd::FileDialog::new().add_filter("PX4 ULog", &["ulg"]).pick_file()).await;
+                            let path = blocking(|| {
+                                let supported: Vec<_> = ["ulg", "ULG"].into_iter()
+                                    .chain(crate::log::BLACKBOX_EXTENSIONS.iter().copied()).collect();
+                                rfd::FileDialog::new()
+                                    .add_filter("Supported logs", &supported)
+                                    .add_filter("ULog", &["ulg", "ULG"])
+                                    .add_filter("Blackbox", crate::log::BLACKBOX_EXTENSIONS)
+                                    .add_filter("All files", &["*"])
+                                    .pick_file()
+                            }).await;
                             if let Some(path) = path { workbench.open(path); }
                         });
-                    }) { "Open ULog" }
+                    }) { "Open log" }
                     ActionButton(class = "equalize-panels", a11y:label = "Equalize dock panel sizes",
                         disabled = Signal::derive_local(move || !matches!(workbench.layout.get(), plot::workspace::layout::Layout::Split { .. })),
                         on:click = move |_| workbench.equalize_panels()) { "Equalize panels" }

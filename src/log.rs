@@ -1,11 +1,40 @@
+mod blackbox;
+mod ulog_settings;
+
 use plot::{PlotPoint, time_series::SeriesData};
 use px4_ulog::full_parser::{ParsedData, SomeVec};
 use std::{collections::BTreeMap, io::Read, path::Path, sync::Arc};
+
+// Both cases are required by case-sensitive native file pickers.
+pub const BLACKBOX_EXTENSIONS: &[&str] = &[
+    "bbl", "BBL", "bfl", "BFL", "cfl", "CFL", "txt", "TXT", "log", "LOG",
+];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SignalInfo {
     pub id: String,
     pub count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LogSetting {
+    pub name: String,
+    pub value: String,
+    pub kind: String,
+}
+
+impl LogSetting {
+    pub fn numbers(&self) -> Option<Vec<f64>> {
+        let value = self.value.trim();
+        let value = value
+            .strip_prefix('[')
+            .and_then(|s| s.strip_suffix(']'))
+            .unwrap_or(value);
+        value
+            .split(',')
+            .map(|part| part.trim().parse::<f64>().ok().filter(|n| n.is_finite()))
+            .collect()
+    }
 }
 
 struct RawSignal {
@@ -18,6 +47,8 @@ pub struct LogStore {
     pub catalogue: Vec<SignalInfo>,
     pub duration: f64,
     pub warnings: Vec<String>,
+    pub blackbox_headers: BTreeMap<usize, bbl_parser::BBLHeader>,
+    pub settings: BTreeMap<usize, Vec<LogSetting>>,
     origin: u64,
     signals: BTreeMap<String, RawSignal>,
 }
@@ -29,6 +60,28 @@ impl LogStore {
             .unwrap_or_default()
             .to_string_lossy()
             .into_owned();
+        let mut prefix = [0; 64];
+        let length = std::fs::File::open(path)
+            .and_then(|mut file| file.read(&mut prefix))
+            .map_err(|error| format!("Cannot read log: {error}"))?;
+        if prefix[..length].starts_with(b"ULog\x01\x12\x35") {
+            return Self::read_ulog(path, name);
+        }
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+        if prefix[..length].starts_with(b"H Product:Blackbox")
+            || BLACKBOX_EXTENSIONS
+                .iter()
+                .any(|supported| extension.eq_ignore_ascii_case(supported))
+        {
+            return Self::read_blackbox(path, name);
+        }
+        Err(
+            "Unsupported log format; open ULog (.ulg) or Blackbox (.bbl, .bfl, .cfl, .txt, .log)"
+                .into(),
+        )
+    }
+
+    fn read_ulog(path: &Path, name: String) -> Result<Self, String> {
         // Upstream full parser exposes columns but not header timestamp.
         let mut header = [0; 16];
         std::fs::File::open(path)
@@ -39,7 +92,20 @@ impl LogStore {
         let parsed = std::panic::catch_unwind(|| px4_ulog::full_parser::read_file(path))
             .map_err(|_| "ULog decoder rejected malformed data".to_owned())?
             .map_err(|error| format!("Cannot read ULog: {error}"))?;
-        Self::from_parsed(name, origin, parsed)
+        let mut store = Self::from_parsed(name, origin, parsed)?;
+        // The full parser exposes sample columns only. Its public streaming
+        // API supplies parameter and information records in a separate pass.
+        match std::panic::catch_unwind(|| ulog_settings::read(path)) {
+            Ok(Ok(settings)) => {
+                store.settings.insert(1, settings);
+            }
+            Ok(Err(error)) => store.warnings.push(error),
+            Err(_) => store
+                .warnings
+                .push("ULog settings decoder rejected malformed data".into()),
+        }
+        store.add_setting_signals();
+        Ok(store)
     }
 
     fn from_parsed(name: String, origin: u64, parsed: ParsedData) -> Result<Self, String> {
@@ -105,13 +171,103 @@ impl LogStore {
             name,
             catalogue,
             duration: relative_seconds(last, origin),
+            blackbox_headers: BTreeMap::new(),
+            settings: BTreeMap::new(),
             warnings,
             origin,
             signals,
         })
     }
 
+    pub fn setting(&self, id: &str) -> Option<&LogSetting> {
+        let mut parts = id.strip_prefix("@setting/")?.split('/');
+        let flight = parts.next()?.parse::<usize>().ok()?;
+        let index = parts.next()?.parse::<usize>().ok()?;
+        if let Some(element) = parts.next() {
+            element.parse::<usize>().ok()?;
+        }
+        if parts.next().is_some() {
+            return None;
+        }
+        self.settings.get(&flight)?.get(index)
+    }
+
+    pub fn setting_number(&self, id: &str) -> Option<f64> {
+        let values = self.setting(id)?.numbers()?;
+        match id.split('/').nth(3) {
+            Some(index) => values.get(index.parse::<usize>().ok()?).copied(),
+            None if values.len() == 1 => values.first().copied(),
+            _ => None,
+        }
+    }
+
+    pub fn setting_label(&self, id: &str) -> Option<String> {
+        let setting = self.setting(id)?;
+        let suffix = id
+            .split('/')
+            .nth(3)
+            .map_or_else(String::new, |index| format!("[{index}]"));
+        let value = self.setting_number(id).map_or_else(
+            || setting.value.trim().to_owned(),
+            |value| value.to_string(),
+        );
+        let label = format!("{}{suffix} = {value} ({})", setting.name, setting.kind);
+        if self.settings.len() > 1 {
+            Some(format!(
+                "Flight {} / {label}",
+                id.strip_prefix("@setting/")?.split('/').next()?
+            ))
+        } else {
+            Some(label)
+        }
+    }
+
+    pub(super) fn add_setting_signals(&mut self) {
+        for (flight, settings) in &self.settings {
+            for (index, setting) in settings.iter().enumerate() {
+                if let Some(values) = setting.numbers() {
+                    for element in 0..values.len() {
+                        let suffix = if values.len() == 1 {
+                            String::new()
+                        } else {
+                            format!("/{element}")
+                        };
+                        self.catalogue.push(SignalInfo {
+                            id: format!("@setting/{flight}/{index}{suffix}"),
+                            count: if self.duration > 0.0 { 2 } else { 1 },
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn duration_for(&self, id: &str) -> f64 {
+        if self.blackbox_headers.is_empty() {
+            return self.duration;
+        }
+        self.signals
+            .get(id)
+            .and_then(|raw| raw.timestamps.last())
+            .map_or(self.duration, |timestamp| {
+                relative_seconds(*timestamp, self.origin)
+            })
+    }
+
     pub fn prepare(&self, id: &str) -> Result<SeriesData, String> {
+        if self.setting(id).is_some() {
+            let y = self
+                .setting_number(id)
+                .ok_or("Parameter needs a finite scalar or array element")?;
+            let mut points = vec![PlotPoint { x: 0.0, y }];
+            if self.duration > 0.0 {
+                points.push(PlotPoint {
+                    x: self.duration,
+                    y,
+                });
+            }
+            return SeriesData::new(points);
+        }
         let raw = self.signals.get(id).ok_or("Signal no longer exists")?;
         let mut points = Vec::with_capacity(raw.timestamps.len());
         for (index, &timestamp) in raw.timestamps.iter().enumerate() {

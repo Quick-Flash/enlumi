@@ -1,6 +1,27 @@
 # Using Enlumi
 
-1. Click **Open ULog** or pass a local log path. File Explorer drag-and-drop is deferred to future work.
+Open ULog (`.ulg`) or Betaflight Blackbox (`.bbl`, `.bfl`, `.cfl`, `.txt`, `.log`) files. Embedded
+Blackbox flights have separate field groups and independent elapsed-time origins.
+Blackbox values use raw log units. Main I/P fields and merged slow fields support
+the same plots and filters as ULog fields; GPS/home records and events are not
+shown. File filters include lowercase and uppercase suffixes (such as `.BBL`).
+Use **All files** for renamed or mixed-case files; their contents must still be
+a supported log format. Decoder failures and frame limits appear as load warnings.
+
+Expand **Parameters** in field tree, alongside **Derived fields**. Search
+matches names, values, and record types. Every recorded Blackbox header and ULog
+parameter/info record appears here; repeated records stay separate. Flight numbers
+appear for multi-flight logs. Numeric rows drag into plots and filters as constant
+fields. Numeric arrays expand into individually usable elements. Rows show separate
+names and values. Select a parameter to read/copy its full value, or use **Add to
+plot** / **Use in filter**. Text records remain readable without plot actions. Settings
+absent from log cannot be reconstructed.
+
+**Fields ▾ → Profiles** loads JSON setups for named fields, filters,
+geometry and time bands. Each loaded plot view offers **New panel** or **Add to
+active plot**. See [profile setup and format](PROFILES.md).
+
+1. Click **Open log** or pass a local log path. File Explorer drag-and-drop is deferred to future work.
 2. Expand plain text topic-instance roots (for example `vehicle_imu.0`; single-instance topics omit suffix) and named field/array groups in scrollable left field tree. Numeric instances and array indices sort naturally. Search keeps matching ancestor paths in tree without opening branches. Matching topic-instance root or field group keeps its whole subtree; leaf matches prune unrelated fields. Expand results manually. Sidebar stays inside visible window; wheel scrolls fields independently.
 3. Drag a field onto any visible plot to add a line. Drag legend labels to move lines between plots or reorder within legend. Drop above/below legend row to insert there; drop onto plot area to append. Appearance and filters follow line. Up/Down on focused legend label reorders it. Ctrl-click toggles individual fields; Shift-click selects visible range; Ctrl+Shift-click adds range. Select several, then drag any selected field to move whole selection into a plot or filter source area. Clicking an unselected field selects it alone; Enter plots focused field. Escape cancels dragging; release outside plots changes nothing.
 4. Each plot's **Duplicate** button copies its lines and appearance into new pane. Tab **+** adds a tab in same pane; tab X closes it.
@@ -75,7 +96,7 @@ Gain/offset applies y = input * gain + offset. Its **rad → deg** and
 **deg → rad** presets fill gain and reset offset to zero; both remain editable.
 Timestamps and gaps are preserved.
 
-One log at a time; dynamic docked plots and tabs. Plot area fills available workspace, with a green theme and docked panels. Topic timestamps use elapsed seconds from ULog header. Incomplete logs show recovered samples with load warning. Missing/unsupported timestamps, decreasing timestamps, and mismatched field lengths also produce load warnings. Numeric and boolean fields are plottable; character and padding fields are omitted. Raw typed values remain in memory; plot values use f64. Linear and step rendering use column LOD. Visible samples are reduced before step corners are generated, retaining extrema and gaps. Sparse pre/post steps retain exact corners. Markers use bounded visible samples; cursor snapping uses full original samples. Preparation runs off UI thread with one worker per pane, coalesces viewport changes, publishes compatible completed buffers during continuous pans, and reuses unchanged lines. Preparation includes one extra viewport on either side so nearby pans reveal cached samples immediately. Exact rendering falls back to columns above 65,536 visible samples to limit GPU geometry. Filtering always uses full samples. Large logs retain all decoded fields, plus buffers for selected signals.
+One log file at a time; dynamic docked plots and tabs. Plot area fills available workspace, with a green theme and docked panels. ULog timestamps use elapsed seconds from file header. Blackbox flights use elapsed seconds from each flight’s first main frame. Incomplete logs show recovered samples with load warning. Missing/unsupported timestamps, decreasing timestamps, and mismatched field lengths also produce load warnings. Numeric and boolean fields are plottable; character and padding fields are omitted. Raw typed values remain in memory; plot values use f64. Linear and step rendering use column LOD. Visible samples are reduced before step corners are generated, retaining extrema and gaps. Sparse pre/post steps retain exact corners. Markers use bounded visible samples; cursor snapping uses full original samples. Preparation runs off UI thread with one worker per pane, coalesces viewport changes, publishes compatible completed buffers during continuous pans, and reuses unchanged lines. Preparation includes one extra viewport on either side so nearby pans reveal cached samples immediately. Exact rendering falls back to columns above 65,536 visible samples to limit GPU geometry. Filtering always uses full samples. Large logs retain all decoded fields, plus buffers for selected signals.
 
 Session persistence, exports, and multi-log comparison are not implemented yet.
 
@@ -193,3 +214,9 @@ During edits, cursor follows action: drawing uses crosshair; free move uses
 open/closed hand; axis locks and time-band edges use directional resize arrows;
 rectangle corner arrows follow actual corner after flips. Locked-line endpoint
 handles change length; move handle or position input changes line's X/Y level.
+
+## Legend
+
+Click **▾ Legend** to minimize legend to its heading. Click **▸ Legend** to expand
+again. Plotted fields, geometry, and visibility remain unchanged. Each plot has
+its own collapsed state; line settings remain available while collapsed.

@@ -193,6 +193,13 @@ impl Workbench {
                 field.data = None;
             }
         }
+        self.profiles.metadata.update(|metadata| {
+            for field in &fields {
+                if field.data.is_none() {
+                    metadata.remove(&field.key());
+                }
+            }
+        });
         self.derived.set(fields.clone());
         self.recompute_filters(fields);
         self.expanded.update(|expanded| {

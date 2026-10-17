@@ -3249,10 +3249,10 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
     click_class(&mut harness, "sidebar-toggle");
     harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
     harness.settle(128);
-    let idle = fill(&harness, &paints, "open-ulog");
+    let idle = fill(&harness, &paints, "open-log");
     assert_ne!(disabled, idle);
     for class in [
-        "open-ulog",
+        "open-log",
         "equalize-panels",
         "sidebar-toggle",
         "filters-done",
@@ -3267,7 +3267,7 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
     }
     let mut hover = None;
     for class in [
-        "open-ulog",
+        "open-log",
         "equalize-panels",
         "sidebar-toggle",
         "filters-done",
@@ -3293,7 +3293,7 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
     click_class(&mut harness, "theme-slate");
     harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
     harness.settle(128);
-    let slate = fill(&harness, &paints, "open-ulog");
+    let slate = fill(&harness, &paints, "open-log");
     assert_ne!(slate, idle, "Theme must update rendered button paint");
     assert_eq!(fill(&harness, &paints, "filters-done"), slate);
     assert_eq!(
@@ -3302,7 +3302,7 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
         "Theme changes must preserve editor instance"
     );
     assert_eq!(
-        radii(&harness, &paints, "open-ulog"),
+        radii(&harness, &paints, "open-log"),
         [0.0; 8],
         "Slate should be sharp"
     );
@@ -3312,17 +3312,17 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
         harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
         harness.settle(128);
         assert_ne!(
-            fill(&harness, &paints, "open-ulog"),
+            fill(&harness, &paints, "open-log"),
             slate,
             "Palette must change: {theme}"
         );
         assert_eq!(
-            fill(&harness, &paints, "open-ulog"),
+            fill(&harness, &paints, "open-log"),
             fill(&harness, &paints, "filters-done"),
             "Buttons must stay uniform: {theme}"
         );
         assert!(
-            radii(&harness, &paints, "open-ulog")
+            radii(&harness, &paints, "open-log")
                 .iter()
                 .all(|actual| (*actual - radius).abs() < 0.1),
             "Theme radii must update: {theme}"
@@ -3337,12 +3337,12 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
     harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
     harness.settle(128);
     assert_eq!(
-        fill(&harness, &paints, "open-ulog"),
+        fill(&harness, &paints, "open-log"),
         idle,
         "Forest palette must restore original button paint"
     );
     assert_eq!(
-        radii(&harness, &paints, "open-ulog"),
+        radii(&harness, &paints, "open-log"),
         [4.0; 8],
         "Forest must restore its rounding"
     );
@@ -3376,6 +3376,63 @@ fn geometry_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workben
     harness.settle(256);
     let workbench = model.borrow().unwrap();
     (harness, workbench)
+}
+
+#[test]
+fn field_menu_settings_and_profile_view_buttons_work_in_real_layout() {
+    let (mut harness, workbench) = geometry_harness();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    let source = "esc_status/0/esc[5].esc_rpm".to_owned();
+    let data = log.prepare(&source).unwrap();
+    workbench.log.set(Some(log));
+    workbench
+        .profiles
+        .views
+        .set(vec![crate::profile::prepare::PreparedView {
+            name: "ESC view".into(),
+            fields: vec![(source, data)],
+            geometry: Vec::new(),
+            tab: false,
+            stacked: true,
+        }]);
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("log-settings-trigger")
+            .is_empty()
+    );
+    click_class(&mut harness, "fields-menu");
+    if harness.app().windows()[0]
+        .nodes_with_class("profiles-trigger")
+        .is_empty()
+    {
+        click_class(&mut harness, "fields-menu");
+    }
+    click_class(&mut harness, "profiles-trigger");
+    harness.advance(Duration::from_millis(500));
+    harness.settle(128);
+    let dialog = harness.app().windows()[0]
+        .box_with_class("profile-dialog")
+        .unwrap();
+    assert!(
+        dialog.size.width.0 > 600.0 && dialog.size.height.0 > 300.0,
+        "{dialog:?}"
+    );
+    click_class(&mut harness, "profile-view-new");
+    assert_eq!(workbench.panes.with_untracked(Vec::len), 2);
+    assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
+    workbench.activate(1);
+    harness.settle(128);
+    click_class(&mut harness, "profile-view-add");
+    click_class(&mut harness, "profile-view-add");
+    assert_eq!(workbench.panes.with_untracked(Vec::len), 2);
+    assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
 }
 
 #[test]
