@@ -1,4 +1,5 @@
 use crate::action_button::ActionButtonProps;
+use crate::field_label::FieldLabelProps;
 use crate::geometry_library::GeometryLibraryProps;
 use crate::parameter_details::ParameterDetailsProps;
 use crate::profile_library::ProfileLibraryProps;
@@ -11,13 +12,23 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
     let tree = Memo::new(move |_| {
         workbench.log.with(|log| {
             log.as_ref().map_or_else(FieldTree::default, |log| {
-                let labels = workbench.profiles.metadata.with(|metadata| {
+                let mut labels: std::collections::BTreeMap<_, _> =
+                    workbench.profiles.metadata.with(|metadata| {
+                        metadata
+                            .iter()
+                            .map(|(source, meta)| (source.clone(), meta.tree_label()))
+                            .collect()
+                    });
+                labels.extend(workbench.profiles.groups.get());
+                let names = workbench.profiles.metadata.with(|metadata| {
                     metadata
                         .iter()
                         .map(|(source, meta)| (source.clone(), meta.label()))
                         .collect()
                 });
-                let tree = FieldTree::new(&log.catalogue).with_labels(&labels);
+                let tree = FieldTree::new(&log.catalogue)
+                    .with_labels(&labels)
+                    .with_search_labels(&names);
                 if log.blackbox_headers.len() == 1 {
                     tree.without_single_root()
                 } else {
@@ -112,7 +123,10 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 VirtualList(count = Signal::derive_local(move || rows.with(Vec::len)), row_size = 28.0, label = "Log field tree", class = "signal-list",
                     row = move |index: usize| view! { FieldRow(workbench = workbench, row = Memo::new(move |_| rows.with(|rows| rows.get(index).cloned())), visible_fields = visible_fields) })
                 ParameterDetails(workbench = workbench)
-                text(class = "selected-field", class:hidden = move || workbench.selected_field.get().is_some_and(|id| id.starts_with("@setting/"))) {{move || workbench.selected_field.get().map_or_else(|| "Select a field or drag it onto a plot".into(), |field| workbench.field_name(&field))}}
+                row(class = "selected-field-row", class:hidden = move || workbench.selected_field.get().is_some_and(|id| id.starts_with("@setting/"))) {
+                text(class = "selected-field") {{move || workbench.selected_field.get().map_or_else(|| "Select a field or drag it onto a plot".into(), |field| workbench.field_name(&field))}}
+                    FieldLabel(workbench = workbench)
+                }
                 text(class = "field-selection-count muted") {{move || format!("{} selected · drag selected fields together", workbench.selected_fields.with(|fields| fields.len()))}}
                 text(class = "muted") { "Ctrl-click toggles fields. Shift-click selects range. Drag selection onto plot or Filters. Enter plots focused field." }
                 if move || workbench.log.get().is_some_and(|log| !log.warnings.is_empty()) {

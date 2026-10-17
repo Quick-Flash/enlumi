@@ -25,10 +25,13 @@ enum LibraryRow {
 fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>) {
     let log = workbench.log.get_untracked();
     let generation = workbench.generation.get_untracked();
+    let requested = workbench.profiles.directory.get_untracked();
+    let directory = requested.clone();
     workbench.task(async move {
         let result = blocking(move || {
-            profile::discover().map(|paths| {
-                paths
+            let root = directory.map_or_else(profile::directory, Ok)?;
+            profile::discover_in(&root).map(|paths| {
+                let files = paths
                     .into_iter()
                     .map(|path| match profile::load(&path) {
                         Ok(profile) => ProfileFile {
@@ -57,15 +60,21 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
                             views: Vec::new(),
                         },
                     })
-                    .collect()
+                    .collect();
+                (root, files)
             })
         })
         .await;
-        if workbench.generation.get_untracked() != generation {
+        if workbench.generation.get_untracked() != generation
+            || workbench.profiles.directory.get_untracked() != requested
+        {
             return;
         }
         match result {
-            Ok(paths) => {
+            Ok((directory, paths)) => {
+                if workbench.profiles.directory.get_untracked().as_ref() != Some(&directory) {
+                    workbench.profiles.directory.set(Some(directory));
+                }
                 let _ = files.try_set(paths);
             }
             Err(error) => workbench.profiles.error.set(error),
@@ -78,9 +87,12 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
     install_stylesheet("enlumi-profiles", include_str!("profile.css"));
     let files = RwSignal::new_local(Vec::<ProfileFile>::new());
     let query = RwSignal::new_local(String::new());
+    let loaded_open = RwSignal::new_local(false);
+    let warnings_open = RwSignal::new_local(false);
     let expanded = RwSignal::new_local(BTreeSet::<PathBuf>::new());
     let effect = RenderEffect::new(move |_| {
         workbench.log.track();
+        workbench.profiles.directory.track();
         refresh(workbench, files);
     });
     on_cleanup_local(move || drop(effect));
@@ -93,7 +105,7 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
     let rows = Memo::new(move |_| {
         let mut rows = Vec::new();
         let mut folders = BTreeSet::new();
-        let root = profile::directory().unwrap_or_default();
+        let root = workbench.profiles.directory.get().unwrap_or_default();
         let query = query.get().to_lowercase();
         let expanded = expanded.get();
         for file in files.get() {
@@ -130,18 +142,35 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
     view! {
         column(class = "profile-library") {
             row(class = "profile-actions") {
+                ActionButton(class = "profile-choose-directory", disabled = Signal::derive_local(move || workbench.profiles.busy.get() || workbench.loading.get()), on:click = move |_| {
+                    let current = workbench.profiles.directory.get_untracked();
+                    workbench.task(async move {
+                        let selected = blocking(move || {
+                            let picker = rfd::FileDialog::new();
+                            let picker = if let Some(path) = current { picker.set_directory(path) } else { picker };
+                            picker.pick_folder().map(|path| profile::save_directory(&path))
+                        }).await;
+                        match selected {
+                            Some(Ok(path)) => { let _ = files.try_set(Vec::new()); let _ = expanded.try_set(BTreeSet::new()); workbench.profiles.directory.set(Some(path)); workbench.profiles.error.set(String::new()); }
+                            Some(Err(error)) => workbench.profiles.error.set(error),
+                            None => (),
+                        }
+                    });
+                }) { "Folder…" }
+
                 ActionButton(class = "profile-browse", disabled = unavailable, on:click = move |_| {
                     workbench.task(async move {
                         let path = blocking(|| rfd::FileDialog::new().add_filter("Enlumi profile", &["json", "JSON"]).pick_file()).await;
-                        if let Some(path) = path { workbench.apply_profile(path); }
+                        if let Some(path) = path { let _ = loaded_open.try_set(true); workbench.apply_profile(path); }
                     });
                 }) { "Load file…" }
                 ActionButton(class = "profile-refresh", on:click = move |_| refresh(workbench, files)) { "Refresh" }
             }
             Input(value = query, placeholder = "Search profiles and views", a11y:label = "Search profiles")
-            text(class = "muted") { "Expand profile; drag a view onto a plot. Auto selects matching firmware when log opens." }
+            text(class = "muted") { "Drag views onto plots. Auto matches firmware when logs open." }
             text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(String::new, |log| log.blackbox_headers.values().map(|header| header.firmware_revision.clone()).collect::<Vec<_>>().join(" · ")))}}
-            text(class = "profile-directory") { {profile::directory().map_or_else(|error| error, |path| path.display().to_string())} }
+            Input(class = "profile-directory", read_only = true, a11y:label = "Profile directory",
+                value = Binding::controlled(Signal::derive_local(move || workbench.profiles.directory.get().map_or_else(|| "Locating profile directory…".into(), |path| path.display().to_string())), |_| {}))
             scroll(class = "profile-files", a11y:label = "Profile directory tree") {
                 for row in move || rows.get(), key = |row| row.clone() {
                     {match row {
@@ -166,13 +195,14 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                             let auto_path = file.path.clone();
                             let auto = file.auto_apply;
                             let compatible = file.compatible.is_ok();
+                            let reason = StoredValue::new_local(file.compatible.clone().err().unwrap_or_default());
                             let path = file.path.clone();
                             let views = StoredValue::new_local(file.views.clone());
                             let view_path = StoredValue::new_local(file.path.clone());
                             AnyView::new(view! { column(class = "profile-tree-file", style:padding-left = Some(format!("{}px", depth * 10))) {
                                 row(class = "profile-file") {
                                     ActionButton(class = "profile-file-name", on:click = move |_| expanded.update(|expanded| { if !expanded.remove(&toggle) { expanded.insert(toggle.clone()); } })) { {move || format!("{} {title}", if expanded.with(|expanded| expanded.contains(&arrow_path)) { "▾" } else { "▸" })} }
-                                    ActionButton(disabled = Signal::derive_local(move || unavailable.get() || !compatible), on:click = move |_| workbench.apply_profile(loaded.clone())) { "Load" }
+                                    ActionButton(disabled = Signal::derive_local(move || unavailable.get() || !compatible), on:click = move |_| { expanded.update(|paths| { paths.insert(loaded.clone()); }); workbench.apply_profile(loaded.clone()); }) { "Load" }
                                     ActionButton(class = "profile-auto", class:setting-active = move || auto, disabled = Signal::derive_local(move || workbench.loading.get() || workbench.profiles.busy.get()), a11y:label = "Toggle automatic selection for matching firmware", on:click = move |_| {
                                         let path = auto_path.clone();
                                         workbench.task(async move {
@@ -183,8 +213,8 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                                         });
                                     }) { {if auto { "Auto ✓" } else { "Auto" }} }
                                 }
-                                if move || !compatible { text(class = "profile-compatibility muted") { {file.compatible.clone().err().unwrap_or_default()} } }
                                 if move || !query.with(String::is_empty) || expanded.with(|expanded| expanded.contains(&path)) {
+                                if move || !compatible { text(class = "profile-compatibility muted") { {reason.get_value()} } }
                                     for entry in move || views.get_value(), key = |entry| entry.0.clone() {
                                         ProfileViewSource(workbench = workbench, source = format!("@profile-file-view/{}", serde_json::to_string(&(view_path.get_value(), entry.0.clone())).unwrap()),
                                             name = entry.0, count = entry.1, enabled = compatible)
@@ -196,7 +226,11 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 }
                 if move || files.with(Vec::is_empty) { text(class = "muted") { "Add JSON profiles in this directory or its subdirectories, or load a file." } }
             }
-            text(class = "heading") { "Loaded views · drag onto plots" }
+            if move || !workbench.profiles.views.with(Vec::is_empty) {
+            ActionButton(class = "profile-loaded-toggle", on:click = move |_| loaded_open.update(|open| *open = !*open)) {
+                {move || format!("{} Loaded views ({})", if loaded_open.get() { "▾" } else { "▸" }, workbench.profiles.views.with(Vec::len))}
+            }
+            if move || loaded_open.get() {
             scroll(class = "profile-views", a11y:label = "Loaded profile plot views") {
                 for entry in move || workbench.profiles.views.with(|views| views.iter().enumerate().map(|(index, view)| (index, view.name.clone(), view.fields.len())).collect::<Vec<_>>()), key = |view| view.0 {
                     column(class = "profile-loaded-view") {
@@ -208,11 +242,18 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                     }
                 }
             }
+            }
+            }
             if move || workbench.profiles.busy.get() { text(a11y:role = Role::Status) { "Preparing profile…" } }
             text(class = "warnings", a11y:role = Role::Status) {{move || workbench.profiles.error.get()}}
             if move || !workbench.profiles.warnings.with(Vec::is_empty) {
+                ActionButton(class = "profile-warnings-toggle", on:click = move |_| warnings_open.update(|open| *open = !*open)) {
+                    {move || format!("{} Skipped items ({})", if warnings_open.get() { "▾" } else { "▸" }, workbench.profiles.warnings.with(Vec::len))}
+                }
+                if move || warnings_open.get() {
                 scroll(class = "profile-warnings", a11y:label = "Skipped profile resources") {
                     text(class = "muted") {{move || workbench.profiles.warnings.with(|warnings| format!("{} skipped items:\n{}", warnings.len(), warnings.iter().take(50).cloned().collect::<Vec<_>>().join("\n")))}}
+                }
                 }
             }
         }

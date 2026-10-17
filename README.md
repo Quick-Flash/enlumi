@@ -25,7 +25,10 @@ Zgui temporarily pins a public text-selection fork; see [Contributing](CONTRIBUT
 - Editable JSON [profiles](docs/PROFILES.md) for names/units, built-in and Rust
   filter graphs, named geometry/state bands, and reusable plot views. Add views
   through sidebar folder tree. Drag views onto plots; missing fields leave usable
-  parts intact. Auto toggles select profiles by recorded firmware/settings.
+  parts intact. Folder picker remembers library location. Auto toggles select
+  profiles by recorded firmware/settings.
+- Profile field groups and per-field labels name axes/components without changing source IDs.
+- Double-click/F2 tab rename, with Enter to save and Escape to cancel.
 - Per-plot legend collapse/expand preserves plotted lines and geometry.
 - Ctrl/Shift selection and drag/drop of field groups onto plots or filters.
 - Split, tab, duplicate, resize, and equalize docks; dock beside groups of panels.

@@ -6,6 +6,9 @@ pub fn rows(log: &LogStore, query: &str, expanded: &BTreeSet<String>) -> Vec<Tre
     let mut entries = Vec::new();
     for (flight, records) in &log.settings {
         for (index, setting) in records.iter().enumerate() {
+            if setting.decoder_header() {
+                continue;
+            }
             let id = format!("@setting/{flight}/{index}");
             let label = log.setting_label(&id).unwrap_or_default();
             if !query.is_empty()

@@ -1,19 +1,16 @@
-.profile-library { flex: 1; min-height: 0; min-width: 0; gap: 10px; }
-.profile-directory { font-family: monospace; font-size: var(--app-font-xs); overflow-wrap: anywhere; }
-.profile-actions { flex: none; gap: 6px; flex-wrap: wrap; }
+.profile-library { flex: 1; min-height: 0; min-width: 0; gap: 6px; }
+.signal-sidebar > .profile-library { height: 0; }
+.profile-actions { flex: none; gap: 4px; flex-wrap: wrap; }
+.profile-directory.zui-input { flex: none; height: 24px; min-height: 24px; font-size: var(--app-font-xs); }
 .profile-files, .profile-views { flex: 1; height: 0; min-height: 0; overflow: auto; }
-.profile-file { align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid var(--app-border); }
-.profile-file-name { flex: 1; min-width: 0; font-size: var(--app-font-sm); overflow-wrap: anywhere; }
-.profile-file-info { flex: 1; min-width: 0; gap: 3px; }
-.profile-compatibility { font-size: var(--app-font-xs); overflow-wrap: anywhere; }
-.signal-sidebar > .profile-library { flex: 1; height: 0; min-height: 0; gap: 6px; }
+.profile-views { flex: 0.7; }
 .profile-folder { flex: none; min-height: 26px; cursor: pointer; }
 .profile-tree-file { flex: none; min-width: 0; }
-.profile-file { padding: 3px 0; gap: 3px; }
-.profile-file-name.app-action { flex: 1; width: 0; min-width: 0; justify-content: flex-start; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.profile-file { align-items: center; gap: 3px; padding: 3px 0; border-bottom: 1px solid var(--app-border); }
+.profile-file-name.app-action { flex: 1; width: 0; min-width: 0; justify-content: flex-start; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--app-font-sm); }
+.profile-compatibility { font-size: var(--app-font-xs); overflow-wrap: anywhere; }
 .profile-view-source { min-width: 0; padding-left: 10px; }
 .profile-view-actions { justify-content: flex-end; gap: 4px; }
-.profile-views { flex: 0.7; }
-.profile-directory { flex: none; max-height: 42px; overflow: hidden; }
+.profile-loaded-toggle.app-action, .profile-warnings-toggle.app-action { flex: none; justify-content: flex-start; }
 .profile-warnings { flex: none; max-height: 100px; overflow: auto; }
 .profile-warnings text { white-space: pre-wrap; }

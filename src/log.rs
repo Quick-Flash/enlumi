@@ -24,6 +24,15 @@ pub struct LogSetting {
 }
 
 impl LogSetting {
+    pub fn decoder_header(&self) -> bool {
+        self.kind == "Header"
+            && (self.name.starts_with("Field ")
+                || matches!(
+                    self.name.as_str(),
+                    "Product" | "Data version" | "I interval" | "P interval" | "P ratio"
+                ))
+    }
+
     pub fn numbers(&self) -> Option<Vec<f64>> {
         let value = self.value.trim();
         let value = value
@@ -225,6 +234,9 @@ impl LogStore {
     pub(super) fn add_setting_signals(&mut self) {
         for (flight, settings) in &self.settings {
             for (index, setting) in settings.iter().enumerate() {
+                if setting.decoder_header() {
+                    continue;
+                }
                 if let Some(values) = setting.numbers() {
                     for element in 0..values.len() {
                         let suffix = if values.len() == 1 {

@@ -9,19 +9,26 @@ Use **All files** for renamed or mixed-case files; their contents must still be
 a supported log format. Decoder failures and frame limits appear as load warnings.
 
 Expand **Parameters** in field tree, alongside **Derived fields**. Search
-matches names, values, and record types. Every recorded Blackbox header and ULog
-parameter/info record appears here; repeated records stay separate. Flight numbers
+matches names, values, and record types. Recorded Blackbox flight settings and ULog
+parameter/info records appear here; repeated records stay separate. Decoder schema
+headers (`Field I/P/S/...` definitions, encoding/predictor tables, Product/Data
+version, I/P frame intervals and ratio) stay internal. Firmware, timing/scaling,
+motor poles and tuning values remain available. Flight numbers
 appear for multi-flight logs. Numeric rows drag into plots and filters as constant
 fields. Numeric arrays expand into individually usable elements. Rows show separate
 names and values. Select a parameter to read/copy its full value, or use **Add to
 plot** / **Use in filter**. Text records remain readable without plot actions. Settings
 absent from log cannot be reconstructed.
 
-**Profiles** in sidebar heading opens folder tree of JSON setups for named fields, filters,
+**Profiles → Folder…** chooses saved library directory. Nested folders and
+auto firmware matching use same location. **Profiles** in sidebar heading opens folder tree of JSON setups for named fields, filters,
 geometry and time bands. Expand a profile and drag a view onto any plot; profile loads on demand. Missing
 fields skip affected outputs while remaining view works. Each loaded view also
 offers **New panel** or **Add to active**. **Auto** enables firmware-matched
-loading next time a log opens. **Rename** in plot strip edits tab title. See [profile setup and format](PROFILES.md).
+loading next time a log opens. Double-click tab title (or focus it and press F2) to rename in place. See [profile setup and format](PROFILES.md).
+
+Raw field selected: **Labels…** edits display name, axis/component, and unit.
+Reusable group labels live in profiles; source IDs stay unchanged.
 
 1. Click **Open log** or pass a local log path. File Explorer drag-and-drop is deferred to future work.
 2. Expand plain text topic-instance roots (for example `vehicle_imu.0`; single-instance topics omit suffix) and named field/array groups in scrollable left field tree. Numeric instances and array indices sort naturally. Search keeps matching ancestor paths in tree without opening branches. Matching topic-instance root or field group keeps its whole subtree; leaf matches prune unrelated fields. Expand results manually. Sidebar stays inside visible window; wheel scrolls fields independently.

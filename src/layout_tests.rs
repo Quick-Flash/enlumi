@@ -3424,6 +3424,7 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
         library.size.width.0 > 200.0 && library.size.height.0 > 300.0,
         "{library:?}"
     );
+    click_class(&mut harness, "profile-loaded-toggle");
     click_class(&mut harness, "profile-view-new");
     assert_eq!(workbench.panes.with_untracked(Vec::len), 2);
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);

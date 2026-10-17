@@ -13,6 +13,7 @@ mod derived;
 mod derived_state;
 #[cfg(test)]
 mod editor;
+mod field_label;
 mod field_row;
 mod field_selection;
 mod field_tree;
@@ -77,7 +78,6 @@ mod script_tests;
 mod startup;
 mod state;
 mod state_bands;
-mod tab_name;
 mod theme;
 mod theme_picker;
 #[cfg(test)]

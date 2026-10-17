@@ -66,7 +66,7 @@ without rebuilding UI. Zgui UI tokens reference those same roles through
 `theme.css`; `plot_theme.css` adapts upstream plot chrome to app tokens. Series
 colors and code syntax colors remain distinct from interface accent. Plot canvas
 rendering/grid colors still belong to upstream plotting library; current
-presets use dark surfaces. Only theme ID is persisted; logs, scripts, plots, and drafts remain session-only.
+presets use dark surfaces. Theme ID and selected profile directory are persisted; logs, scripts, plots, and drafts remain session-only.
 
 ## UI action buttons
 
@@ -141,3 +141,9 @@ produce warnings while independent resources remain available. Sidebar profile
 view payloads reuse signal drag transport and resolve destination plot on drop.
 Canonical profile paths and view names map repeated drops to existing resources.
 Plot title editing uses existing per-plot title map.
+
+Blackbox decoder schema headers remain in original settings records for internal
+use but are excluded from parameter rows and numeric parameter catalogue. Profile
+field_groups map exact raw prefixes/suffixes into branch and component labels;
+raw identities remain stable. Tab rename runs inside zgui-plot tab strip through
+optional consumer callback.

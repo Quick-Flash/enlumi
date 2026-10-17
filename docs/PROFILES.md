@@ -37,7 +37,12 @@ validation, and Rust/WASM execution limits.
 
 ## Profile directory
 
-Sidebar scans this directory when opened, when log changes, or when **Refresh** is used:
+Click **Folder…** to choose profile library directory. Choice persists across
+launches and controls both browsing and automatic firmware matching. Nested
+folders are supported. **Load file…** imports one profile without changing library.
+**Loaded views** and **Skipped items** expand on demand.
+
+Without a selected folder, library defaults to:
 
 | Platform | Directory |
 | --- | --- |
@@ -46,7 +51,7 @@ Sidebar scans this directory when opened, when log changes, or when **Refresh** 
 | macOS | `~/Library/Application Support/Enlumi/profiles` |
 
 Create the directory and copy JSON files there. Rust source files referenced by a
-profile travel beside it or in a subdirectory. The chooser shows the exact path.
+profile travel beside it or in a subdirectory. Sidebar shows selectable directory path.
 JSON files in nested directories form expandable tree. Symlinks are not followed;
 scan allows up to 32 directory levels and 4096 files. **Load file…** works from any
 directory. No directory watcher runs. Example organization:
@@ -254,8 +259,43 @@ Betaflight examples are templates checked with synthetic matching data, not a
 claim of real-flight validation. Review required settings, units and state names
 against the actual firmware/log before using their interpretations.
 
+## Field groups and axis names
+
+Choose a raw field, then **Labels…** to edit its plot/legend name, tree component
+label, and unit. Changes affect current log only and do not scale values. Search
+continues matching raw IDs and full display names. **Reset** removes that field's
+display override.
+
+For reusable mappings, add `field_groups` to profile. Source prefixes and exact
+component suffixes are explicit; Enlumi does not assume every vector is roll/pitch/yaw.
+
+```json
+"field_groups": [
+  {
+    "source": "blackbox/1/gyroADC",
+    "name": "Gyroscope",
+    "unit": "deg/s",
+    "components": {"[0]":"Roll", "[1]":"Pitch", "[2]":"Yaw"}
+  },
+  {
+    "source": "rates/0",
+    "name": "Angular rates",
+    "unit": "rad/s",
+    "components": {"/p":"Roll", "/q":"Pitch", "/r":"Yaw"}
+  }
+]
+```
+
+Array suffixes (`[0]`), nested members (`.x`), and individual fields (`/p`) all
+use same mechanism. Group name replaces browser branch label; components replace
+leaf labels. Source IDs remain unchanged. Group-generated legend names include
+group and component; explicit `signals` metadata overrides generated names. Missing
+components are skipped. Existing Betaflight PID examples map gyro, setpoint, and
+PID-term components. High-resolution examples retain raw scaling in unit labels.
+
 ## Tab names
 
-Use **Rename** in plot strip, enter title, and press Enter or **Save**. **Reset**
-restores default name. Dragging a view onto unnamed empty plot uses view title.
+Double-click tab title, or focus it and press F2, to edit directly. Existing text
+is selected. Enter or clicking elsewhere saves; Escape cancels. Clear text to
+restore default name. Dragging a view onto unnamed empty plot uses view title.
 Names stay attached to plot IDs through docking; titles remain session-local.

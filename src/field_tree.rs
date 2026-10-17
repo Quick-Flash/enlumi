@@ -9,6 +9,8 @@ struct Node {
     children: BTreeMap<String, Node>,
     signal: Option<SignalInfo>,
     alias: Option<String>,
+    source: Option<String>,
+    search_alias: Option<String>,
 }
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldTree(BTreeMap<String, Node>);
@@ -37,16 +39,27 @@ impl FieldTree {
                 continue;
             };
             let mut node = tree.0.entry(format!("{topic}.{instance}")).or_default();
+            node.source = Some(format!("{topic}/{instance}"));
+            let mut source = format!("{topic}/{instance}/");
             for part in field.split('.') {
+                if !source.ends_with('/') {
+                    source.push('.');
+                }
                 if let Some(index) = part.find('[') {
                     if index > 0 {
                         node = node.children.entry(part[..index].to_owned()).or_default();
+                        source.push_str(&part[..index]);
+                        node.source = Some(source.clone());
                     }
                     for index in part[index..].split_inclusive(']') {
                         node = node.children.entry(index.to_owned()).or_default();
+                        source.push_str(index);
+                        node.source = Some(source.clone());
                     }
                 } else {
                     node = node.children.entry(part.to_owned()).or_default();
+                    source.push_str(part);
+                    node.source = Some(source.clone());
                 }
             }
             node.signal = Some(signal.clone());
@@ -85,6 +98,23 @@ impl FieldTree {
             node.alias = node
                 .signal
                 .as_ref()
+                .and_then(|signal| labels.get(&signal.id).cloned())
+                .or_else(|| node.source.as_ref().and_then(|id| labels.get(id).cloned()));
+            for child in node.children.values_mut() {
+                apply(child, labels);
+            }
+        }
+        for node in self.0.values_mut() {
+            apply(node, labels);
+        }
+        self
+    }
+
+    pub fn with_search_labels(mut self, labels: &BTreeMap<String, String>) -> Self {
+        fn apply(node: &mut Node, labels: &BTreeMap<String, String>) {
+            node.search_alias = node
+                .signal
+                .as_ref()
                 .and_then(|signal| labels.get(&signal.id).cloned());
             for child in node.children.values_mut() {
                 apply(child, labels);
@@ -121,6 +151,10 @@ fn filter(node: &Node, label: &str, query: &str) -> Option<Node> {
             .as_ref()
             .is_some_and(|alias| alias.to_ascii_lowercase().contains(query))
         || node
+            .search_alias
+            .as_ref()
+            .is_some_and(|alias| alias.to_ascii_lowercase().contains(query))
+        || node
             .signal
             .as_ref()
             .is_some_and(|signal| signal.id.to_ascii_lowercase().contains(query))
@@ -135,7 +169,9 @@ fn filter(node: &Node, label: &str, query: &str) -> Option<Node> {
     (!children.is_empty()).then_some(Node {
         children,
         signal: None,
-        alias: None,
+        alias: node.alias.clone(),
+        source: node.source.clone(),
+        search_alias: node.search_alias.clone(),
     })
 }
 fn ordered(nodes: &BTreeMap<String, Node>) -> Vec<(&String, &Node)> {
@@ -213,7 +249,7 @@ fn append(
         let open = expanded.contains(&id);
         rows.push(TreeRow {
             id: id.clone(),
-            label: label.into(),
+            label: node.alias.as_deref().unwrap_or(label).into(),
             depth,
             count: count(node),
             field: None,

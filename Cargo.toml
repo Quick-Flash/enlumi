@@ -17,7 +17,7 @@ resolver = "3"
 [dependencies]
 bbl_parser = { version = "1.1.1", default-features = false }
 kurbo = "0.13.1"
-plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "c73a80b265bb3158f3b9e058752e573a84fbc954", features = ["workspace"] }
+plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "a9eb0984db409a1a2c511e7e00e0ad0fac1ba6f1", features = ["workspace"] }
 px4-ulog = "0.6.1"
 rfd = "0.17.2"
 serde = { version = "1", features = ["derive"] }

@@ -2,7 +2,6 @@ use crate::{
     plot_actions::PlotActionsProps,
     plot_cursor::CursorPlotProps,
     state::{Pane, Workbench},
-    tab_name::TabNameProps,
 };
 use plot::{
     workspace::plot_visible,
@@ -31,9 +30,11 @@ pub fn Panel(
                 PlotTabs(pane = pane.dock, dock = dock,
                     title = UnsyncCallback::new(move |id| workbench.profiles.titles.with(|titles| titles.get(&id).cloned().unwrap_or_else(|| format!("Plot {id}")))),
                     on_select = UnsyncCallback::new(move |id| workbench.activate(id)),
+                    on_rename = UnsyncCallback::new(move |(id, name): (u64, String)| {
+                        workbench.profiles.titles.update(|titles| { if name.is_empty() { titles.remove(&id); } else { titles.insert(id, name); } });
+                    }),
                     on_close = UnsyncCallback::new(move |id| workbench.close_plot(id)),
                     on_add = UnsyncCallback::new(move |id| { workbench.add_plot(id, false, true); }))
-                TabName(workbench = workbench, pane = pane)
                 PlotLinksMenu(options = pane.links)
                 PlotActions(workbench = workbench, pane = pane)
             }

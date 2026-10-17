@@ -18,6 +18,8 @@ use zgui::prelude::*;
 
 #[derive(Clone, Copy)]
 pub struct ProfileUi {
+    pub directory: RwSignal<Option<PathBuf>, LocalStorage>,
+    pub groups: RwSignal<BTreeMap<String, String>, LocalStorage>,
     pub browsing: RwSignal<bool, LocalStorage>,
     pub busy: RwSignal<bool, LocalStorage>,
     pub error: RwSignal<String, LocalStorage>,
@@ -33,6 +35,8 @@ pub struct ProfileUi {
 impl ProfileUi {
     pub fn new() -> Self {
         Self {
+            directory: RwSignal::new_local(None),
+            groups: RwSignal::new_local(BTreeMap::new()),
             browsing: RwSignal::new_local(false),
             busy: RwSignal::new_local(false),
             error: RwSignal::new_local(String::new()),
@@ -58,6 +62,7 @@ impl ProfileUi {
         self.error.set(String::new());
         self.warnings.set(Vec::new());
         self.metadata.set(BTreeMap::new());
+        self.groups.set(BTreeMap::new());
         self.titles.set(BTreeMap::new());
         self.applied.set(BTreeSet::new());
         self.views.set(Vec::new());
@@ -316,6 +321,15 @@ impl Workbench {
                 return Err(format!("Conflicting signal metadata for {source}"));
             }
         }
+        for (source, label) in &prepared.groups {
+            if self
+                .profiles
+                .groups
+                .with_untracked(|groups| groups.get(source).is_some_and(|old| old != label))
+            {
+                return Err(format!("Conflicting field group label for {source}"));
+            }
+        }
         let mut names: BTreeSet<_> = self
             .geometry
             .items
@@ -330,6 +344,9 @@ impl Workbench {
             .update(|warnings| warnings.extend(prepared.warnings));
         // All fallible decoding, compilation, computation and validation finished.
         self.derived.set(fields);
+        self.profiles
+            .groups
+            .update(|groups| groups.extend(prepared.groups));
         self.profiles
             .metadata
             .update(|metadata| metadata.extend(prepared.metadata));
@@ -472,6 +489,7 @@ mod tests {
         Prepared {
             name: "Test setup".into(),
             warnings: Vec::new(),
+            groups: BTreeMap::new(),
             fields: Vec::new(),
             metadata: BTreeMap::from([(
                 source.clone(),

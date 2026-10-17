@@ -26,11 +26,24 @@ pub struct Profile {
     #[serde(default)]
     pub signals: Vec<Signal>,
     #[serde(default)]
+    pub field_groups: Vec<FieldGroup>,
+    #[serde(default)]
     pub filters: Vec<Filter>,
     #[serde(default)]
     pub geometry: Vec<Geometry>,
     #[serde(default)]
     pub views: Vec<View>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FieldGroup {
+    pub source: String,
+    pub name: String,
+    #[serde(default)]
+    pub unit: String,
+    /// Exact suffixes: [index], .member, or /field.
+    pub components: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -43,6 +56,13 @@ pub struct Metadata {
     pub axis: String,
 }
 impl Metadata {
+    pub fn tree_label(&self) -> String {
+        if self.axis.is_empty() {
+            self.label()
+        } else {
+            self.label_for(&self.axis)
+        }
+    }
     pub fn label(&self) -> String {
         self.label_for(&self.name)
     }
@@ -211,13 +231,52 @@ fn yes() -> bool {
     true
 }
 
-pub fn directory() -> Result<PathBuf, String> {
+pub fn default_directory() -> Result<PathBuf, String> {
     crate::preferences::config_directory()
         .map(|path| path.join("profiles"))
         .ok_or("Cannot find user configuration directory".into())
 }
 
+pub fn directory() -> Result<PathBuf, String> {
+    let saved = crate::preferences::config_directory()
+        .ok_or("Cannot find user configuration directory")?
+        .join("profile-directory.json");
+    match std::fs::read(&saved) {
+        Ok(bytes) => {
+            let path: PathBuf = serde_json::from_slice(&bytes)
+                .map_err(|e| format!("Profile directory preference: {e}"))?;
+            if !path.is_absolute() {
+                return Err("Saved profile directory must be absolute".into());
+            }
+            Ok(path)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => default_directory(),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+pub fn save_directory(path: &Path) -> Result<PathBuf, String> {
+    use std::io::Write;
+    let path = path.canonicalize().map_err(|e| e.to_string())?;
+    if !path.is_dir() {
+        return Err("Choose a directory".into());
+    }
+    let config =
+        crate::preferences::config_directory().ok_or("Cannot find user configuration directory")?;
+    std::fs::create_dir_all(&config).map_err(|e| e.to_string())?;
+    let mut file = tempfile::NamedTempFile::new_in(&config).map_err(|e| e.to_string())?;
+    serde_json::to_writer(&mut file, &path).map_err(|e| e.to_string())?;
+    file.flush().map_err(|e| e.to_string())?;
+    file.persist(config.join("profile-directory.json"))
+        .map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
 pub fn discover() -> Result<Vec<PathBuf>, String> {
+    discover_in(&directory()?)
+}
+
+pub fn discover_in(directory: &Path) -> Result<Vec<PathBuf>, String> {
     fn scan(directory: &Path, depth: usize, paths: &mut Vec<PathBuf>) -> Result<(), String> {
         if depth > 32 {
             return Err("Profile directory exceeds 32 levels".into());
@@ -247,7 +306,7 @@ pub fn discover() -> Result<Vec<PathBuf>, String> {
         Ok(())
     }
     let mut paths = Vec::new();
-    scan(&directory()?, 0, &mut paths)?;
+    scan(directory, 0, &mut paths)?;
     paths.sort();
     Ok(paths)
 }
@@ -304,6 +363,7 @@ pub fn load(path: &Path) -> Result<Profile, String> {
     if profile.filters.len() + profile.geometry.len() > 2048
         || profile.views.len() > 32
         || profile.signals.len() > 4096
+        || profile.field_groups.len() > 256
     {
         return Err("Profile exceeds 2048 resources or 32 views".into());
     }

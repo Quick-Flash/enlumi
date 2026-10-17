@@ -22,7 +22,7 @@
       "metadata": {
         "name": "Roll Gyro raw",
         "unit": "0.1 deg/s",
-        "axis": "roll"
+        "axis": "Roll"
       }
     },
     {
@@ -31,7 +31,7 @@
       "metadata": {
         "name": "Roll Rate setpoint raw",
         "unit": "0.1 deg/s",
-        "axis": "roll"
+        "axis": "Roll"
       }
     },
     {
@@ -40,7 +40,7 @@
       "metadata": {
         "name": "Roll P term",
         "unit": "",
-        "axis": "roll"
+        "axis": "Roll"
       }
     },
     {
@@ -49,7 +49,7 @@
       "metadata": {
         "name": "Roll I term",
         "unit": "",
-        "axis": "roll"
+        "axis": "Roll"
       }
     },
     {
@@ -58,7 +58,7 @@
       "metadata": {
         "name": "Roll D term",
         "unit": "",
-        "axis": "roll"
+        "axis": "Roll"
       }
     },
     {
@@ -67,7 +67,7 @@
       "metadata": {
         "name": "Pitch Gyro raw",
         "unit": "0.1 deg/s",
-        "axis": "pitch"
+        "axis": "Pitch"
       }
     },
     {
@@ -76,7 +76,7 @@
       "metadata": {
         "name": "Pitch Rate setpoint raw",
         "unit": "0.1 deg/s",
-        "axis": "pitch"
+        "axis": "Pitch"
       }
     },
     {
@@ -85,7 +85,7 @@
       "metadata": {
         "name": "Pitch P term",
         "unit": "",
-        "axis": "pitch"
+        "axis": "Pitch"
       }
     },
     {
@@ -94,7 +94,7 @@
       "metadata": {
         "name": "Pitch I term",
         "unit": "",
-        "axis": "pitch"
+        "axis": "Pitch"
       }
     },
     {
@@ -103,7 +103,7 @@
       "metadata": {
         "name": "Pitch D term",
         "unit": "",
-        "axis": "pitch"
+        "axis": "Pitch"
       }
     },
     {
@@ -112,7 +112,7 @@
       "metadata": {
         "name": "Yaw Gyro raw",
         "unit": "0.1 deg/s",
-        "axis": "yaw"
+        "axis": "Yaw"
       }
     },
     {
@@ -121,7 +121,7 @@
       "metadata": {
         "name": "Yaw Rate setpoint raw",
         "unit": "0.1 deg/s",
-        "axis": "yaw"
+        "axis": "Yaw"
       }
     },
     {
@@ -130,7 +130,7 @@
       "metadata": {
         "name": "Yaw P term",
         "unit": "",
-        "axis": "yaw"
+        "axis": "Yaw"
       }
     },
     {
@@ -139,7 +139,7 @@
       "metadata": {
         "name": "Yaw I term",
         "unit": "",
-        "axis": "yaw"
+        "axis": "Yaw"
       }
     },
     {
@@ -148,7 +148,7 @@
       "metadata": {
         "name": "Yaw D term",
         "unit": "",
-        "axis": "yaw"
+        "axis": "Yaw"
       }
     }
   ],
@@ -158,7 +158,7 @@
       "metadata": {
         "name": "Yaw Rate setpoint",
         "unit": "deg/s",
-        "axis": "yaw"
+        "axis": "Yaw"
       },
       "inputs": [
         "$yaw_setpoint_raw"
@@ -173,7 +173,7 @@
       "metadata": {
         "name": "Yaw Gyro",
         "unit": "deg/s",
-        "axis": "yaw"
+        "axis": "Yaw"
       },
       "inputs": [
         "$yaw_gyro_raw"
@@ -188,7 +188,7 @@
       "metadata": {
         "name": "Pitch Rate setpoint",
         "unit": "deg/s",
-        "axis": "pitch"
+        "axis": "Pitch"
       },
       "inputs": [
         "$pitch_setpoint_raw"
@@ -203,7 +203,7 @@
       "metadata": {
         "name": "Pitch Gyro",
         "unit": "deg/s",
-        "axis": "pitch"
+        "axis": "Pitch"
       },
       "inputs": [
         "$pitch_gyro_raw"
@@ -218,7 +218,7 @@
       "metadata": {
         "name": "Roll Rate setpoint",
         "unit": "deg/s",
-        "axis": "roll"
+        "axis": "Roll"
       },
       "inputs": [
         "$roll_setpoint_raw"
@@ -233,7 +233,7 @@
       "metadata": {
         "name": "Roll Gyro",
         "unit": "deg/s",
-        "axis": "roll"
+        "axis": "Roll"
       },
       "inputs": [
         "$roll_gyro_raw"
@@ -248,7 +248,7 @@
       "metadata": {
         "name": "Roll rate error",
         "unit": "deg/s",
-        "axis": "roll"
+        "axis": "Roll"
       },
       "inputs": [
         "$roll_setpoint",
@@ -264,7 +264,7 @@
       "metadata": {
         "name": "Pitch rate error",
         "unit": "deg/s",
-        "axis": "pitch"
+        "axis": "Pitch"
       },
       "inputs": [
         "$pitch_setpoint",
@@ -280,7 +280,7 @@
       "metadata": {
         "name": "Yaw rate error",
         "unit": "deg/s",
-        "axis": "yaw"
+        "axis": "Yaw"
       },
       "inputs": [
         "$yaw_setpoint",
@@ -358,5 +358,57 @@
     "blackbox/1/setpoint[2]",
     "blackbox/1/axisP[2]",
     "blackbox/1/axisI[2]"
+  ],
+  "field_groups": [
+    {
+      "source": "blackbox/1/gyroADC",
+      "name": "Gyroscope",
+      "unit": "0.1 deg/s",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/setpoint",
+      "name": "Rate setpoint",
+      "unit": "0.1 deg/s",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/axisP",
+      "name": "P term",
+      "unit": "",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/axisI",
+      "name": "I term",
+      "unit": "",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/axisD",
+      "name": "D term",
+      "unit": "",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    }
   ]
 }

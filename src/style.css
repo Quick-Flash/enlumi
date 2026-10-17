@@ -325,4 +325,7 @@
 .parameter-value { min-height: 48px; height: 64px; max-height: 80px; background: var(--app-control); color: var(--app-foreground); font-size: var(--app-font-xs); }
 .parameter-actions { gap: 6px; }
 
-.tab-name-editor { width: 250px; display: flex; flex-direction: column; gap: 6px; }
+.field-label-editor { width: 290px; display: flex; flex-direction: column; gap: 5px; }
+.field-label-editor > row { gap: 6px; }
+.selected-field-row { flex: none; min-height: 28px; align-items: center; gap: 4px; }
+.selected-field-row .selected-field { flex: 1; height: auto; min-width: 0; max-height: 32px; }

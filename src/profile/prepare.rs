@@ -18,6 +18,7 @@ use std::{
 pub struct Prepared {
     pub name: String,
     pub warnings: Vec<String>,
+    pub groups: BTreeMap<String, String>,
     pub fields: Vec<DerivedField>,
     pub metadata: MetadataMap,
     pub geometry: Vec<Geometry>,
@@ -76,6 +77,40 @@ pub fn prepare(
             return Err(format!("Multiple aliases for {source}"));
         }
         symbols.insert(signal.id.clone(), source);
+    }
+    let mut groups = BTreeMap::new();
+    for group in &profile.field_groups {
+        if group.name.trim().is_empty() || group.source.is_empty() || group.components.len() > 256 {
+            return Err("Field groups need source, name, and at most 256 components".into());
+        }
+        let mut found = false;
+        for (suffix, axis) in &group.components {
+            if suffix.is_empty()
+                || !(suffix.starts_with('[') || suffix.starts_with('.') || suffix.starts_with('/'))
+                || axis.trim().is_empty()
+            {
+                return Err(
+                    "Group components need exact [index], .member, or /field suffixes and labels"
+                        .into(),
+                );
+            }
+            let source = format!("{}{suffix}", group.source);
+            if !log.catalogue.iter().any(|field| field.id == source) {
+                warnings.push(format!("{} {axis}: missing field {source}", group.name));
+                continue;
+            }
+            found = true;
+            let metadata_value = super::Metadata {
+                name: format!("{} {axis}", group.name),
+                unit: group.unit.clone(),
+                axis: axis.clone(),
+            };
+            validate_metadata(&metadata_value)?;
+            metadata.entry(source).or_insert(metadata_value);
+        }
+        if found {
+            groups.insert(group.source.clone(), group.name.clone());
+        }
     }
     for (index, filter) in profile.filters.iter().enumerate() {
         symbols.insert(filter.id.clone(), derived::key(first_id + index as u64));
@@ -273,6 +308,7 @@ pub fn prepare(
     Ok(Prepared {
         name: profile.name,
         warnings,
+        groups,
         fields,
         metadata,
         geometry,
