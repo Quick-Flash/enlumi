@@ -26,8 +26,9 @@ between initial, changed, or default values. Both log formats use the same path.
 
 Profile loading validates and computes a candidate before committing resources.
 It adds fields, metadata, and geometry without creating plot panels. Each view
-then offers **New panel** and **Add to active plot**. Missing sources, cycles,
-conflicts, failed compilation, and missing settings reject the candidate.
+then offers drag placement and **New panel** / **Add to active**. Missing sources,
+cyclic/failed branches, and unavailable geometry are skipped with diagnostics.
+Firmware/settings guards and commit conflicts still reject incompatible loads.
 
 Future work should build on this format: an interactive metadata inspector/editor,
 setting overrides with provenance, richer field-derived geometry, and additional
@@ -75,3 +76,6 @@ position; those interpretations require their own evidence.
 
 These moving references establish investigation targets. Implemented rules must
 pin evidence to the firmware revisions they claim to support.
+
+See [profile system review and plan](PROFILE_SYSTEM_PLAN.md) for current gaps,
+proposed UI, ownership/lifecycle work, and validation gates.

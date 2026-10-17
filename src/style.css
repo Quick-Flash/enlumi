@@ -17,7 +17,7 @@
 .browser-heading .heading { flex: 1; }
 .toolbar .zui-button, .browser-heading .zui-button { transition: none; }
 .browser-heading .zui-button { flex: none; padding: 3px 5px; }
-.browser-heading { align-items: center; justify-content: space-between; gap: 4px; }
+.browser-heading { align-items: center; justify-content: flex-start; gap: 4px; }
 .heading { font-weight: 600; font-size: var(--app-font-sm); }
 .muted { color: var(--app-muted); font-size: var(--app-font-xs); }
 .signal-list { flex: 1; height: 0; min-height: 28px; overflow-y: auto; overflow-x: hidden; }
