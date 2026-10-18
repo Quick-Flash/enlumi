@@ -328,3 +328,7 @@ Double-click tab title, or focus it and press F2, to edit directly. Existing tex
 is selected. Enter or clicking elsewhere saves; Escape cancels. Clear text to
 restore default name. Dragging a view onto unnamed empty plot uses view title.
 Names stay attached to plot IDs through docking; titles remain session-local.
+
+## Individual view fields and analysis
+
+Arrow beside each view prepares profile if needed and exposes its available member fields. Members support selection and dragging individually. Drag whole view into **Analyze** to list every available member separately, then enable desired inputs. See [frequency analysis](FREQUENCY_ANALYSIS.md).

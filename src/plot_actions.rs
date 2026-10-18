@@ -17,6 +17,7 @@ pub fn PlotActions(workbench: Workbench, pane: Pane) -> impl IntoView {
             }
         }
 
+        ActionButton(on:click=move |_|workbench.analyze_plot(pane)) {"Analyze"}
         ActionButton(class = "duplicate-plot-button", a11y:label = "Duplicate plot",
             on:click = move |_| workbench.duplicate_plot(pane)) { "Duplicate" }
         ActionButton(class = "maximize-button", class:setting-active = move || workbench.maximized.get() == Some(pane.id), on:click = move |_| workbench.maximize(pane.id)) {

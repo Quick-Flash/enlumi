@@ -37,3 +37,7 @@
 .profile-output-more.app-action.zui-button { width: 24px; min-width: 24px; height: 24px; min-height: 24px; }
 .field-selection-actions { align-items: center; gap: 6px; }
 .field-selection-actions .field-selection-count { flex: 1; }
+
+.profile-view-members { padding-left: 18px; gap: 2px; }
+.profile-view-members .profile-view-source { padding-left: 0; }
+.profile-members-toggle.app-action { flex: none; padding: 0; width: 20px; min-width: 20px; border: none; background: transparent; }

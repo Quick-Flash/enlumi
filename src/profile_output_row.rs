@@ -19,6 +19,7 @@ pub fn ProfileOutputRow(
 ) -> impl IntoView {
     let label = StoredValue::new_local(name.clone());
     let more = RwSignal::new_local(false);
+    let members = RwSignal::new_local(false);
     let instance = Signal::derive_local(move || {
         workbench
             .profiles
@@ -76,6 +77,12 @@ pub fn ProfileOutputRow(
     view! {
         column(class="profile-output") {
             row(class="profile-output-line") {
+                if move ||matches!(drag.get().item,Item::View(_)) && count>0 {
+                    ActionButton(icon=true,class="profile-members-toggle",a11y:label="Show individual fields in view",disabled=disabled,on:click=move |_|{
+                        members.update(|open|*open = !*open);
+                        if members.get_untracked() && instance.get_untracked().is_none() { let drag=drag.get_untracked();workbench.profiles.flight.set(drag.profile.flight);workbench.apply_profile(drag.profile.path); }
+                    }) {{move ||if members.get(){"▾"}else{"▸"}}}
+                }
                 ProfileViewSource(workbench=workbench,source=Signal::derive_local(move ||drag.get().source()),name=name,count=count,enabled=Signal::derive_local(move || !disabled.get()))
                 if move ||matches!(drag.get().item,Item::Field(_)) {
                     Popover(open=more) {
@@ -84,6 +91,18 @@ pub fn ProfileOutputRow(
                             text(class="muted") {{label.get_value()}}
                             ActionButton(disabled=disabled,on:click=move |_|{more.set(false);workbench.use_profile_item(drag.get_untracked(),Destination::Filter);}) { "Use in filter" }
                         }
+                    }
+                }
+            }
+            if move ||members.get() {
+                column(class="profile-view-members") {
+                    for member in move || instance.with(|instance| {
+                        let Item::View(name)=drag.get().item else {return Vec::new();};
+                        instance.as_ref().and_then(|instance|instance.views.get(&name)).map_or_else(Vec::new,|view|view.fields.iter().map(|(source,_)|source.clone()).collect())
+                    }),key=|source|source.clone() {
+                        {{let name=workbench.field_name(&member);view! {
+                            ProfileViewSource(workbench=workbench,source=Signal::derive_local(move ||Drag{profile:drag.get().profile,item:Item::Field(member.clone())}.source()),name=name,count=0,enabled=Signal::derive_local(move ||!disabled.get()))
+                        }}}
                     }
                 }
             }

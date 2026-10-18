@@ -1,0 +1,19 @@
+.analysis-workspace { flex: 1; min-width: 0; min-height: 0; padding: 8px; gap: 8px; }
+.analysis-workspace.analysis-drop-active { outline: 2px solid var(--app-accent); outline-offset: -2px; }
+.analysis-heading { align-items: center; gap: 12px; }
+.analysis-heading .heading { flex: 1; }
+.analysis-body { flex: 1; min-width: 0; min-height: 0; gap: 12px; }
+.analysis-controls { flex: none; width: 300px; min-height: 0; gap: 8px; }
+.analysis-controls > row { gap: 6px; }
+.analysis-controls .zui-field { min-width: 0; flex: 1; }
+.analysis-inputs { flex: 1; min-height: 80px; overflow-y: auto; }
+.analysis-input { align-items: center; gap: 6px; min-height: 28px; }
+.analysis-input .zui-label { flex: 1; min-width: 0; font-size: var(--app-font-sm); }
+.analysis-results { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; gap: 12px; }
+.analysis-result { flex: none; height: 380px; min-width: 0; gap: 4px; padding: 8px; background: var(--app-surface); border: 1px solid var(--app-border); }
+.analysis-chart { flex: 1; min-height: 0; position: relative; }
+.analysis-result .time-series-host { flex: 1; min-height: 0; }
+.analysis-summary { white-space: pre-wrap; font-size: var(--app-font-xs); }
+.analysis-heatmap, .analysis-heatmap-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.analysis-color-key { align-items: center; gap: 8px; }
+.analysis-color-gradient { flex: none; width: 120px; height: 10px; background: linear-gradient(to right, #0000ff, #00bf40, #80bf00, #ff0000); }

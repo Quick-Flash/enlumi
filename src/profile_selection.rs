@@ -88,6 +88,35 @@ impl Workbench {
         }
         self.profiles.pending_drop.set_value(None);
         match target {
+            Destination::Analysis => {
+                let sources: Vec<String> = self.profiles.instances.with_untracked(|instances| {
+                    items
+                        .iter()
+                        .flat_map(|drag| {
+                            let Some(instance) = instances.get(&drag.profile) else {
+                                return Vec::new();
+                            };
+                            match &drag.item {
+                                Item::Field(name) => instance.resolve(name).into_iter().collect(),
+                                Item::View(name) => {
+                                    instance.views.get(name).map_or_else(Vec::new, |view| {
+                                        view.fields
+                                            .iter()
+                                            .map(|(source, _)| source.clone())
+                                            .collect()
+                                    })
+                                }
+                                Item::Geometry(_) => Vec::new(),
+                            }
+                        })
+                        .collect()
+                });
+                if sources.is_empty() {
+                    self.analysis.message.set("No sample fields available. Drop fields or a usable profile view; geometry has no samples.".into());
+                } else {
+                    self.add_analysis_sources(sources);
+                }
+            }
             Destination::Plot(_) => {
                 for drag in items {
                     self.place_prepared_item(drag.profile, drag.item, target);

@@ -73,7 +73,12 @@ impl AppliedProfile {
     pub fn resolve(&self, token: &str) -> Option<String> {
         if let Some(id) = token.strip_prefix('$') {
             self.symbols.get(id).cloned()
-        } else if self.metadata.contains_key(token) {
+        } else if self.metadata.contains_key(token)
+            || self
+                .views
+                .values()
+                .any(|view| view.fields.iter().any(|(source, _)| source == token))
+        {
             Some(token.into())
         } else {
             None

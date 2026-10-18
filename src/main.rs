@@ -1,5 +1,9 @@
 #![recursion_limit = "256"]
 mod action_button;
+mod analysis_heatmap;
+mod analysis_plot;
+mod analysis_state;
+mod analysis_workspace;
 mod app;
 mod app_icon;
 mod band_background;
@@ -89,6 +93,7 @@ mod script_tests;
 mod sidebar_help;
 mod sidebar_search;
 mod signal_provenance;
+mod spectral;
 mod startup;
 mod state;
 mod state_bands;

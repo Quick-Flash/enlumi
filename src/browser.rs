@@ -117,7 +117,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                         text(class="heading") { "Plot and filter fields" }
                         text { "Drag onto plot to add line. Enter plots focused field." }
                         text { "Ctrl-click toggles selection. Shift-click selects range." }
-                        text { "Drag selected fields together onto plot or Filters." }
+                        text { "Drag selected fields together onto plot, Filters, or Analyze." }
                     }
                 }
                 text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Open a log to browse fields".into(), |log| format!("{} fields | drag onto a plot", log.catalogue.len())))}}

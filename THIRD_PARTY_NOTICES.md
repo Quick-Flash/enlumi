@@ -9,6 +9,7 @@ Dependencies and third-party material retain their own license terms and notices
 | zgui-plot | [Quick-Flash/zgui-plot](https://github.com/Quick-Flash/zgui-plot) | MIT OR BSD-3-Clause |
 | px4-ulog | [PX4/px4-ulog-rs](https://github.com/PX4/px4-ulog-rs) | MIT |
 | bbl_parser | [crates.io/bbl_parser](https://crates.io/crates/bbl_parser) | AGPL-3.0-or-later |
+| RustFFT | [RustFFT](https://github.com/ejmahler/RustFFT) | MIT OR Apache-2.0 |
 | Wasmtime | [bytecodealliance/wasmtime](https://github.com/bytecodealliance/wasmtime) | Apache-2.0 WITH LLVM-exception |
 | zgui-editor | [zortax/zgui-editor](https://github.com/zortax/zgui-editor) | Apache-2.0 |
 

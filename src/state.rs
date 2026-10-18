@@ -127,6 +127,7 @@ pub struct Workbench {
     pub derived: RwSignal<Vec<crate::derived::DerivedField>, LocalStorage>,
     pub geometry: crate::geometry_state::GeometryUi,
     pub bands: crate::band_state::BandUi,
+    pub analysis: crate::analysis_state::AnalysisUi,
     pub profiles: crate::profile_state::ProfileUi,
     pub derived_busy: RwSignal<bool, LocalStorage>,
     pub filters_open: RwSignal<bool, LocalStorage>,
@@ -184,6 +185,7 @@ impl Workbench {
         Self {
             geometry: crate::geometry_state::GeometryUi::new(),
             bands: crate::band_state::BandUi::new(),
+            analysis: crate::analysis_state::AnalysisUi::new(),
             profiles: crate::profile_state::ProfileUi::new(),
             log: RwSignal::new_local(None),
             status: RwSignal::new_local("Open a log file to begin".into()),
@@ -259,6 +261,7 @@ impl Workbench {
     }
     pub fn open(self, path: PathBuf) {
         self.profiles.cancel();
+        self.analysis.reset();
         self.cancel_band_source();
         self.bands.jobs.update_value(BTreeMap::clear);
         self.generation.update(|id| *id += 1);

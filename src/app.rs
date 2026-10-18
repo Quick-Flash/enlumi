@@ -1,4 +1,5 @@
 use crate::action_button::ActionButtonProps;
+use crate::analysis_workspace::AnalysisWorkspaceProps;
 use crate::github_link::GithubLinkProps;
 use crate::preferences::ThemePreference;
 use crate::{
@@ -66,6 +67,7 @@ pub fn WorkbenchApp(
                     text(class = "file-name") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Enlumi".into(), |log| log.name.clone()))}}
                     text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
                     UpdateControls(state = updates)
+                    ActionButton(class:setting-active=move ||workbench.analysis.open.get(),on:click=move |_|{workbench.analysis.open.update(|open|*open = !*open);workbench.filters_open.set(false);}) {"Analyze"}
                     GithubLink(workbench = workbench)
                     ThemePicker(palette = palette, preferences = preferences.clone())
                     Fps()
@@ -73,8 +75,9 @@ pub fn WorkbenchApp(
                 UpdateNotice(state = updates)
                 row(class = "body") {
                     Browser(workbench = workbench)
-                    column(class = "plot-page", class:hidden = move || workbench.filters_open.get()) { PlotWorkspace(workbench = workbench) }
+                    column(class = "plot-page", class:hidden = move || workbench.filters_open.get() || workbench.analysis.open.get()) { PlotWorkspace(workbench = workbench) }
                     if move || workbench.filters_open.get() { FilterWorkspace(workbench = workbench) }
+                    if move || workbench.analysis.open.get() && !workbench.filters_open.get() { AnalysisWorkspace(workbench = workbench) }
                 }
             }
         }

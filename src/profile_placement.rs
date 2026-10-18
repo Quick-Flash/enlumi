@@ -42,6 +42,13 @@ impl Workbench {
         };
         let pane = match target {
             Destination::Plot(pane) => pane,
+            Destination::Analysis => {
+                self.use_profile_items(
+                    vec![profile::identity::Drag { profile: key, item }],
+                    Destination::Analysis,
+                );
+                return;
+            }
             Destination::Filter | Destination::Bands => {
                 let Item::Field(name) = &item else {
                     self.profiles

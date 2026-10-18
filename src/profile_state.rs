@@ -20,6 +20,7 @@ pub enum Destination {
     Plot(Option<u64>),
     Filter,
     Bands,
+    Analysis,
 }
 
 #[derive(Clone, Copy)]

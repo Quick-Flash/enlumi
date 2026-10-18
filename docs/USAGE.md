@@ -230,3 +230,7 @@ handles change length; move handle or position input changes line's X/Y level.
 Click **▾ Legend** to minimize legend to its heading. Click **▸ Legend** to expand
 again. Plotted fields, geometry, and visibility remain unchanged. Each plot has
 its own collapsed state; line settings remain available while collapsed.
+
+## Frequency analysis
+
+Open **Analyze**, drag fields or whole profile views into inputs, choose FFT amplitude, Welch PSD, or FFT vs field heatmap, then **Run**. Expand profile views to drag individual members. Plot header **Analyze** seeds visible signals and current time range. See [frequency analysis](FREQUENCY_ANALYSIS.md) for scaling, sampling, units, and limits.

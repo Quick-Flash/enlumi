@@ -94,6 +94,17 @@ impl Workbench {
         }
     }
     pub fn field_drag_move(self, x: f32, y: f32) {
+        self.analysis.hover.set(
+            self.analysis.open.get_untracked()
+                && !self.filters_open.get_untracked()
+                && Self::inside(self.analysis.drop, x, y),
+        );
+        if self.analysis.hover.get_untracked() {
+            self.drop_target.set(None);
+            self.filter_drop_active.set(false);
+            self.bands.hover.set(false);
+            return;
+        }
         if self.drag.state.get_untracked().is_some_and(|drag| {
             crate::profile::identity::Drag::parse(&drag.0)
                 .is_some_and(|drag| !matches!(drag.item, crate::profile::identity::Item::Field(_)))
@@ -122,12 +133,35 @@ impl Workbench {
         self.drop_target.set(self.hit_plot(x, y));
     }
     pub fn finish_field_drag(self) {
+        self.analysis.hover.set(false);
         self.bands.hover.set(false);
         self.filter_drop_active.set(false);
         self.filter_input_ui.hover.set(None);
         self.drop_target.set(None);
     }
     pub fn drop_fields(self, source: String, x: f32, y: f32) {
+        if self.analysis.open.get_untracked()
+            && !self.filters_open.get_untracked()
+            && Self::inside(self.analysis.drop, x, y)
+        {
+            let sources = self.drag_fields(source);
+            if sources
+                .first()
+                .is_some_and(|source| source.starts_with("@profile/"))
+            {
+                self.use_profile_items(
+                    sources
+                        .iter()
+                        .filter_map(|source| crate::profile::identity::Drag::parse(source))
+                        .collect(),
+                    crate::profile_state::Destination::Analysis,
+                );
+            } else {
+                self.add_analysis_sources(sources);
+            }
+            self.finish_field_drag();
+            return;
+        }
         if let Some(drag) = crate::profile::identity::Drag::parse(&source) {
             use crate::profile_state::Destination;
             let field = matches!(drag.item, crate::profile::identity::Item::Field(_));
@@ -186,7 +220,7 @@ impl Workbench {
         }
         self.finish_field_drag();
     }
-    fn inside(node: NodeRef, x: f32, y: f32) -> bool {
+    pub(crate) fn inside(node: NodeRef, x: f32, y: f32) -> bool {
         let Some(bounds) = node.window_bounds() else {
             return false;
         };
