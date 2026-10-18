@@ -1,4 +1,4 @@
-use crate::profile::identity::{Item, ProfileKey};
+use crate::profile::identity::{Drag, Item, ProfileKey};
 use crate::profile_instance::AppliedProfile;
 use crate::{
     derived,
@@ -40,6 +40,8 @@ pub struct ProfileUi {
     pub auto_saving: RwSignal<bool, LocalStorage>,
     pub overrides: RwSignal<BTreeMap<String, Option<profile::Metadata>>, LocalStorage>,
     pub removal: RwSignal<Option<ProfileKey>, LocalStorage>,
+    pub rows: StoredValue<BTreeMap<u64, crate::profile_selection::ProfileSourceRow>, LocalStorage>,
+    pub pending_drop: StoredValue<Option<(Vec<Drag>, Destination)>, LocalStorage>,
     pending: StoredValue<Vec<PathBuf>, LocalStorage>,
     cancel: StoredValue<Option<Arc<AtomicBool>>, LocalStorage>,
 }
@@ -62,12 +64,15 @@ impl ProfileUi {
             auto_saving: RwSignal::new_local(false),
             overrides: RwSignal::new_local(BTreeMap::new()),
             removal: RwSignal::new_local(None),
+            rows: StoredValue::new_local(BTreeMap::new()),
+            pending_drop: StoredValue::new_local(None),
             pending: StoredValue::new_local(Vec::new()),
             cancel: StoredValue::new_local(None),
         }
     }
     pub fn cancel(self) {
         self.pending.set_value(Vec::new());
+        self.pending_drop.set_value(None);
         if let Some(cancel) = self.cancel.get_value() {
             cancel.store(true, Ordering::Relaxed);
         }
@@ -152,6 +157,10 @@ impl Workbench {
     }
 
     fn next_default_profile(self) {
+        self.resume_profile_drop();
+        if self.profiles.busy.get_untracked() {
+            return;
+        }
         let mut path = None;
         self.profiles
             .pending
@@ -228,8 +237,9 @@ impl Workbench {
                     self.place_prepared_item(key, item, target);
                 } else {
                     self.status
-                        .set("Profile ready; use Add or New panel".into());
+                        .set("Profile ready; drag outputs onto a plot".into());
                 }
+                self.next_default_profile();
                 return;
             }
             let mut ids = previous
@@ -433,6 +443,11 @@ impl Workbench {
 
     fn profile_failed(self, error: String) {
         if let Some(key) = self.profiles.loading_profile.get_untracked() {
+            self.profiles.pending_drop.update_value(|pending| {
+                if let Some((items, _)) = pending {
+                    items.retain(|drag| drag.profile != key);
+                }
+            });
             self.profiles.failures.update(|failures| {
                 failures.insert(key, error.clone());
             });

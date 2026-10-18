@@ -323,7 +323,7 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
             SidebarSearch(value = query, placeholder = "Search profiles, views and fields", label = "Search profiles") {
                 SidebarHelp(label = "Profile library details and help") {
                     text(class = "heading") { "Profile library" }
-            text(class = "muted") { "Drag outputs onto plots, or use Add / New. Auto uses local preferences." }
+            text(class = "muted") { "Ctrl-click toggles selection; Shift-click selects range. Drag selected outputs onto plots. Auto uses local preferences." }
             text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(String::new, |log| log.blackbox_headers.values().map(|header| header.firmware_revision.clone()).collect::<Vec<_>>().join(" · ")))}}
             text(class = "muted") {{move || workbench.profiles.directory.get().map_or_else(|| "Locating profile directory…".into(), |path| path.display().to_string())}}
                 }

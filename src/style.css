@@ -42,12 +42,13 @@
 .tree-name { flex: 1; min-width: 0; font-size: var(--app-font-sm); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tree-count { flex: none; padding: 0 4px; border-radius: var(--app-radius-sm); background: transparent; font-size: var(--app-font-tiny); color: var(--app-muted); }
 .field-leaf { flex: 1; min-width: 0; }
-.metric-option { display: flex; flex: 1; min-width: 0; align-items: center; height: 26px; padding: 2px 5px; gap: 5px; border: 1px solid transparent; border-radius: var(--app-radius-sm); cursor: grab; }
-.metric-option:hover { background: var(--app-hover); border-color: var(--app-border-strong); }
-.metric-option-selected { background: var(--app-selected); border-color: var(--app-accent); }
+.page .metric-option { display: flex; flex: 1; min-width: 0; align-items: center; height: 26px; padding: 2px 5px; gap: 5px; border: 1px solid transparent; border-radius: var(--app-radius-sm); color: var(--app-foreground); cursor: grab; }
+.page .metric-option:hover { background: var(--app-hover); border-color: var(--app-border-strong); }
+.page .metric-option.metric-option-selected { background: var(--app-selected); color: var(--app-selected-text); border-color: var(--app-accent); }
+.page .metric-option.metric-option-selected:hover { background: var(--app-selected-hover); }
 .metric-option:focus-visible { outline: 1px solid var(--app-focus); outline-offset: -1px; }
 .signal-name { flex: 1; min-width: 0; font-size: var(--app-font-sm); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.metric-option-count { flex: none; color: var(--app-muted); font-size: var(--app-font-tiny); }
+.page .metric-option-count { flex: none; color: var(--app-muted); font-size: var(--app-font-tiny); }
 .selected-field { flex: none; height: 30px; overflow: hidden; font-size: var(--app-font-xs); color: var(--app-muted); }
 .sidebar-grip { flex: none; width: 6px; cursor: ew-resize; background: var(--app-border); }
 .sidebar-grip:hover { background: var(--app-accent); }

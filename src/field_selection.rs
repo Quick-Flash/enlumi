@@ -3,6 +3,16 @@ use zgui::prelude::*;
 
 impl Workbench {
     pub fn select_field(self, source: String, ctrl: bool, shift: bool, visible: &[String]) {
+        let profile = source.starts_with("@profile/");
+        self.selected_fields
+            .update(|fields| fields.retain(|id| id.starts_with("@profile/") == profile));
+        if self
+            .selection_anchor
+            .get_untracked()
+            .is_some_and(|id| id.starts_with("@profile/") != profile)
+        {
+            self.selection_anchor.set(None);
+        }
         if shift {
             let anchor = self.selection_anchor.get_untracked();
             let range = anchor.as_ref().and_then(|anchor| {
@@ -59,13 +69,25 @@ impl Workbench {
         }
         self.finish_field_drag();
     }
-    fn drag_fields(self, source: String) -> Vec<String> {
+    pub(crate) fn drag_fields(self, source: String) -> Vec<String> {
         if self
             .selected_fields
             .with_untracked(|fields| fields.contains(&source))
         {
             let mut fields: Vec<_> = self.selected_fields.get_untracked().into_iter().collect();
-            fields.sort_by(|a, b| crate::field_tree::natural_cmp(a, b));
+            if source.starts_with("@profile/") {
+                let visible = self.visible_profile_sources();
+                fields.sort_by(|a, b| {
+                    visible
+                        .iter()
+                        .position(|id| id == a)
+                        .unwrap_or(usize::MAX)
+                        .cmp(&visible.iter().position(|id| id == b).unwrap_or(usize::MAX))
+                        .then_with(|| crate::field_tree::natural_cmp(a, b))
+                });
+            } else {
+                fields.sort_by(|a, b| crate::field_tree::natural_cmp(a, b));
+            }
             fields
         } else {
             vec![source]
@@ -124,7 +146,12 @@ impl Workbench {
                     .map(|pane| Destination::Plot(Some(pane)))
             };
             if let Some(target) = target {
-                self.use_profile_item(drag, target);
+                let items = self
+                    .drag_fields(source)
+                    .into_iter()
+                    .filter_map(|source| crate::profile::identity::Drag::parse(&source))
+                    .collect();
+                self.use_profile_items(items, target);
             }
             self.finish_field_drag();
             return;

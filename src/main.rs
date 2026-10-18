@@ -74,6 +74,7 @@ mod profile_output_row;
 mod profile_outputs;
 mod profile_placement;
 mod profile_preferences;
+mod profile_selection;
 mod profile_state;
 mod profile_view_source;
 mod script;

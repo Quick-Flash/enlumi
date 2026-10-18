@@ -17,7 +17,7 @@ No Betaflight alias table or motor pole-count default is built into Enlumi.
    profiles outside library directory. Existing work is preserved.
 3. Each profile expands into **Views**, **Fields**, and **Geometry**. Views start
    open; Fields/Geometry expand on demand. Search opens matching sections and
-   filters their rows. Drag outputs, or use inline **Add** / **New** (new plot).
+   filters their rows. Click highlights output; Ctrl-click toggles selection, and Shift-click selects range across expanded sections/profiles. Drag selected outputs onto plot to add them together. Create empty plot with plot-tab **+** first when needed.
    Field **⋯ → Use in filter** also accepts individual outputs; fields drag into
    filter inputs or state-band source area. Imports outside library appear under
    **Imported**. Existing plot contents remain; duplicate sources are skipped.

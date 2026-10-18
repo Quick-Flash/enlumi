@@ -3468,11 +3468,18 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     harness.settle(128);
     assert!(
         !harness.app().windows()[0]
-            .nodes_with_class("profile-view-new")
+            .nodes_with_class("profile-view-source")
             .is_empty(),
         "Expansion survives mode switch"
     );
-    click_class(&mut harness, "profile-view-new");
+    let profile_output = crate::profile::identity::Drag {
+        profile: crate::profile::identity::ProfileKey::new(path.canonicalize().unwrap(), 1),
+        item: crate::profile::identity::Item::View("ESC view".into()),
+    };
+    workbench.use_profile_items(
+        vec![profile_output.clone()],
+        crate::profile_state::Destination::Plot(None),
+    );
     let deadline = Instant::now() + Duration::from_secs(10);
     while workbench.profiles.busy.get_untracked() {
         assert!(
@@ -3493,7 +3500,10 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
     workbench.activate(1);
     for _ in 0..2 {
-        click_class(&mut harness, "profile-view-add");
+        workbench.use_profile_items(
+            vec![profile_output.clone()],
+            crate::profile_state::Destination::Plot(Some(1)),
+        );
         let deadline = Instant::now() + Duration::from_secs(10);
         while workbench.profiles.busy.get_untracked() {
             assert!(Instant::now() < deadline);

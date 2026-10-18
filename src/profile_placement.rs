@@ -11,9 +11,6 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet};
 use zgui::prelude::*;
 impl Workbench {
-    pub fn place_profile_item(self, drag: profile::identity::Drag, pane: Option<u64>) {
-        self.use_profile_item(drag, Destination::Plot(pane));
-    }
     pub fn use_profile_item(self, drag: profile::identity::Drag, target: Destination) {
         if self.profiles.busy.get_untracked()
             || self.loading.get_untracked()

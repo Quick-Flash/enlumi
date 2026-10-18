@@ -76,9 +76,7 @@ pub fn ProfileOutputRow(
     view! {
         column(class="profile-output") {
             row(class="profile-output-line") {
-                ProfileViewSource(workbench=workbench,source=Signal::derive_local(move ||drag.get().source()),name=name,count=count,enabled=available)
-                ActionButton(class="profile-view-add",disabled=disabled,a11y:label=format!("Add {} to active plot",label.get_value()),on:click=move |_|workbench.place_profile_item(drag.get_untracked(),Some(workbench.active.get_untracked()))) { "Add" }
-                ActionButton(class="profile-view-new",disabled=disabled,a11y:label=format!("Open {} in new plot",label.get_value()),on:click=move |_|workbench.place_profile_item(drag.get_untracked(),None)) { "New" }
+                ProfileViewSource(workbench=workbench,source=Signal::derive_local(move ||drag.get().source()),name=name,count=count,enabled=Signal::derive_local(move || !disabled.get()))
                 if move ||matches!(drag.get().item,Item::Field(_)) {
                     Popover(open=more) {
                         PopoverTrigger(class="app-action profile-output-more",size=ButtonSize::IconXs,variant=ButtonVariant::Ghost,a11y:label=format!("Actions for {}",label.get_value())) { "⋯" }
