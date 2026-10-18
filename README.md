@@ -172,9 +172,10 @@ See [compiler packaging](docs/RUST_FILTERS.md#build-portable-distribution).
 
 [Nightly downloads](https://github.com/Quick-Flash/enlumi/releases) include Windows
 x86_64, Linux x86_64, macOS Apple Silicon, and macOS Intel portable bundles.
-Workflow builds after each PR merges into default branch, or manually through
+Workflow runs after every commit reaches `master`, or manually through
 Actions → Nightly releases. Closed, unmerged PRs do not build releases.
-All four builds must pass packaging/compiler checks before prerelease publishes.
+All four builds must pass tests and packaging/compiler checks before prerelease
+publishes, so a new download appears after CI finishes.
 Downloads include offline compiler, profiles, and SHA-256 checksums. Extract whole
 archive. Builds are unsigned; macOS builds are not notarized.
 Automation starts after workflow reaches default branch. Failed builds leave previous
@@ -184,7 +185,7 @@ releases available. Nightlies use project's pinned Rust toolchain.
 
 Open **Updates** in toolbar and select **Enable nightly updates**.
 Opt-in persists locally; disabled by default. Enlumi checks GitHub's `master` tip
-once at startup when enabled. Enabling takes effect on next startup. Changed revision
+once at startup when enabled. Enabling takes effect on next startup. A newer commit
 shows dismissible banner with commit and download links. Dismissed revisions stay
 quiet across restarts; later revisions show new notice. Multiple pushes between
 startups appear as one notice. New code may precede completed nightly download.
