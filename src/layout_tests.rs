@@ -4294,7 +4294,7 @@ fn mapping_builder_adds_custom_values_reports_duplicates_and_removes_rows() {
         1
     );
     click_class(&mut harness, "band-rule-value");
-    for (text, modifiers) in [("a", Modifiers::CONTROL), ("-2", Modifiers::NONE)] {
+    for (text, modifiers) in [("a", Modifiers::PRIMARY), ("-2", Modifiers::NONE)] {
         harness.deliver_to_first(SurfaceEvent::Key {
             state: zgui::vocab::KeyState::Pressed,
             event: zgui::vocab::KeyEvent::character(text),
