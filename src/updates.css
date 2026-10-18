@@ -1,0 +1,6 @@
+.updates-menu { width: 340px; max-width: 90vw; padding: 12px; gap: 10px; background: var(--app-surface); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); }
+.updates-option, .updates-actions { gap: 8px; align-items: center; }
+.updates-option label { font-size: var(--app-font-sm); }
+.updates-status { font-size: var(--app-font-sm); color: var(--app-foreground); }
+.update-notice { flex: none; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 12px; background: var(--app-surface); border-bottom: 1px solid var(--app-accent); color: var(--app-accent-text); font-size: var(--app-font-sm); }
+.update-notice text { flex: 1; }

@@ -26,6 +26,7 @@ pub fn ParameterDetails(workbench: Workbench) -> impl IntoView {
                     let element = id.split('/').nth(3).map_or_else(String::new, |i| format!(" · element {i}"));
                     format!("{}{element} · {}", setting.kind, if number.is_some() { "numeric constant" } else { "recorded text" })
                 })}}
+                text(class="muted") {{move ||parameter.get().map(|(_,s,_)|s.timing()).unwrap_or_default()}}
                 Textarea(class = "parameter-value", read_only = true, label = "Recorded parameter value",
                     value = Binding::controlled(Signal::derive_local(move || parameter.get().map_or_else(String::new, |(id, setting, number)| {
                         if id.split('/').nth(3).is_some() { number.map_or(setting.value, |value| value.to_string()) } else { setting.value }

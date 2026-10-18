@@ -23,9 +23,10 @@ absent from log cannot be reconstructed.
 **Profiles → Folder…** chooses saved library directory. Nested folders and
 auto firmware matching use same location. **Profiles** in sidebar heading opens folder tree of JSON setups for named fields, filters,
 geometry and time bands. Expand a profile and drag a view onto any plot; profile loads on demand. Missing
-fields skip affected outputs while remaining view works. Each loaded view also
-offers **New panel** or **Add to active**. **Auto** enables firmware-matched
-loading next time a log opens. Double-click tab title (or focus it and press F2) to rename in place. See [profile setup and format](PROFILES.md).
+fields skip affected outputs while remaining view works. Views, fields and geometry offer **Add** / **New panel**; fields also offer
+**Filter**. **Reload** updates owned outputs without resetting log; **Remove…**
+previews affected outputs and dependencies. **Auto** saves local firmware-matching
+preference without editing recipe. Select flight for multi-flight files. Double-click tab title (or focus it and press F2) to rename in place. See [profile setup and format](PROFILES.md).
 
 Raw field selected: **Labels…** edits display name, axis/component, and unit.
 Reusable group labels live in profiles; source IDs stay unchanged.
@@ -118,8 +119,8 @@ Legend gear opens line settings. Click selects one line; Ctrl-click toggles line
 
 ## Themes
 
-Choose theme from dropdown beside FPS counter: **Forest** (green, soft corners),
-**Slate** (blue-gray, sharp), **Ember** (red, crisp), **Amethyst** (purple, rounded),
+Choose theme from dropdown beside FPS counter: **Slate** (default; blue-gray, sharp),
+**Forest** (green, soft corners), **Ember** (red, crisp), **Amethyst** (purple, rounded),
 or **Dune** (warm amber, gently rounded). Palette
 updates toolbar, Fields, Filters, code editor surfaces, and plot chrome together.
 Switching preserves open plots, selection, and filter draft. Theme choice is saved automatically across launches; line colors remain unchanged.
@@ -139,7 +140,7 @@ No plots, log paths, scripts, or filter drafts are restored across launches.
 **Line**, then drag inside plot. Shapes use data coordinates: pan/zoom changes
 view, while bounds stay anchored. Geometry does not change automatic axis fitting.
 
-Each plot's legend includes its geometry, even when plot contains no signals.
+Each plot's legend includes its geometry, even when plot contains no signals. Drag fields, geometry, and time bands into any legend position; Up/Down reorders focused entries. Geometry order controls overlapping shapes and band label rows. State bands list their named state colors beneath legend entry. Mixed unit labels and **Separate plots** live under **Units** in plot header.
 Click geometry name to show/hide that plot's copy. Pencil opens live editor;
 **X** removes geometry from that plot while preserving saved definition.
 

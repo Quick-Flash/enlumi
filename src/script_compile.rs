@@ -48,8 +48,7 @@ pub fn compile(source: &str, cancel: &AtomicBool) -> Result<Module, String> {
     std::fs::write(path.join("wrapper.rs"), include_str!("script_guest.rs.txt"))
         .map_err(|e| e.to_string())?;
     let diagnostics = path.join("diagnostics.txt");
-    let mut command =
-        Command::new(std::env::var_os("ENLUMI_RUSTC").unwrap_or_else(|| "rustc".into()));
+    let mut command = compiler()?;
     command
         .arg(path.join("wrapper.rs"))
         .args([
@@ -77,7 +76,7 @@ pub fn compile(source: &str, cancel: &AtomicBool) -> Result<Module, String> {
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     let mut child = command.spawn().map_err(|e| format!(
-        "Cannot start Rust compiler: {e}. Install Rust and run `rustup target add wasm32-unknown-unknown`, or set ENLUMI_RUSTC."
+        "Cannot start Rust compiler: {e}. Use Enlumi portable bundle (including rust-toolchain), or set ENLUMI_RUSTC to a compiler with wasm32-unknown-unknown installed."
     ))?;
     let started = Instant::now();
     let status = loop {
@@ -126,5 +125,32 @@ pub fn check_cancel(cancel: &AtomicBool) -> Result<(), String> {
         Err("Filter run cancelled".into())
     } else {
         Ok(())
+    }
+}
+
+// Explicit override wins; portable releases never depend on rustup or PATH.
+fn compiler() -> Result<Command, String> {
+    if let Some(path) = std::env::var_os("ENLUMI_RUSTC") {
+        return Ok(Command::new(path));
+    }
+    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    let root = executable
+        .parent()
+        .ok_or("Cannot locate Enlumi directory")?
+        .join("rust-toolchain");
+    if root.exists() {
+        let rustc = root
+            .join("bin")
+            .join(format!("rustc{}", std::env::consts::EXE_SUFFIX));
+        if !rustc.is_file() || !root.join("lib/rustlib/wasm32-unknown-unknown/lib").is_dir() {
+            return Err("Bundled Rust compiler is incomplete. Extract entire Enlumi portable bundle, including rust-toolchain.".into());
+        }
+        let mut command = Command::new(rustc);
+        #[cfg(target_os = "macos")]
+        command.env("DYLD_LIBRARY_PATH", root.join("lib"));
+        command.arg("--sysroot").arg(root);
+        Ok(command)
+    } else {
+        Ok(Command::new("rustc"))
     }
 }

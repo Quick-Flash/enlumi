@@ -8,12 +8,18 @@
 .plot-page { flex: 1; min-width: 0; min-height: 0; }
 .browser { flex: none; min-width: 0; min-height: 0; overflow: hidden; }
 .signal-sidebar { flex: 1; min-width: 0; min-height: 0; overflow: hidden; gap: 6px; padding: 8px; background: var(--app-surface); }
-.field-search.zui-input-group { box-sizing: border-box; height: var(--app-control-height); min-height: var(--app-control-height); }
+.sidebar-search-row { flex: none; min-width: 0; gap: 4px; align-items: center; }
+.field-search.zui-input-group { flex: 1; width: 0; min-width: 0; box-sizing: border-box; height: var(--app-control-height); min-height: var(--app-control-height); flex-wrap: nowrap; }
 .field-search .zui-field.zui-input-group__field { box-sizing: border-box; height: calc(var(--app-control-height) - 2px); padding: 2px 6px; font-size: var(--app-font-sm); }
-.field-search .zui-input-group__addon { padding-top: 0; padding-bottom: 0; }
-.field-search .zui-input-group__button { height: calc(var(--app-control-height) - 2px); min-height: 0; }
-.field-search .zui-input-group__addon[data-align="inline-end"] { align-self: stretch; padding-block: 0; cursor: pointer; }
-.field-search .zui-input-group__button { cursor: pointer; }
+.field-search .zui-input-group__addon[data-align="inline-end"] { flex: none; align-self: stretch; padding: 0 2px; }
+.field-search .zui-input-group__addon[data-align="inline-end"] > .zui-input-group__button { flex: none; width: 20px; min-width: 20px; height: 20px; min-height: 20px; margin: 0; padding: 0; cursor: pointer; }
+.search-clear-icon { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: var(--app-muted); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.page .sidebar-help.zui-button { flex: none; width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 3px; background: transparent; border: none; color: var(--app-muted); box-shadow: none; cursor: pointer; }
+.page .sidebar-help.zui-button:hover, .page .sidebar-help.zui-button:active { background: transparent; color: var(--app-foreground); }
+.sidebar-help:hover .sidebar-info-icon { --zgui-stroke: var(--app-foreground); }
+.page .sidebar-help.zui-button:focus-visible { outline: 1px solid var(--app-focus); outline-offset: -1px; }
+.sidebar-info-icon { flex: none; width: 16px; height: 16px; color: transparent; --zgui-stroke: var(--app-muted); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.sidebar-help-content { width: 320px; max-width: 90vw; gap: 6px; }
 .browser-heading .heading { flex: 1; }
 .toolbar .zui-button, .browser-heading .zui-button { transition: none; }
 .browser-heading .zui-button { flex: none; padding: 3px 5px; }
@@ -272,7 +278,7 @@
 .geometry-editor-footer > text { flex: 1; }
 .geometry-legend { gap: 0; }
 .geometry-legend-editing { box-shadow: inset 2px 0 0 0 var(--app-accent); }
-.workbench-legend .geometry-legend-toggle { cursor: pointer; }
+.workbench-legend .geometry-legend-toggle { cursor: grab; }
 .workbench-legend .geometry-legend-edit.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"], .workbench-legend .geometry-legend-remove.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"] { height: 18px; min-height: 18px; width: 18px; min-width: 18px; padding: 1px; border: none; background: transparent; color: var(--app-muted); }
 .workbench-legend .geometry-legend-edit.app-action:hover { background: var(--app-hover); color: var(--app-foreground); }
 .workbench-legend .geometry-legend-remove.app-action:hover { background: var(--app-danger); color: var(--app-danger-text); }
@@ -329,3 +335,9 @@
 .field-label-editor > row { gap: 6px; }
 .selected-field-row { flex: none; min-height: 28px; align-items: center; gap: 4px; }
 .selected-field-row .selected-field { flex: 1; height: auto; min-width: 0; max-height: 32px; }
+
+.github-logo { width: 16px; height: 16px; color: var(--app-foreground); pointer-events: none; }
+
+.geometry-state-colors { padding-left: 12px; gap: 2px 8px; flex-wrap: wrap; max-width: 300px; max-height: 80px; overflow-y: auto; }
+.geometry-state-colors.geometry-legend-hidden { opacity: 0.4; }
+.geometry-state-colors text { font-size: var(--app-font-sm); }

@@ -1,3 +1,5 @@
+mod bundle;
+
 use std::{
     env,
     io::{self, Write},
@@ -38,6 +40,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
         ),
         "build" => cargo(&["build", "--locked", "--workspace"], args),
         "build-release" => cargo(&["build", "--locked", "--release", "--workspace"], args),
+        "bundle" if args.is_empty() => bundle::build(),
         "test" => cargo(&["test", "--locked", "--workspace"], args),
         "check" => cargo(&["check", "--locked", "--workspace"], args),
         "pre-commit" if args.is_empty() => {
@@ -59,7 +62,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
         }
         "help" | "-h" | "--help" => {
             println!(
-                "cargo xtask [run-gui | run-gui-release | build | build-release | test | check | pre-commit]"
+                "cargo xtask [run-gui | run-gui-release | build | build-release | bundle | test | check | pre-commit]"
             );
             println!("No command: interactive menu. GUI commands accept log path after --.");
             Ok(())
@@ -94,6 +97,7 @@ fn menu() -> Result<(), String> {
         "run-gui-release",
         "build",
         "build-release",
+        "bundle",
         "test",
         "check",
         "pre-commit",

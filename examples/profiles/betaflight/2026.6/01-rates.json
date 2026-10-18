@@ -1,0 +1,971 @@
+{
+  "version": 1,
+  "name": "Betaflight 2026.6 \u00b7 Rates, PID and RC",
+  "auto_apply": false,
+  "requires_settings": [
+    {
+      "setting": {
+        "name": "Firmware revision"
+      },
+      "starts_with": "Betaflight 2026.6."
+    },
+    {
+      "setting": {
+        "name": "blackbox_high_resolution"
+      },
+      "equals": "0"
+    }
+  ],
+  "signals": [
+    {
+      "id": "roll_gyro",
+      "source": "blackbox/1/gyroADC[0]",
+      "metadata": {
+        "name": "Roll Gyro",
+        "unit": "deg/s",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "roll_setpoint",
+      "source": "blackbox/1/setpoint[0]",
+      "metadata": {
+        "name": "Roll Rate setpoint",
+        "unit": "deg/s",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "roll_p",
+      "source": "blackbox/1/axisP[0]",
+      "metadata": {
+        "name": "Roll P term",
+        "unit": "0.1 %",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "roll_i",
+      "source": "blackbox/1/axisI[0]",
+      "metadata": {
+        "name": "Roll I term",
+        "unit": "0.1 %",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "roll_d",
+      "source": "blackbox/1/axisD[0]",
+      "metadata": {
+        "name": "Roll D term",
+        "unit": "0.1 %",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "pitch_gyro",
+      "source": "blackbox/1/gyroADC[1]",
+      "metadata": {
+        "name": "Pitch Gyro",
+        "unit": "deg/s",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "pitch_setpoint",
+      "source": "blackbox/1/setpoint[1]",
+      "metadata": {
+        "name": "Pitch Rate setpoint",
+        "unit": "deg/s",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "pitch_p",
+      "source": "blackbox/1/axisP[1]",
+      "metadata": {
+        "name": "Pitch P term",
+        "unit": "0.1 %",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "pitch_i",
+      "source": "blackbox/1/axisI[1]",
+      "metadata": {
+        "name": "Pitch I term",
+        "unit": "0.1 %",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "pitch_d",
+      "source": "blackbox/1/axisD[1]",
+      "metadata": {
+        "name": "Pitch D term",
+        "unit": "0.1 %",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "yaw_gyro",
+      "source": "blackbox/1/gyroADC[2]",
+      "metadata": {
+        "name": "Yaw Gyro",
+        "unit": "deg/s",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "yaw_setpoint",
+      "source": "blackbox/1/setpoint[2]",
+      "metadata": {
+        "name": "Yaw Rate setpoint",
+        "unit": "deg/s",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "yaw_p",
+      "source": "blackbox/1/axisP[2]",
+      "metadata": {
+        "name": "Yaw P term",
+        "unit": "0.1 %",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "yaw_i",
+      "source": "blackbox/1/axisI[2]",
+      "metadata": {
+        "name": "Yaw I term",
+        "unit": "0.1 %",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "yaw_d",
+      "source": "blackbox/1/axisD[2]",
+      "metadata": {
+        "name": "Yaw D term",
+        "unit": "0.1 %",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "roll_unfiltered_raw",
+      "source": "blackbox/1/gyroUnfilt[0]",
+      "metadata": {
+        "name": "Roll Unfiltered gyro",
+        "unit": "deg/s",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "roll_f",
+      "source": "blackbox/1/axisF[0]",
+      "metadata": {
+        "name": "Roll Feedforward term",
+        "unit": "0.1 %",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "roll_s",
+      "source": "blackbox/1/axisS[0]",
+      "metadata": {
+        "name": "Roll S term",
+        "unit": "0.1 %",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "roll_rc_raw",
+      "source": "blackbox/1/rcCommand[0]",
+      "metadata": {
+        "name": "Roll RC command raw",
+        "unit": "us offset",
+        "axis": "Roll"
+      }
+    },
+    {
+      "id": "pitch_unfiltered_raw",
+      "source": "blackbox/1/gyroUnfilt[1]",
+      "metadata": {
+        "name": "Pitch Unfiltered gyro",
+        "unit": "deg/s",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "pitch_f",
+      "source": "blackbox/1/axisF[1]",
+      "metadata": {
+        "name": "Pitch Feedforward term",
+        "unit": "0.1 %",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "pitch_s",
+      "source": "blackbox/1/axisS[1]",
+      "metadata": {
+        "name": "Pitch S term",
+        "unit": "0.1 %",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "pitch_rc_raw",
+      "source": "blackbox/1/rcCommand[1]",
+      "metadata": {
+        "name": "Pitch RC command raw",
+        "unit": "us offset",
+        "axis": "Pitch"
+      }
+    },
+    {
+      "id": "yaw_unfiltered_raw",
+      "source": "blackbox/1/gyroUnfilt[2]",
+      "metadata": {
+        "name": "Yaw Unfiltered gyro",
+        "unit": "deg/s",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "yaw_f",
+      "source": "blackbox/1/axisF[2]",
+      "metadata": {
+        "name": "Yaw Feedforward term",
+        "unit": "0.1 %",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "yaw_s",
+      "source": "blackbox/1/axisS[2]",
+      "metadata": {
+        "name": "Yaw S term",
+        "unit": "0.1 %",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "yaw_rc_raw",
+      "source": "blackbox/1/rcCommand[2]",
+      "metadata": {
+        "name": "Yaw RC command raw",
+        "unit": "us offset",
+        "axis": "Yaw"
+      }
+    },
+    {
+      "id": "rc_throttle_raw",
+      "source": "blackbox/1/rcCommand[3]",
+      "metadata": {
+        "name": "Throttle RC command raw",
+        "unit": "us",
+        "axis": "Throttle"
+      }
+    },
+    {
+      "id": "mixer_throttle_raw",
+      "source": "blackbox/1/setpoint[3]",
+      "metadata": {
+        "name": "Mixer throttle raw",
+        "unit": "0.1 %",
+        "axis": "Throttle"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "roll_tracking_error",
+      "inputs": [
+        "$roll_setpoint",
+        "$roll_gyro"
+      ],
+      "metadata": {
+        "name": "Explorer Roll tracking error",
+        "unit": "deg/s",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "difference.rs"
+      }
+    },
+    {
+      "id": "roll_p_percent",
+      "inputs": [
+        "$roll_p"
+      ],
+      "metadata": {
+        "name": "Explorer Roll P contribution",
+        "unit": "%",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "roll_i_percent",
+      "inputs": [
+        "$roll_i"
+      ],
+      "metadata": {
+        "name": "Explorer Roll I contribution",
+        "unit": "%",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "roll_d_percent",
+      "inputs": [
+        "$roll_d"
+      ],
+      "metadata": {
+        "name": "Explorer Roll D contribution",
+        "unit": "%",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "roll_f_percent",
+      "inputs": [
+        "$roll_f"
+      ],
+      "metadata": {
+        "name": "Explorer Roll F contribution",
+        "unit": "%",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "roll_s_percent",
+      "inputs": [
+        "$roll_s"
+      ],
+      "metadata": {
+        "name": "Explorer Roll S contribution",
+        "unit": "%",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "roll_pid_sum",
+      "inputs": [
+        "$roll_p_percent",
+        "$roll_i_percent",
+        "$roll_d_percent",
+        "$roll_f_percent"
+      ],
+      "metadata": {
+        "name": "Explorer Roll P+I+D+F sum",
+        "unit": "%",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "sum.rs"
+      }
+    },
+    {
+      "id": "roll_rc_us",
+      "inputs": [
+        "$roll_rc_raw"
+      ],
+      "metadata": {
+        "name": "Explorer Roll RC command",
+        "unit": "us",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 1,
+        "offset": 1500
+      }
+    },
+    {
+      "id": "pitch_tracking_error",
+      "inputs": [
+        "$pitch_setpoint",
+        "$pitch_gyro"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch tracking error",
+        "unit": "deg/s",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "difference.rs"
+      }
+    },
+    {
+      "id": "pitch_p_percent",
+      "inputs": [
+        "$pitch_p"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch P contribution",
+        "unit": "%",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "pitch_i_percent",
+      "inputs": [
+        "$pitch_i"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch I contribution",
+        "unit": "%",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "pitch_d_percent",
+      "inputs": [
+        "$pitch_d"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch D contribution",
+        "unit": "%",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "pitch_f_percent",
+      "inputs": [
+        "$pitch_f"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch F contribution",
+        "unit": "%",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "pitch_s_percent",
+      "inputs": [
+        "$pitch_s"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch S contribution",
+        "unit": "%",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "pitch_pid_sum",
+      "inputs": [
+        "$pitch_p_percent",
+        "$pitch_i_percent",
+        "$pitch_d_percent",
+        "$pitch_f_percent"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch P+I+D+F sum",
+        "unit": "%",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "sum.rs"
+      }
+    },
+    {
+      "id": "pitch_rc_us",
+      "inputs": [
+        "$pitch_rc_raw"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch RC command",
+        "unit": "us",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 1,
+        "offset": 1500
+      }
+    },
+    {
+      "id": "yaw_tracking_error",
+      "inputs": [
+        "$yaw_setpoint",
+        "$yaw_gyro"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw tracking error",
+        "unit": "deg/s",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "difference.rs"
+      }
+    },
+    {
+      "id": "yaw_p_percent",
+      "inputs": [
+        "$yaw_p"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw P contribution",
+        "unit": "%",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "yaw_i_percent",
+      "inputs": [
+        "$yaw_i"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw I contribution",
+        "unit": "%",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "yaw_d_percent",
+      "inputs": [
+        "$yaw_d"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw D contribution",
+        "unit": "%",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "yaw_f_percent",
+      "inputs": [
+        "$yaw_f"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw F contribution",
+        "unit": "%",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "yaw_s_percent",
+      "inputs": [
+        "$yaw_s"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw S contribution",
+        "unit": "%",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "yaw_pid_sum",
+      "inputs": [
+        "$yaw_p_percent",
+        "$yaw_i_percent",
+        "$yaw_d_percent",
+        "$yaw_f_percent"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw P+I+D+F sum",
+        "unit": "%",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "sum.rs"
+      }
+    },
+    {
+      "id": "yaw_rc_us",
+      "inputs": [
+        "$yaw_rc_raw"
+      ],
+      "metadata": {
+        "name": "Explorer Yaw RC command",
+        "unit": "us",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 1,
+        "offset": 1500
+      }
+    },
+    {
+      "id": "rc_throttle_us",
+      "inputs": [
+        "$rc_throttle_raw"
+      ],
+      "metadata": {
+        "name": "Explorer throttle RC command",
+        "unit": "us",
+        "axis": "Throttle"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 1,
+        "offset": 0
+      }
+    },
+    {
+      "id": "mixer_throttle_percent",
+      "inputs": [
+        "$mixer_throttle_raw"
+      ],
+      "metadata": {
+        "name": "Explorer mixer throttle",
+        "unit": "%",
+        "axis": "Throttle"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.1,
+        "offset": 0
+      }
+    }
+  ],
+  "geometry": [],
+  "views": [
+    {
+      "name": "Roll rate tracking",
+      "fields": [
+        "$roll_gyro",
+        "$roll_setpoint",
+        "$roll_tracking_error"
+      ]
+    },
+    {
+      "name": "Roll PID contributions (%)",
+      "fields": [
+        "$roll_p_percent",
+        "$roll_i_percent",
+        "$roll_d_percent",
+        "$roll_f_percent",
+        "$roll_s_percent"
+      ]
+    },
+    {
+      "name": "Roll gyro filtering",
+      "fields": [
+        "$roll_unfiltered_raw",
+        "$roll_gyro"
+      ]
+    },
+    {
+      "name": "Roll gyro + PID (mixed units)",
+      "fields": [
+        "$roll_gyro",
+        "$roll_p_percent",
+        "$roll_i_percent",
+        "$roll_d_percent",
+        "$roll_f_percent"
+      ]
+    },
+    {
+      "name": "Pitch rate tracking",
+      "fields": [
+        "$pitch_gyro",
+        "$pitch_setpoint",
+        "$pitch_tracking_error"
+      ]
+    },
+    {
+      "name": "Pitch PID contributions (%)",
+      "fields": [
+        "$pitch_p_percent",
+        "$pitch_i_percent",
+        "$pitch_d_percent",
+        "$pitch_f_percent",
+        "$pitch_s_percent"
+      ]
+    },
+    {
+      "name": "Pitch gyro filtering",
+      "fields": [
+        "$pitch_unfiltered_raw",
+        "$pitch_gyro"
+      ]
+    },
+    {
+      "name": "Pitch gyro + PID (mixed units)",
+      "fields": [
+        "$pitch_gyro",
+        "$pitch_p_percent",
+        "$pitch_i_percent",
+        "$pitch_d_percent",
+        "$pitch_f_percent"
+      ]
+    },
+    {
+      "name": "Yaw rate tracking",
+      "fields": [
+        "$yaw_gyro",
+        "$yaw_setpoint",
+        "$yaw_tracking_error"
+      ]
+    },
+    {
+      "name": "Yaw PID contributions (%)",
+      "fields": [
+        "$yaw_p_percent",
+        "$yaw_i_percent",
+        "$yaw_d_percent",
+        "$yaw_f_percent",
+        "$yaw_s_percent"
+      ]
+    },
+    {
+      "name": "Yaw gyro filtering",
+      "fields": [
+        "$yaw_unfiltered_raw",
+        "$yaw_gyro"
+      ]
+    },
+    {
+      "name": "Yaw gyro + PID (mixed units)",
+      "fields": [
+        "$yaw_gyro",
+        "$yaw_p_percent",
+        "$yaw_i_percent",
+        "$yaw_d_percent",
+        "$yaw_f_percent"
+      ]
+    },
+    {
+      "name": "Gyros",
+      "fields": [
+        "$roll_gyro",
+        "$pitch_gyro",
+        "$yaw_gyro"
+      ]
+    },
+    {
+      "name": "Unfiltered gyros",
+      "fields": [
+        "$roll_unfiltered_raw",
+        "$pitch_unfiltered_raw",
+        "$yaw_unfiltered_raw"
+      ]
+    },
+    {
+      "name": "Rate setpoints",
+      "fields": [
+        "$roll_setpoint",
+        "$pitch_setpoint",
+        "$yaw_setpoint"
+      ]
+    },
+    {
+      "name": "PID tracking error",
+      "fields": [
+        "$roll_tracking_error",
+        "$pitch_tracking_error",
+        "$yaw_tracking_error"
+      ]
+    },
+    {
+      "name": "P terms (%)",
+      "fields": [
+        "$roll_p_percent",
+        "$pitch_p_percent",
+        "$yaw_p_percent"
+      ]
+    },
+    {
+      "name": "I terms (%)",
+      "fields": [
+        "$roll_i_percent",
+        "$pitch_i_percent",
+        "$yaw_i_percent"
+      ]
+    },
+    {
+      "name": "D terms (%)",
+      "fields": [
+        "$roll_d_percent",
+        "$pitch_d_percent",
+        "$yaw_d_percent"
+      ]
+    },
+    {
+      "name": "Feedforward (%)",
+      "fields": [
+        "$roll_f_percent",
+        "$pitch_f_percent",
+        "$yaw_f_percent"
+      ]
+    },
+    {
+      "name": "S terms (%)",
+      "fields": [
+        "$roll_s_percent",
+        "$pitch_s_percent",
+        "$yaw_s_percent"
+      ]
+    },
+    {
+      "name": "PID sums \u00b7 complete P+I+D+F (%)",
+      "fields": [
+        "$roll_pid_sum",
+        "$pitch_pid_sum",
+        "$yaw_pid_sum"
+      ]
+    },
+    {
+      "name": "RC commands (us)",
+      "fields": [
+        "$roll_rc_us",
+        "$pitch_rc_us",
+        "$yaw_rc_us",
+        "$rc_throttle_us"
+      ]
+    },
+    {
+      "name": "Mixer throttle (%)",
+      "fields": [
+        "$mixer_throttle_percent"
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "source": "blackbox/1/gyroADC",
+      "name": "Gyroscope",
+      "unit": "deg/s",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/setpoint",
+      "name": "Rate setpoint",
+      "unit": "deg/s",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/axisP",
+      "name": "P term",
+      "unit": "",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/axisI",
+      "name": "I term",
+      "unit": "",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/axisD",
+      "name": "D term",
+      "unit": "",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    },
+    {
+      "source": "blackbox/1/gyroUnfilt",
+      "name": "Unfiltered gyroscope",
+      "unit": "deg/s",
+      "components": {
+        "[0]": "Roll",
+        "[1]": "Pitch",
+        "[2]": "Yaw"
+      }
+    }
+  ]
+}

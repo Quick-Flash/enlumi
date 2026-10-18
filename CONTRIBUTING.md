@@ -68,5 +68,5 @@ source and license notes.
 
 Follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Unless explicitly stated
 otherwise, contributions submitted for inclusion are available under
-`MIT OR BSD-3-Clause`, without additional terms. Third-party material retains
+[AGPL-3.0-or-later](LICENSE), without additional terms. Third-party material retains
 its original license and attribution.

@@ -1,4 +1,4 @@
-//! Persist only palette ID. Plots, log paths, scripts, and drafts remain session-only.
+//! Palette persistence and platform configuration directory.
 use crate::theme::Palette;
 use std::{
     io::{self, Write},
@@ -71,7 +71,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config/theme");
         let preferences = ThemePreference(Some(path.clone()));
-        assert_eq!(preferences.load(), Palette::Forest);
+        assert_eq!(preferences.load(), Palette::Slate);
         for palette in Palette::ALL {
             preferences.save(palette).unwrap();
             assert_eq!(ThemePreference(Some(path.clone())).load(), palette);
@@ -85,6 +85,6 @@ mod tests {
             1
         );
         std::fs::write(path, "unknown-theme").unwrap();
-        assert_eq!(preferences.load(), Palette::Forest);
+        assert_eq!(preferences.load(), Palette::Slate);
     }
 }

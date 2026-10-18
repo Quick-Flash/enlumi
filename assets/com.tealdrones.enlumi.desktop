@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enlumi
+Comment=Time-series log workbench
+Exec=enlumi %f
+Icon=com.tealdrones.enlumi
+Terminal=false
+Categories=Science;Utility;
+StartupWMClass=com.tealdrones.enlumi

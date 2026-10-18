@@ -6,16 +6,16 @@ use zgui_ui_tokens::prelude::*;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Palette {
     #[default]
-    Forest,
     Slate,
+    Forest,
     Ember,
     Amethyst,
     Dune,
 }
 impl Palette {
     pub const ALL: [Self; 5] = [
-        Self::Forest,
         Self::Slate,
+        Self::Forest,
         Self::Ember,
         Self::Amethyst,
         Self::Dune,
@@ -59,7 +59,7 @@ pub fn stylesheet() -> String {
     format!(
         ":root {{ {} {} }}\n{}\n{}",
         include_str!("themes/common.css"),
-        Palette::Forest.declarations(),
+        Palette::default().declarations(),
         include_str!("style.css"),
         include_str!("plot_theme.css")
     )

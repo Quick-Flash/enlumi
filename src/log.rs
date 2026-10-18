@@ -24,6 +24,18 @@ pub struct LogSetting {
 }
 
 impl LogSetting {
+    pub fn timing(&self) -> &'static str {
+        if self.kind.starts_with("Parameter change") {
+            "Change record · timestamp unavailable · selected snapshot, not flight history"
+        } else if self.kind.starts_with("Initial parameter") {
+            "Initial value · log start"
+        } else if self.kind.starts_with("Default") {
+            "Default value · not an observed change"
+        } else {
+            "Recorded header · flight snapshot"
+        }
+    }
+
     pub fn decoder_header(&self) -> bool {
         self.kind == "Header"
             && (self.name.starts_with("Field ")
@@ -258,6 +270,19 @@ impl LogStore {
         if self.blackbox_headers.is_empty() {
             return self.duration;
         }
+        if let Some(flight) = id
+            .strip_prefix("@setting/")
+            .and_then(|id| id.split('/').next())
+        {
+            let prefix = format!("blackbox/{flight}/");
+            return self
+                .signals
+                .iter()
+                .filter(|(id, _)| id.starts_with(&prefix))
+                .filter_map(|(_, raw)| raw.timestamps.last())
+                .max()
+                .map_or(0., |timestamp| relative_seconds(*timestamp, self.origin));
+        }
         self.signals
             .get(id)
             .and_then(|raw| raw.timestamps.last())
@@ -272,11 +297,9 @@ impl LogStore {
                 .setting_number(id)
                 .ok_or("Parameter needs a finite scalar or array element")?;
             let mut points = vec![PlotPoint { x: 0.0, y }];
-            if self.duration > 0.0 {
-                points.push(PlotPoint {
-                    x: self.duration,
-                    y,
-                });
+            let duration = self.duration_for(id);
+            if duration > 0.0 {
+                points.push(PlotPoint { x: duration, y });
             }
             return SeriesData::new(points);
         }

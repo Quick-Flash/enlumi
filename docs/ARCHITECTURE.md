@@ -41,10 +41,13 @@ plot-facing view without giving plotting code access to decoded log state.
 `profile` defines the versioned JSON schema and local directory discovery;
 `profile::resolve` binds raw fields, settings, scalar ratios and existing filter
 operations. `profile::prepare` validates and computes an owned candidate off the
-UI thread. `profile_state` checks for concurrent conflicts before adding its
-fields, metadata and geometry. Log generation and cancellation discard stale
-work. Prepared view templates are registered separately; placing a view resolves
-current derived results and validates geometry before touching a target pane.
+UI thread. `profile_state` stages loads/reloads; `profile_commit` validates conflicts
+and swaps resources; `profile_placement` places stable named outputs. `AppliedProfile`
+owns IDs and placements per canonical path and flight. Log generation, cancellation,
+filter snapshots and scan tokens reject stale work. Reload stages dependent filters
+and state bands too; errors preserve current resources. Removal previews ownership
+and blocks manual dependencies. Placing prepared output reuses current instance,
+even when recipe file has since become unavailable.
 
 `LogStore::prepare` exposes finite numeric settings as constant `@setting` sources
 listed in the catalogue. The browser shows them separately from sampled fields.
@@ -55,7 +58,7 @@ See [profile format and limits](PROFILES.md).
 
 ## Design tokens and themes
 
-`theme::stylesheet()` supplies shared tokens and app styles. `themes/forest.css`
+`theme::stylesheet()` supplies shared tokens and app styles, using Slate by default. `themes/slate.css`
 and other palette files define the same semantic color and corner-radius roles;
 `themes/common.css` owns typography, control height, and code syntax colors. Components use
 `var(--app-...)` references rather than literal palette colors. Add new palette
@@ -66,7 +69,8 @@ without rebuilding UI. Zgui UI tokens reference those same roles through
 `theme.css`; `plot_theme.css` adapts upstream plot chrome to app tokens. Series
 colors and code syntax colors remain distinct from interface accent. Plot canvas
 rendering/grid colors still belong to upstream plotting library; current
-presets use dark surfaces. Theme ID and selected profile directory are persisted; logs, scripts, plots, and drafts remain session-only.
+presets use dark surfaces. Theme ID, profile directory, and local Auto overrides are persisted;
+logs, scripts, plots, and drafts remain session-only.
 
 ## UI action buttons
 

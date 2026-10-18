@@ -1,7 +1,8 @@
 # Profile system review and next steps
 
-Status: review and implementation plan. Only immediate fixes below are implemented
-in this change. Later milestones need separate implementation.
+Status: ownership/browser, Auto/Reload/Remove, and metadata changes implemented locally.
+Automated validation passed; see implementation notes for remaining release checks.
+Historical review follows.
 
 ## Immediate fixes
 
@@ -27,7 +28,7 @@ interaction validation; these fixes do not establish a finished interaction suit
 Keep these capabilities. Improve their state model and presentation before adding
 more profile features or firmware packs.
 
-## Problems found in code
+## Problems found during original review
 
 | Problem | Evidence | User impact |
 | --- | --- | --- |
@@ -146,3 +147,40 @@ Start Milestone 1 with applied-profile record and single browser. Pair model cha
 with one complete flow: expand profile → inspect available fields → drag view →
 see partial reasons. Then implement Auto/Reload/Remove on those owned resources.
 Avoid another round of independent buttons over flat global state.
+
+
+## Implementation notes
+
+- One applied record per canonical path + selected flight owns fields, geometry,
+  named views, diagnostics, and created lines. Index-based view transport removed.
+- One browser includes directory profiles and Imported entries; views/fields/
+  geometry have drag and button actions. Mode switches preserve mounted state.
+- Scan tokens reject superseded refreshes. Auto overrides save separately from
+  recipes, with explicit override taking precedence over recipe default.
+- Reload stages computation and dependent filters/state geometry, validates conflicts
+  and concurrent edits, then updates stable IDs and placed views. Failed reload
+  preserves usable setup. Remove previews owned counts and names manual blockers.
+- Inspector traces sources, filters and recorded scalar settings; manual labels
+  stay separate from defaults. Mixed unit labels can split into separate panels.
+- Flight selector scopes template references; JSON bitmask state rules supported.
+- ULog parameter messages have no event timestamps. Changed records remain explicit
+  untimed snapshots; no fabricated parameter history. Other timestamped parameter
+  formats remain future work.
+- Pointer/keyboard rename test reproduced missing focus after mounting. Local
+  zgui-plot now waits for input binding before requesting focus/select-all.
+  Enlumi pins published zgui-plot revision `abc99220c129bf6e85e8b370aa0b42d1994295cc`.
+
+Validation covers profile ownership, partial preparation, optional-output recovery,
+failed reload preservation, removal dependencies, read-only recipe Auto choices,
+flight reference rebinding, bitmask combinations, browser mode persistence/header
+spacing, and pointer/F2/Enter/Escape/blur rename. Provided Basher log verified six
+PID views and RPM output, with missing yaw D skipped. Synthetic high-resolution and Rust-filter cases pass. Added public synthetic
+multi-flight fixture verifying distinct IDs/names, scoped settings, independent
+clocks, and combined bitmask bands. Full release matrix above
+still requires platform file-picker/restart checks, additional real high-resolution
+and multi-flight logs, and large-library timing measurements. Private log stays
+outside repository.
+
+Automated results: 109 default tests passed (6 opt-in tests skipped); 11 profile
+data tests passed with opt-in Rust/high-resolution/Basher checks enabled.
+`cargo check --offline`, formatting, and diff whitespace checks passed.

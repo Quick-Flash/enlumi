@@ -37,6 +37,7 @@ pub struct Pane {
     pub links: RwSignal<LinkOptions, LocalStorage>,
     pub lines: RwSignal<Vec<Line>, LocalStorage>,
     pub geometry: RwSignal<BTreeSet<u64>, LocalStorage>,
+    pub legend_order: RwSignal<Vec<u64>, LocalStorage>,
     pub hidden_geometry: RwSignal<BTreeSet<u64>, LocalStorage>,
     pub selected: RwSignal<Option<u64>, LocalStorage>,
     pub drawing: RwSignal<BTreeMap<u64, plot::line_draw::LineDraw>, LocalStorage>,
@@ -81,6 +82,7 @@ impl Pane {
             }),
             lines,
             geometry: RwSignal::new_local(BTreeSet::new()),
+            legend_order: RwSignal::new_local(Vec::new()),
             hidden_geometry: RwSignal::new_local(BTreeSet::new()),
             view_lines,
             selected: RwSignal::new_local(None),
@@ -305,6 +307,9 @@ impl Workbench {
                         pane.plot.auto_fit.set(true);
                     }
                     self.clear_generated_bands();
+                    self.profiles
+                        .flight
+                        .set(log.settings.keys().next().copied().unwrap_or(1));
                     self.log.set(Some(Arc::new(log)));
                     self.apply_default_profiles();
                 }
@@ -471,6 +476,7 @@ impl Workbench {
         copy.plot.auto_fit.set(source.plot.auto_fit.get_untracked());
         copy.links.set(source.links.get_untracked());
         copy.geometry.set(source.geometry.get_untracked());
+        copy.legend_order.set(source.legend_order.get_untracked());
         copy.hidden_geometry
             .set(source.hidden_geometry.get_untracked());
     }

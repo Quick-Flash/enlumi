@@ -146,8 +146,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and pull requests,
 
 ## License
 
-Enlumi source is dual-licensed under [MIT](LICENSE-MIT) or
-[BSD-3-Clause](LICENSE-BSD-3-Clause), at your option (`MIT OR BSD-3-Clause`).
+Enlumi is licensed under [GNU AGPL version 3 or later](LICENSE)
+(`AGPL-3.0-or-later`). See [copyright and license grant](COPYRIGHT).
 Dependencies and the bundled test fixture retain their own licenses; see
 [third-party notices](THIRD_PARTY_NOTICES.md).
 
@@ -160,3 +160,59 @@ State bands map discrete raw or derived fields to named, colored time sections
 behind signals using editable, [shareable JSON mappings](examples/state-mappings/README.md).
 Firmware mappings auto-apply only when explicitly enabled in profile files. Manual time bands provide reusable labeled highlights alongside
 automatic layers. [State band controls](docs/USAGE.md#state-bands-and-manual-time-highlights).
+
+### Portable distribution
+
+`cargo xtask bundle` builds `target/enlumi-portable/`, including offline Rust-to-WASM
+compiler and example profiles. Ship entire directory: users can edit custom Rust
+filters without installing Rust. Build machine needs WASM target installed.
+See [compiler packaging](docs/RUST_FILTERS.md#build-portable-distribution).
+
+### Nightly releases
+
+[Nightly downloads](https://github.com/Quick-Flash/enlumi/releases) include Windows
+x86_64, Linux x86_64, macOS Apple Silicon, and macOS Intel portable bundles.
+Workflow builds after each PR merges into default branch, or manually through
+Actions → Nightly releases. Closed, unmerged PRs do not build releases.
+All four builds must pass packaging/compiler checks before prerelease publishes.
+Downloads include offline compiler, profiles, and SHA-256 checksums. Extract whole
+archive. Builds are unsigned; macOS builds are not notarized.
+Automation starts after workflow reaches default branch. Failed builds leave previous
+releases available. Nightlies use project's pinned Rust toolchain.
+
+### Updates
+
+Open **Updates** in toolbar and select **Enable nightly updates**.
+Opt-in persists locally; disabled by default. Enlumi checks GitHub's `master` tip
+once at startup when enabled. Enabling takes effect on next startup. Changed revision
+shows dismissible banner with commit and download links. Dismissed revisions stay
+quiet across restarts; later revisions show new notice. Multiple pushes between
+startups appear as one notice. New code may precede completed nightly download.
+
+Choose **Update & restart** to download and install completed nightly for current
+OS/architecture. Restart closes current log and unsaved session work. Download is
+verified against GitHub asset's SHA-256 digest before extraction. Pending builds
+cannot be installed; new master code may precede completed nightly download.
+Checks remain startup-only; enabling takes effect next launch.
+
+Installer updates portable executable, bundled compiler, icon assets, licenses,
+and bundle manifest. Existing profiles and other files stay intact; new example files are
+added without replacing existing ones. Installation folder's parent must be
+writable for staging. Source/development builds use Downloads link instead;
+self-installation requires portable bundle's `enlumi-bundle.json` manifest.
+File replacement or restart failures trigger rollback; incomplete recovery reports
+backup location. Download errors leave current installation untouched. Windows
+helper waits for app exit before replacing files. Update check and download send
+no log data. Stable release updates are not implemented.
+
+### App icon
+
+`assets/enlumi.png` supplies window icon, Windows executable icon, and running
+macOS app's Dock icon. Icon conversion happens during build; no image tools needed at runtime.
+
+Wayland resolves icons through desktop entry matching application ID. On Linux,
+Enlumi automatically registers current executable and embedded icon in user data
+directory before opening window. Works for development builds and portable bundles;
+no launcher installation or PATH changes needed. Respects `XDG_DATA_HOME`, falling
+back to `~/.local/share`. Registration updates only when executable path or artwork
+changes. Restart rebuilt app to apply icon to new window.

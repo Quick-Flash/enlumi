@@ -1,10 +1,15 @@
 use crate::action_button::ActionButtonProps;
+use crate::github_link::GithubLinkProps;
 use crate::preferences::ThemePreference;
 use crate::{
     browser::BrowserProps, filter_workspace::FilterWorkspaceProps, fps::FpsProps, state::Workbench,
     workspace::PlotWorkspaceProps,
 };
 use crate::{theme::AppThemeProps, theme_picker::ThemePickerProps};
+use crate::{
+    update_controls::UpdateControlsProps, update_notice::UpdateNoticeProps,
+    update_state::UpdateState,
+};
 use std::path::PathBuf;
 use zgui::prelude::*;
 
@@ -18,6 +23,7 @@ pub fn WorkbenchApp(
         workbench.open(path);
     }
     let palette = RwSignal::new_local(preferences.load());
+    let updates = UpdateState::new();
     view! {
         AppTheme(palette = palette) {
             column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
@@ -59,9 +65,12 @@ pub fn WorkbenchApp(
                         on:click = move |_| workbench.equalize_panels()) { "Equalize panels" }
                     text(class = "file-name") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Enlumi".into(), |log| log.name.clone()))}}
                     text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
+                    UpdateControls(state = updates)
+                    GithubLink(workbench = workbench)
                     ThemePicker(palette = palette, preferences = preferences.clone())
                     Fps()
                 }
+                UpdateNotice(state = updates)
                 row(class = "body") {
                     Browser(workbench = workbench)
                     column(class = "plot-page", class:hidden = move || workbench.filters_open.get()) { PlotWorkspace(workbench = workbench) }

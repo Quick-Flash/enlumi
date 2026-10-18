@@ -1,0 +1,445 @@
+{
+  "version": 1,
+  "name": "Betaflight 2026.6 \u00b7 Flight modes, failsafe and RX",
+  "auto_apply": false,
+  "requires_settings": [
+    {
+      "setting": {
+        "name": "Firmware revision"
+      },
+      "starts_with": "Betaflight 2026.6."
+    }
+  ],
+  "signals": [
+    {
+      "id": "flightModeFlags",
+      "source": "blackbox/1/flightModeFlags",
+      "metadata": {
+        "name": "Active RC mode flags",
+        "unit": "",
+        "axis": ""
+      }
+    },
+    {
+      "id": "stateFlags",
+      "source": "blackbox/1/stateFlags",
+      "metadata": {
+        "name": "Flight state flags",
+        "unit": "",
+        "axis": ""
+      }
+    },
+    {
+      "id": "failsafePhase",
+      "source": "blackbox/1/failsafePhase",
+      "metadata": {
+        "name": "Failsafe phase",
+        "unit": "",
+        "axis": ""
+      }
+    },
+    {
+      "id": "rxSignalReceived",
+      "source": "blackbox/1/rxSignalReceived",
+      "metadata": {
+        "name": "RX signal received",
+        "unit": "",
+        "axis": ""
+      }
+    },
+    {
+      "id": "rxFlightChannelsValid",
+      "source": "blackbox/1/rxFlightChannelsValid",
+      "metadata": {
+        "name": "RX channels valid",
+        "unit": "",
+        "axis": ""
+      }
+    }
+  ],
+  "filters": [],
+  "geometry": [
+    {
+      "id": "rc_modes",
+      "name": "BF 2026.6 RC mode bands",
+      "shape": {
+        "kind": "flags",
+        "source": "$flightModeFlags",
+        "rules": [
+          {
+            "mask": 1,
+            "name": "Arm switch",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "mask": 2,
+            "name": "Angle",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          },
+          {
+            "mask": 4,
+            "name": "Horizon",
+            "color": [
+              90,
+              190,
+              120
+            ]
+          },
+          {
+            "mask": 8,
+            "name": "Mag",
+            "color": [
+              190,
+              110,
+              220
+            ]
+          },
+          {
+            "mask": 16,
+            "name": "Altitude hold",
+            "color": [
+              230,
+              90,
+              90
+            ]
+          },
+          {
+            "mask": 32,
+            "name": "Headfree",
+            "color": [
+              80,
+              190,
+              190
+            ]
+          },
+          {
+            "mask": 64,
+            "name": "Chirp",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "mask": 128,
+            "name": "Passthrough",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          },
+          {
+            "mask": 256,
+            "name": "Failsafe switch",
+            "color": [
+              90,
+              190,
+              120
+            ]
+          },
+          {
+            "mask": 512,
+            "name": "Position hold",
+            "color": [
+              190,
+              110,
+              220
+            ]
+          },
+          {
+            "mask": 1024,
+            "name": "GPS rescue",
+            "color": [
+              230,
+              90,
+              90
+            ]
+          },
+          {
+            "mask": 2048,
+            "name": "Autopilot",
+            "color": [
+              80,
+              190,
+              190
+            ]
+          },
+          {
+            "mask": 4096,
+            "name": "Anti-gravity",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "mask": 8388608,
+            "name": "Blackbox switch",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          },
+          {
+            "mask": 16777216,
+            "name": "Airmode",
+            "color": [
+              90,
+              190,
+              120
+            ]
+          },
+          {
+            "mask": 33554432,
+            "name": "3D",
+            "color": [
+              190,
+              110,
+              220
+            ]
+          },
+          {
+            "mask": 2147483648,
+            "name": "Crash flip",
+            "color": [
+              230,
+              90,
+              90
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "gps_states",
+      "name": "BF 2026.6 GPS state bands",
+      "shape": {
+        "kind": "flags",
+        "source": "$stateFlags",
+        "rules": [
+          {
+            "mask": 1,
+            "name": "GPS home fixed",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "mask": 2,
+            "name": "GPS fix",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          },
+          {
+            "mask": 4,
+            "name": "GPS fix acquired previously",
+            "color": [
+              90,
+              190,
+              120
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "failsafePhase_bands",
+      "name": "BF 2026.6 failsafe bands",
+      "shape": {
+        "kind": "states",
+        "source": "$failsafePhase",
+        "rules": [
+          {
+            "value": 0,
+            "name": "Idle",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "value": 1,
+            "name": "RX loss detected",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          },
+          {
+            "value": 2,
+            "name": "Landing",
+            "color": [
+              90,
+              190,
+              120
+            ]
+          },
+          {
+            "value": 3,
+            "name": "Landed",
+            "color": [
+              190,
+              110,
+              220
+            ]
+          },
+          {
+            "value": 4,
+            "name": "RX loss monitoring",
+            "color": [
+              230,
+              90,
+              90
+            ]
+          },
+          {
+            "value": 5,
+            "name": "RX loss recovered",
+            "color": [
+              80,
+              190,
+              190
+            ]
+          },
+          {
+            "value": 6,
+            "name": "GPS rescue",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "value": 7,
+            "name": "Autopilot under RX loss",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "rxSignalReceived_bands",
+      "name": "BF 2026.6 RX signal bands",
+      "shape": {
+        "kind": "states",
+        "source": "$rxSignalReceived",
+        "rules": [
+          {
+            "value": 0,
+            "name": "RX signal lost",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "value": 1,
+            "name": "RX signal received",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "rxFlightChannelsValid_bands",
+      "name": "BF 2026.6 RX validity bands",
+      "shape": {
+        "kind": "states",
+        "source": "$rxFlightChannelsValid",
+        "rules": [
+          {
+            "value": 0,
+            "name": "RX channels invalid",
+            "color": [
+              80,
+              150,
+              240
+            ]
+          },
+          {
+            "value": 1,
+            "name": "RX channels valid",
+            "color": [
+              230,
+              170,
+              60
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "views": [
+    {
+      "name": "Flight modes \u00b7 named bands",
+      "fields": [],
+      "geometry": [
+        "rc_modes"
+      ]
+    },
+    {
+      "name": "Failsafe \u00b7 named bands",
+      "fields": [],
+      "geometry": [
+        "failsafePhase_bands"
+      ]
+    },
+    {
+      "name": "RX signal and validity",
+      "fields": [
+        "$rxSignalReceived",
+        "$rxFlightChannelsValid"
+      ]
+    },
+    {
+      "name": "RX signal \u00b7 named bands",
+      "fields": [],
+      "geometry": [
+        "rxSignalReceived_bands"
+      ]
+    },
+    {
+      "name": "RX channel validity \u00b7 named bands",
+      "fields": [],
+      "geometry": [
+        "rxFlightChannelsValid_bands"
+      ]
+    },
+    {
+      "name": "GPS state \u00b7 named bands",
+      "fields": [],
+      "geometry": [
+        "gps_states"
+      ]
+    }
+  ]
+}

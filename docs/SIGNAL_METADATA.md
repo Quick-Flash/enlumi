@@ -30,9 +30,13 @@ then offers drag placement and **New panel** / **Add to active**. Missing source
 cyclic/failed branches, and unavailable geometry are skipped with diagnostics.
 Firmware/settings guards and commit conflicts still reject incompatible loads.
 
-Future work should build on this format: an interactive metadata inspector/editor,
-setting overrides with provenance, richer field-derived geometry, and additional
-verified firmware profiles. None require a plugin framework. Unknown fields keep
+**Labels…** now inspects raw identity, supplying profile, transformation chain,
+and recorded scalar parameter inputs. Profile defaults and manual label overrides
+are separate. Reset can restore profile default or raw label. Different declared
+units warn and offer separate plots; no automatic dimension inference occurs.
+JSON `flags` rules name bitmask combinations alongside exact `states` rules.
+Future work includes timestamped parameter formats, parameter value overrides,
+richer field-derived paths, and additional verified firmware profiles. None require a plugin framework. Unknown fields keep
 their raw identity. Units are declarations and must match the actual computation;
 no automatic unit inference or per-series axis normalization is implemented.
 

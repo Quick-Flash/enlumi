@@ -21,6 +21,7 @@ pub struct StateBands {
     pub intervals: Arc<[StateInterval]>,
     pub rules: Vec<StateRule>,
     pub error: Option<String>,
+    pub flag_rules: Option<Vec<crate::profile::FlagRule>>,
 }
 impl PartialEq for StateBands {
     fn eq(&self, other: &Self) -> bool {
@@ -29,6 +30,7 @@ impl PartialEq for StateBands {
             && self.intervals == other.intervals
             && self.rules == other.rules
             && self.error == other.error
+            && self.flag_rules == other.flag_rules
     }
 }
 impl StateBands {
@@ -105,6 +107,7 @@ impl StateBands {
             intervals: intervals.into(),
             rules,
             error: None,
+            flag_rules: None,
         })
     }
     pub fn set_rule(
@@ -159,7 +162,51 @@ impl StateBands {
         Ok(())
     }
     pub fn preserve_rules(&mut self, old: &Self) {
+        if let Some(rules) = &old.flag_rules {
+            self.apply_flags(rules.clone());
+            for rule in &mut self.rules {
+                if let Some(previous) = old.rules.iter().find(|r| r.value == rule.value) {
+                    rule.name = previous.name.clone();
+                    rule.color = previous.color;
+                }
+            }
+            return;
+        }
         self.apply_rules(old.rules.clone());
+    }
+    pub fn apply_flags(&mut self, rules: Vec<crate::profile::FlagRule>) {
+        let active = |value: i64| {
+            rules
+                .iter()
+                .filter(move |rule| value >= 0 && (value as u64 & rule.mask) == rule.mask)
+        };
+        self.intervals = self
+            .intervals
+            .iter()
+            .filter(|interval| active(interval.value).next().is_some())
+            .cloned()
+            .collect::<Vec<_>>()
+            .into();
+        self.rules = self
+            .intervals
+            .iter()
+            .map(|interval| interval.value)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|value| {
+                let selected = active(value).collect::<Vec<_>>();
+                StateRule {
+                    value,
+                    name: selected
+                        .iter()
+                        .map(|r| r.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" + "),
+                    color: selected[0].color,
+                }
+            })
+            .collect();
+        self.flag_rules = Some(rules);
     }
     pub fn apply_rules(&mut self, mut rules: Vec<StateRule>) {
         for value in self
@@ -327,5 +374,38 @@ mod tests {
             unknown.rules[0].name, "State 6",
             "Version-dependent enum slots stay numeric"
         );
+    }
+    #[test]
+    fn flag_rules_name_combinations_and_preserve_inactive_gaps_on_refresh() {
+        let rules = vec![
+            crate::profile::FlagRule {
+                mask: 1,
+                name: "Armed".into(),
+                color: [1, 2, 3],
+            },
+            crate::profile::FlagRule {
+                mask: 4,
+                name: "Angle".into(),
+                color: [4, 5, 6],
+            },
+        ];
+        let mut bands = StateBands::build(
+            "flags".into(),
+            data(&[(0., 0.), (1., 1.), (2., 5.), (3., 4.), (4., 0.)]),
+            5.,
+        )
+        .unwrap();
+        bands.apply_flags(rules);
+        assert_eq!(bands.intervals.len(), 3);
+        assert_eq!(
+            bands.rules.iter().find(|r| r.value == 5).unwrap().name,
+            "Armed + Angle"
+        );
+        assert_eq!(bands.intervals[0].start, 1.);
+        assert_eq!(bands.intervals.last().unwrap().end, 4.);
+        let mut next = StateBands::build("flags".into(), data(&[(0., 5.), (1., 0.)]), 2.).unwrap();
+        next.preserve_rules(&bands);
+        assert_eq!(next.rules[0].name, "Armed + Angle");
+        assert_eq!(next.intervals.len(), 1);
     }
 }

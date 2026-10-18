@@ -35,7 +35,13 @@ pub fn record<'a>(
 }
 
 pub fn setting(log: &LogStore, reference: &Setting) -> Result<String, String> {
-    let (index, _) = record(log, reference)?;
+    let (index, record) = record(log, reference)?;
+    if record.kind.starts_with("Parameter change") && reference.occurrence.is_none() {
+        return Err(format!(
+            "Setting {} is an untimed change; select explicit occurrence to use snapshot",
+            reference.name
+        ));
+    }
     let suffix = reference
         .element
         .map_or_else(String::new, |index| format!("/{index}"));

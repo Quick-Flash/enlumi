@@ -221,3 +221,25 @@ fn profile_rust_filter_uses_recorded_setting_as_numeric_input() {
         assert!((actual.y - raw.y - offset).abs() < 1e-6);
     }
 }
+
+#[test]
+fn unavailable_dependencies_share_root_cause_with_affected_view() {
+    let log = fixture();
+    let mut value = recipe();
+    value["filters"][0]["inputs"] = json!(["missing/0/field"]);
+    let prepared = prepare_json(value, &log).unwrap();
+    let cause = prepared
+        .diagnostics
+        .iter()
+        .find(|cause| cause.message == "Missing field missing/0/field")
+        .unwrap();
+    assert!(cause.dependents.iter().any(|name| name == "Motor view"));
+    assert_eq!(
+        prepared
+            .diagnostics
+            .iter()
+            .filter(|cause| cause.message.contains("Missing field missing/0/field"))
+            .count(),
+        1
+    );
+}

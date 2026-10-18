@@ -1,0 +1,124 @@
+name: Nightly releases
+
+on:
+  # Only merged code is checked out; never execute unmerged PR head code.
+  # Target event permits release publication for merged fork contributions too.
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-release-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == github.event.repository.default_branch)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux-x86_64
+          - os: windows-latest
+            platform: windows-x86_64
+          - os: macos-15
+            platform: macos-aarch64
+          - os: macos-15-intel
+            platform: macos-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+      - name: Linux build libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config \
+            libx11-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            libxcb1-dev libxcursor-dev libxi-dev libxrandr-dev libfontconfig1-dev \
+            fonts-dejavu-core
+      - name: Compiler and WASM target
+        run: rustup target add wasm32-unknown-unknown
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/release
+            target/xtask
+          key: nightly-${{ matrix.platform }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - name: Build portable bundle and check compiler without system Rust
+        run: cargo xtask bundle
+      - name: Compress portable bundle
+        shell: python
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          import os, pathlib, tarfile, zipfile
+          platform = os.environ['PLATFORM']
+          source = pathlib.Path('target/enlumi-portable')
+          pathlib.Path('dist').mkdir()
+          if platform.startswith('windows-'):
+              with zipfile.ZipFile(f'dist/enlumi-{platform}.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+                  for path in sorted(source.rglob('*')):
+                      if path.is_file():
+                          archive.write(path, path.relative_to(source.parent))
+          else:
+              with tarfile.open(f'dist/enlumi-{platform}.tar.gz', 'w:gz') as archive:
+                  archive.add(source, arcname=source.name)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nightly-${{ matrix.platform }}
+          path: dist/*
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    # Manual runs from other branches may build, but never publish releases.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: nightly-*
+          path: dist
+          merge-multiple: true
+      - name: Publish complete nightly prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          tag="nightly-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          (cd dist && sha256sum enlumi-* > SHA256SUMS)
+          cat > notes.md <<EOF
+          Automated nightly build from commit ${COMMIT}.
+
+          Extract entire archive; keep rust-toolchain beside executable.
+          Includes offline Rust filter compiler and example profiles.
+          Windows: ZIP. Linux/macOS: tar.gz. Choose matching architecture.
+          Builds are unsigned; macOS builds are not notarized.
+          Linux build targets Ubuntu 22.04 or newer compatible systems.
+
+          Experimental build. Previous nightlies remain available.
+          EOF
+          gh release create "$tag" dist/* --target "$COMMIT" \
+            --title "Nightly $(date -u +%Y-%m-%d)" --notes-file notes.md \
+            --prerelease --latest=false --draft
+          gh release edit "$tag" --draft=false

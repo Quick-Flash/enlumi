@@ -81,22 +81,16 @@ impl Workbench {
         }
     }
     pub fn field_name(self, source: &str) -> String {
-        if let Some(index) = source
-            .strip_prefix("@profile-view/")
-            .and_then(|index| index.parse::<usize>().ok())
-        {
-            return self.profiles.views.with(|views| {
-                views
-                    .get(index)
-                    .map_or_else(|| "Profile view".into(), |view| view.name.clone())
-            });
+        if let Some(drag) = crate::profile::identity::Drag::parse(source) {
+            return drag.item.name().into();
         }
-        if let Some(payload) = source.strip_prefix("@profile-file-view/")
-            && let Ok((_, name)) = serde_json::from_str::<(std::path::PathBuf, String)>(payload)
+        if let Some(label) = self
+            .profiles
+            .metadata
+            .with(|all| all.get(source).map(|m| m.label()))
         {
-            return name;
+            return label;
         }
-
         self.derived.with(|fields| {
             fields
                 .iter()

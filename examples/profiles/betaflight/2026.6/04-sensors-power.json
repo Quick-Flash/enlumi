@@ -1,0 +1,617 @@
+{
+  "version": 1,
+  "name": "Betaflight 2026.6 \u00b7 Sensors, attitude and power",
+  "auto_apply": false,
+  "requires_settings": [
+    {
+      "setting": {
+        "name": "Firmware revision"
+      },
+      "starts_with": "Betaflight 2026.6."
+    }
+  ],
+  "signals": [
+    {
+      "id": "acc_x_raw",
+      "source": "blackbox/1/accSmooth[0]",
+      "metadata": {
+        "name": "Accelerometer X raw",
+        "unit": "acc count",
+        "axis": "X"
+      }
+    },
+    {
+      "id": "quat_x_raw",
+      "source": "blackbox/1/imuQuaternion[0]",
+      "metadata": {
+        "name": "Quaternion X raw",
+        "unit": "1/32767",
+        "axis": "X"
+      }
+    },
+    {
+      "id": "acc_y_raw",
+      "source": "blackbox/1/accSmooth[1]",
+      "metadata": {
+        "name": "Accelerometer Y raw",
+        "unit": "acc count",
+        "axis": "Y"
+      }
+    },
+    {
+      "id": "quat_y_raw",
+      "source": "blackbox/1/imuQuaternion[1]",
+      "metadata": {
+        "name": "Quaternion Y raw",
+        "unit": "1/32767",
+        "axis": "Y"
+      }
+    },
+    {
+      "id": "acc_z_raw",
+      "source": "blackbox/1/accSmooth[2]",
+      "metadata": {
+        "name": "Accelerometer Z raw",
+        "unit": "acc count",
+        "axis": "Z"
+      }
+    },
+    {
+      "id": "quat_z_raw",
+      "source": "blackbox/1/imuQuaternion[2]",
+      "metadata": {
+        "name": "Quaternion Z raw",
+        "unit": "1/32767",
+        "axis": "Z"
+      }
+    },
+    {
+      "id": "mag_x",
+      "source": "blackbox/1/magADC[0]",
+      "metadata": {
+        "name": "Compass X raw",
+        "unit": "mag count",
+        "axis": "X"
+      }
+    },
+    {
+      "id": "mag_y",
+      "source": "blackbox/1/magADC[1]",
+      "metadata": {
+        "name": "Compass Y raw",
+        "unit": "mag count",
+        "axis": "Y"
+      }
+    },
+    {
+      "id": "mag_z",
+      "source": "blackbox/1/magADC[2]",
+      "metadata": {
+        "name": "Compass Z raw",
+        "unit": "mag count",
+        "axis": "Z"
+      }
+    },
+    {
+      "id": "battery_raw",
+      "source": "blackbox/1/vbatLatest",
+      "metadata": {
+        "name": "Battery voltage raw",
+        "unit": "0.01 V",
+        "axis": ""
+      }
+    },
+    {
+      "id": "current_raw",
+      "source": "blackbox/1/amperageLatest",
+      "metadata": {
+        "name": "Current raw",
+        "unit": "0.01 A",
+        "axis": ""
+      }
+    },
+    {
+      "id": "baro_raw",
+      "source": "blackbox/1/baroAlt",
+      "metadata": {
+        "name": "Barometer altitude raw",
+        "unit": "cm",
+        "axis": ""
+      }
+    },
+    {
+      "id": "rssi_raw",
+      "source": "blackbox/1/rssi",
+      "metadata": {
+        "name": "RSSI raw",
+        "unit": "RSSI count",
+        "axis": ""
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "acc_x",
+      "inputs": [
+        "$acc_x_raw"
+      ],
+      "metadata": {
+        "name": "Explorer acceleration X",
+        "unit": "g",
+        "axis": "X"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            {
+              "setting": {
+                "name": "acc_1G"
+              }
+            }
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "quat_x",
+      "inputs": [
+        "$quat_x_raw"
+      ],
+      "metadata": {
+        "name": "Explorer quaternion X",
+        "unit": "",
+        "axis": "X"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            32767
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "acc_y",
+      "inputs": [
+        "$acc_y_raw"
+      ],
+      "metadata": {
+        "name": "Explorer acceleration Y",
+        "unit": "g",
+        "axis": "Y"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            {
+              "setting": {
+                "name": "acc_1G"
+              }
+            }
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "quat_y",
+      "inputs": [
+        "$quat_y_raw"
+      ],
+      "metadata": {
+        "name": "Explorer quaternion Y",
+        "unit": "",
+        "axis": "Y"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            32767
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "acc_z",
+      "inputs": [
+        "$acc_z_raw"
+      ],
+      "metadata": {
+        "name": "Explorer acceleration Z",
+        "unit": "g",
+        "axis": "Z"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            {
+              "setting": {
+                "name": "acc_1G"
+              }
+            }
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "quat_z",
+      "inputs": [
+        "$quat_z_raw"
+      ],
+      "metadata": {
+        "name": "Explorer quaternion Z",
+        "unit": "",
+        "axis": "Z"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            32767
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "quat_w",
+      "inputs": [
+        "$quat_x",
+        "$quat_y",
+        "$quat_z"
+      ],
+      "metadata": {
+        "name": "Explorer reconstructed quaternion W",
+        "unit": "",
+        "axis": "W"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "quaternion_w.rs"
+      }
+    },
+    {
+      "id": "attitude_roll",
+      "inputs": [
+        "$quat_w",
+        "$quat_x",
+        "$quat_y",
+        "$quat_z"
+      ],
+      "metadata": {
+        "name": "Explorer Roll attitude",
+        "unit": "deg",
+        "axis": "Roll"
+      },
+      "operation": {
+        "kind": "quaternion",
+        "axis": "roll",
+        "degrees": true
+      }
+    },
+    {
+      "id": "attitude_pitch",
+      "inputs": [
+        "$quat_w",
+        "$quat_x",
+        "$quat_y",
+        "$quat_z"
+      ],
+      "metadata": {
+        "name": "Explorer Pitch attitude",
+        "unit": "deg",
+        "axis": "Pitch"
+      },
+      "operation": {
+        "kind": "quaternion",
+        "axis": "pitch",
+        "degrees": true
+      }
+    },
+    {
+      "id": "attitude_yaw_signed",
+      "inputs": [
+        "$quat_w",
+        "$quat_x",
+        "$quat_y",
+        "$quat_z"
+      ],
+      "metadata": {
+        "name": "Explorer quaternion yaw (signed)",
+        "unit": "deg",
+        "axis": "Yaw"
+      },
+      "operation": {
+        "kind": "quaternion",
+        "axis": "yaw",
+        "degrees": true
+      }
+    },
+    {
+      "id": "acc_magnitude",
+      "inputs": [
+        "$acc_x",
+        "$acc_y",
+        "$acc_z"
+      ],
+      "metadata": {
+        "name": "Explorer acceleration magnitude",
+        "unit": "g",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "magnitude"
+      }
+    },
+    {
+      "id": "battery_v",
+      "inputs": [
+        "$battery_raw"
+      ],
+      "metadata": {
+        "name": "Explorer battery voltage",
+        "unit": "V",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.01,
+        "offset": 0
+      }
+    },
+    {
+      "id": "current_a",
+      "inputs": [
+        "$current_raw"
+      ],
+      "metadata": {
+        "name": "Explorer current",
+        "unit": "A",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.01,
+        "offset": 0
+      }
+    },
+    {
+      "id": "power_w",
+      "inputs": [
+        "$battery_v",
+        "$current_a"
+      ],
+      "metadata": {
+        "name": "Explorer electrical power",
+        "unit": "W",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "multiply.rs"
+      }
+    },
+    {
+      "id": "charge_as",
+      "inputs": [
+        "$current_a"
+      ],
+      "metadata": {
+        "name": "Explorer segment current integral",
+        "unit": "A s",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "integral",
+        "initial": 0
+      }
+    },
+    {
+      "id": "charge_mah",
+      "inputs": [
+        "$charge_as"
+      ],
+      "metadata": {
+        "name": "Explorer charge since segment start",
+        "unit": "mAh",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1000,
+            3600
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "baro_m",
+      "inputs": [
+        "$baro_raw"
+      ],
+      "metadata": {
+        "name": "Explorer barometer altitude",
+        "unit": "m",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": 0.01,
+        "offset": 0
+      }
+    },
+    {
+      "id": "rssi_percent",
+      "inputs": [
+        "$rssi_raw"
+      ],
+      "metadata": {
+        "name": "Explorer RSSI",
+        "unit": "%",
+        "axis": ""
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            100,
+            1024
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "attitude_yaw",
+      "metadata": {
+        "name": "Explorer IMU heading",
+        "unit": "deg",
+        "axis": "Heading"
+      },
+      "inputs": [
+        "$attitude_yaw_signed"
+      ],
+      "operation": {
+        "kind": "rust",
+        "path": "heading.rs"
+      }
+    }
+  ],
+  "geometry": [],
+  "views": [
+    {
+      "name": "Accelerometers (g)",
+      "fields": [
+        "$acc_x",
+        "$acc_y",
+        "$acc_z"
+      ]
+    },
+    {
+      "name": "Acceleration magnitude (g)",
+      "fields": [
+        "$acc_magnitude"
+      ]
+    },
+    {
+      "name": "Attitude \u00b7 roll, pitch, heading (deg)",
+      "fields": [
+        "$attitude_roll",
+        "$attitude_pitch",
+        "$attitude_yaw"
+      ]
+    },
+    {
+      "name": "Roll attitude (deg)",
+      "fields": [
+        "$attitude_roll"
+      ]
+    },
+    {
+      "name": "Pitch attitude (deg)",
+      "fields": [
+        "$attitude_pitch"
+      ]
+    },
+    {
+      "name": "Heading (0\u2013360 deg)",
+      "fields": [
+        "$attitude_yaw"
+      ]
+    },
+    {
+      "name": "Compass \u00b7 raw",
+      "fields": [
+        "$mag_x",
+        "$mag_y",
+        "$mag_z"
+      ]
+    },
+    {
+      "name": "Battery voltage (V)",
+      "fields": [
+        "$battery_v"
+      ]
+    },
+    {
+      "name": "Current (A)",
+      "fields": [
+        "$current_a"
+      ]
+    },
+    {
+      "name": "Electrical power (W)",
+      "fields": [
+        "$power_w"
+      ]
+    },
+    {
+      "name": "Charge per contiguous segment (mAh)",
+      "fields": [
+        "$charge_mah"
+      ]
+    },
+    {
+      "name": "Barometer altitude (m)",
+      "fields": [
+        "$baro_m"
+      ]
+    },
+    {
+      "name": "RSSI (%)",
+      "fields": [
+        "$rssi_percent"
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "source": "blackbox/1/accSmooth",
+      "name": "Accelerometer",
+      "unit": "acc count",
+      "components": {
+        "[0]": "X",
+        "[1]": "Y",
+        "[2]": "Z"
+      }
+    },
+    {
+      "source": "blackbox/1/imuQuaternion",
+      "name": "Quaternion XYZ raw",
+      "unit": "1/32767",
+      "components": {
+        "[0]": "X",
+        "[1]": "Y",
+        "[2]": "Z"
+      }
+    },
+    {
+      "source": "blackbox/1/magADC",
+      "name": "Compass raw",
+      "unit": "mag count",
+      "components": {
+        "[0]": "X",
+        "[1]": "Y",
+        "[2]": "Z"
+      }
+    }
+  ]
+}

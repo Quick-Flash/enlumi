@@ -26,24 +26,46 @@ its timestamp; NaN in any input leaves a gap. Additional outputs need matching
 
 ## Compiler setup
 
-Install Rust through [rustup](https://rustup.rs/) and add the WASM target:
+Portable distributions include compiler and WASM standard library. Extract entire
+bundle and launch `enlumi`; custom Rust editing and profile helpers work offline,
+without installing Rust, rustup, Cargo, or Wasmtime. Keep `rust-toolchain` directory
+beside executable. Bundles are specific to host OS and architecture.
+
+Compiler selection: explicit `ENLUMI_RUSTC` override, then adjacent bundled compiler,
+then `rustc` from PATH for development builds. Bundled compiler receives explicit
+`--sysroot`, independent of working directory and system rustup configuration.
+Incomplete bundled toolchains report an error instead of silently using system Rust.
+
+### Build portable distribution
+
+On build machine, install target for selected compiler, then build bundle:
 
 ```sh
 rustup target add wasm32-unknown-unknown
+cargo xtask bundle
 ```
 
-Enlumi calls `rustc` from PATH, respecting current directory's rustup toolchain.
-When running from this repository, its pinned nightly is selected; add the target
-from this directory. Outside the repository, rustup's default toolchain applies.
-Set `ENLUMI_RUSTC` to a compiler executable path to select a different compiler.
-That compiler needs its own `wasm32-unknown-unknown` standard library installed.
-Rust 2024 edition support is required.
+Output: `target/enlumi-portable/`. Ship **entire directory**, including profiles
+and compiler licenses. Command builds native release executable and copies real
+compiler from sysroot, not rustup proxy. Compiler libraries include WASM linker. Bundle excludes host standard libraries,
+Rust sources, unrelated targets, and developer tools. Packaging compiles starter
+filter with empty PATH before publishing output directory; this checks bundled
+compiler and linker without system Rust. CI runs packaging on Linux, Windows,
+Apple Silicon macOS, and Intel macOS.
+Existing output/staging directories must be moved or removed before rebuilding.
+No compiler downloads or installations happen when users run filters.
+Compiler and LLVM shared libraries still account for most unpacked size. Compress
+whole directory for distribution (ZIP or tar.gz); compression reduces download
+size without changing offline behavior.
 
-Compiler is **not bundled**. Enlumi embeds Wasmtime; no separate Wasmtime install
-is required. Source compilation uses a temporary directory and direct `rustc`,
-without Cargo, build scripts, downloads, or external crates. Windows compiler
-processes launch without opening console windows. Same mechanism supports native
-Windows, Linux, and macOS builds; this prototype was exercised locally on Windows.
+Development builds without bundle need Rust 2024 compiler and WASM target.
+Set `ENLUMI_RUSTC` to select compiler executable; selected compiler needs its own
+`wasm32-unknown-unknown` standard library. Repository uses pinned nightly.
+
+Source compilation uses temporary directory and direct `rustc`, without Cargo,
+build scripts, or external crates. Windows compiler processes launch without
+console windows. Native Windows, Linux, and macOS use same bundle layout;
+bundles require usual host system libraries used by application and compiler.
 
 ## Function contract
 

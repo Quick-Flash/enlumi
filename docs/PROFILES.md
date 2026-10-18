@@ -15,18 +15,25 @@ No Betaflight alias table or motor pole-count default is built into Enlumi.
    Enlumi loads profile if needed, computes available outputs, and adds that view.
    **Load** prepares resources without placing plots; **Load file…** supports
    profiles outside library directory. Existing work is preserved.
-3. Under **Loaded views**, drag a view onto any plot, or use **New panel** /
-   **Add to active**. Existing plot
-   contents remain; fields already present are skipped. View geometry is attached
-   too. Adding a view fits the destination axes. Views can be used repeatedly.
+3. Each profile expands into **Views**, **Fields**, and **Geometry**. Views start
+   open; Fields/Geometry expand on demand. Search opens matching sections and
+   filters their rows. Drag outputs, or use inline **Add** / **New** (new plot).
+   Field **⋯ → Use in filter** also accepts individual outputs; fields drag into
+   filter inputs or state-band source area. Imports outside library appear under
+   **Imported**. Existing plot contents remain; duplicate sources are skipped.
+   View geometry attaches too. Search, expansion and scroll survive mode switches.
 
 Named state bands also appear in the geometry library. Their name and each
 state's name/color can be edited with existing geometry controls. Labels render
 inside the time bands. Derived band sources refresh after filter recomputation.
 
 Profiles are additive. Conflicting output names, geometry names, or signal
-metadata reject the load. Each profile path loads once per log; reload the log
-to apply a revised file from scratch. Missing signals, failed filters and their
+metadata reject the load. Each canonical profile path and selected flight owns one
+prepared setup. **⋯ → Reload** prepares replacement in background and preserves previous
+setup if validation or computation fails. Stable IDs update existing lines and
+recompute dependent filters/state bands. **⋯ → Remove…** previews owned outputs and
+blocks removal when manual filters, state bands, or manually added derived lines
+depend on them. Existing plots and unrelated raw lines remain. Missing signals, failed filters and their
 dependents, and unavailable geometry are skipped with visible warnings. Views keep
 remaining lines/geometry; completely empty views are skipped. Raw `requires`
 entries report missing data without blocking unrelated resources. Firmware/settings
@@ -40,7 +47,7 @@ validation, and Rust/WASM execution limits.
 Click **Folder…** to choose profile library directory. Choice persists across
 launches and controls both browsing and automatic firmware matching. Nested
 folders are supported. **Load file…** imports one profile without changing library.
-**Loaded views** and **Skipped items** expand on demand.
+Profile sections and **Details** expand on demand. Info icon beside profile search shows full directory path, recorded firmware, and library help. Superseded directory scans cannot replace newer results.
 
 Without a selected folder, library defaults to:
 
@@ -69,10 +76,12 @@ profiles/
 
 ## Firmware detection and defaults
 
-Click **Auto** beside a profile to enable automatic firmware selection. **Auto ✓**
-means enabled; click again to disable. Toggle saves `"auto_apply"` in that JSON file.
-Reload log to use changed defaults. Editing `"auto_apply": true` manually also works;
-default is false. Each successful log load scans files in filename order and matches
+Open **⋯** beside profile, then **Auto** to enable automatic firmware selection. **Auto ✓**
+means enabled; click again to disable. Choices save in application configuration
+as `profile-auto.json`, keyed by canonical recipe path. Recipe stays untouched,
+including in read-only libraries. Auto scans chosen library; imports outside it
+must move into library before enabling Auto. Explicit local true/false overrides recipe's
+`auto_apply` default; absent local choice uses recipe default (false if omitted). Each successful log load scans files in filename order and matches
 `requires_settings` against recorded metadata, including firmware revision/version.
 At least one setting condition is required for auto-apply. Unmatched firmware
 profiles are skipped. Matching profiles apply serially and open Profiles sidebar
@@ -81,11 +90,14 @@ or resources report warnings and do not stop unrelated defaults. No panels open
 automatically; drag a view or choose its panel action.
 
 Use narrow version prefixes, e.g. `Betaflight 2026.6.`, rather than guessing across
-firmware releases. Conditions include explicit flight number (default 1); examples
-configure first flight only. Additional flights need separately configured profiles.
+firmware releases. Choose **Flight** before applying profiles to multi-flight files.
+Flight-1 Blackbox paths and setting references act as template scope and bind to
+selected flight; explicit references to other flights stay explicit. Each flight
+gets independent resource IDs. Recorded matching values appear under profile name.
+Selecting flight also checks configured Auto profiles for that flight.
 Scanning reads all JSON profiles; malformed files report errors. Rust filters in
 enabled matching profiles run through existing WASM engine. Only enable profiles
-you intend to run. Refresh updates discovery; reload log to reapply defaults.
+you intend to run. Refresh updates discovery; **Reload** applies edited recipe to existing setup.
 
 Latest-release examples target [Betaflight 2026.6.2](https://github.com/betaflight/betaflight/releases/tag/2026.6.2):
 `betaflight-2026.6-pid.json`, `betaflight-2026.6-pid-high-resolution.json`, and
@@ -124,7 +136,10 @@ order, including ULog initial values, changes and defaults. There is no implicit
 
 Numeric settings appear as stable-within-log sources `@setting/<flight>/<record>`.
 They are constant series across the log's time range. A recorded parameter change
-is a separate selectable value; its event time is not reconstructed. In multi-input
+is a separate selectable snapshot, never implicitly last-wins flight history.
+ULog parameter messages contain no timestamp: UI marks changed records as untimed,
+initial records as log-start values, and defaults separately. Profiles must select
+explicit `occurrence` for untimed changes. No event timestamp is fabricated. In multi-input
 filters, put a sampled signal first to establish output timestamps; settings can
 then be additional inputs. Numeric array elements use sources
 `@setting/<flight>/<record>/<element>`. String and non-numeric array records remain
@@ -225,11 +240,14 @@ and `shape`:
 | `line`, `rectangle` | `coordinates`: four scalars `[x1,y1,x2,y2]` |
 | `band` | `start`, `end`: time scalars in seconds |
 | `states` | `source`, `rules`: `[{"value":3,"name":"Mission","color":[40,160,90]}]` |
+| `flags` | `source`, `rules`: `[{"mask":4,"name":"Example flag","color":[40,160,90]}]` |
 
 State sources can be raw fields, numeric settings or derived fields. Values must
-be exact integers. Unmapped values retain numeric names. Bitmask fields need an
-explicit extraction/filter step or rules for exact combined values; Enlumi does
-not guess firmware mode bits. Static geometry coordinates may use recorded
+be exact integers. Exact `states` retain numeric names for unmapped values.
+`flags` matches `(value & mask) == mask`; simultaneous names join with ` + `,
+using first matching rule's color. Inactive samples leave gaps. Supply 1–64 unique,
+nonzero masks within exact integer range (2^53−1). Mask meanings live in recipe;
+Enlumi does not guess firmware mode bits. Static geometry coordinates may use recorded
 settings. General sample-to-path geometry is not part of version 1.
 
 Views contain `name`, optional `fields`, optional geometry IDs in `geometry`,
@@ -237,12 +255,23 @@ optional `tab` (false) and `stacked` (true). Placement flags affect **New panel*
 **Add to active plot** uses the active destination. Views use current derived
 results after edits. Deleting a required output/geometry makes the view unavailable
 rather than silently using old data. Plots retain the application's shared-Y-axis
-behavior; unit labels do not normalize differently-scaled signals.
+behavior; unit labels do not normalize differently-scaled signals. Different
+nonempty unit labels show warning and **Separate plots** action. Unknown units
+stay unknown. **Labels…** inspector shows raw ID, supplying profile/flight,
+transformation chain and recorded scalar settings. Manual label overrides survive
+Reload; **Profile default** and **Raw label** reset independently. Labels never
+convert values.
 
 Limits: 4 MiB profile JSON, 4096 aliases, 2048 filters/geometries, 32 view presets,
 256 state rules per band, and the existing filter and geometry limits.
 
 ## Examples
+
+[Betaflight 2026.6 Explorer pack](../examples/profiles/betaflight/2026.6/README.md)
+adds 52 view choices for either logging resolution: rates/PID, RC commands,
+motors/RPM, sensors/power, named mode/RX bands, and raw debug channels. Select
+pack directory with **Folder…**, or copy entire folder into existing library.
+Keep Rust helpers beside JSON files. Pack README lists conversions and limits.
 
 See [examples/profiles](../examples/profiles):
 

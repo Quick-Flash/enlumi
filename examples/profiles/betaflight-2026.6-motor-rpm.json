@@ -1,6 +1,53 @@
 {
-  "version": 1,
+  "auto_apply": false,
+  "filters": [
+    {
+      "id": "rpm",
+      "inputs": [
+        "$electrical"
+      ],
+      "metadata": {
+        "name": "Motor 1 mechanical RPM",
+        "unit": "rpm"
+      },
+      "operation": {
+        "gain": {
+          "ratio": [
+            200,
+            {
+              "setting": {
+                "name": "motor_poles"
+              }
+            }
+          ]
+        },
+        "kind": "affine"
+      }
+    },
+    {
+      "id": "hz",
+      "inputs": [
+        "$rpm"
+      ],
+      "metadata": {
+        "name": "Motor 1 rotational frequency",
+        "unit": "Hz"
+      },
+      "operation": {
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "kind": "affine"
+      }
+    }
+  ],
   "name": "Betaflight 2026.6 motor 1",
+  "requires": [
+    "blackbox/1/eRPM[0]"
+  ],
   "requires_settings": [
     {
       "setting": {
@@ -12,73 +59,26 @@
   "signals": [
     {
       "id": "electrical",
-      "source": "blackbox/1/eRPM[0]",
       "metadata": {
         "name": "Motor 1 logged eRPM",
         "unit": "100 eRPM"
-      }
+      },
+      "source": "blackbox/1/eRPM[0]"
     }
   ],
-  "filters": [
-    {
-      "id": "rpm",
-      "metadata": {
-        "name": "Motor 1 mechanical RPM",
-        "unit": "rpm"
-      },
-      "inputs": [
-        "$electrical"
-      ],
-      "operation": {
-        "kind": "affine",
-        "gain": {
-          "ratio": [
-            200,
-            {
-              "setting": {
-                "name": "motor_poles"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "id": "hz",
-      "metadata": {
-        "name": "Motor 1 rotational frequency",
-        "unit": "Hz"
-      },
-      "inputs": [
-        "$rpm"
-      ],
-      "operation": {
-        "kind": "affine",
-        "gain": {
-          "ratio": [
-            1,
-            60
-          ]
-        }
-      }
-    }
-  ],
+  "version": 1,
   "views": [
     {
-      "name": "Mechanical RPM",
       "fields": [
         "$rpm"
-      ]
+      ],
+      "name": "Mechanical RPM"
     },
     {
-      "name": "Rotation frequency",
       "fields": [
         "$hz"
-      ]
+      ],
+      "name": "Rotation frequency"
     }
-  ],
-  "auto_apply": false,
-  "requires": [
-    "blackbox/1/eRPM[0]"
   ]
 }

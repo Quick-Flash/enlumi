@@ -4,6 +4,7 @@ use crate::geometry_library::GeometryLibraryProps;
 use crate::parameter_details::ParameterDetailsProps;
 use crate::profile_library::ProfileLibraryProps;
 use crate::{field_row::FieldRowProps, field_tree::FieldTree, state::Workbench};
+use crate::{sidebar_help::SidebarHelpProps, sidebar_search::SidebarSearchProps};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
@@ -107,15 +108,16 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                         ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
                     }
                 }
-                if move || workbench.profiles.browsing.get() {
+                column(class="profile-browser-pane",class:hidden=move ||!workbench.profiles.browsing.get()) {
                     ProfileLibrary(workbench = workbench)
-                } else {
-                InputGroup(class = "field-search") {
-                    InputGroupInput(value = workbench.query, placeholder = "Search topics and fields", a11y:label = "Search log fields")
-                    if move || !workbench.query.with(String::is_empty) {
-                        InputGroupAddon(align = InputGroupAddonAlign::InlineEnd, on:click = move |_| workbench.query.set(String::new())) {
-                            InputGroupButton(size = InputGroupButtonSize::IconXs, a11y:label = "Clear search") { "×" }
-                        }
+                }
+                column(class="field-browser-pane",class:hidden=move ||workbench.profiles.browsing.get()) {
+                SidebarSearch(value = workbench.query, placeholder = "Search topics and fields", label = "Search log fields") {
+                    SidebarHelp(label = "Field shortcuts") {
+                        text(class="heading") { "Plot and filter fields" }
+                        text { "Drag onto plot to add line. Enter plots focused field." }
+                        text { "Ctrl-click toggles selection. Shift-click selects range." }
+                        text { "Drag selected fields together onto plot or Filters." }
                     }
                 }
                 text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Open a log to browse fields".into(), |log| format!("{} fields | drag onto a plot", log.catalogue.len())))}}
@@ -123,12 +125,16 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 VirtualList(count = Signal::derive_local(move || rows.with(Vec::len)), row_size = 28.0, label = "Log field tree", class = "signal-list",
                     row = move |index: usize| view! { FieldRow(workbench = workbench, row = Memo::new(move |_| rows.with(|rows| rows.get(index).cloned())), visible_fields = visible_fields) })
                 ParameterDetails(workbench = workbench)
-                row(class = "selected-field-row", class:hidden = move || workbench.selected_field.get().is_some_and(|id| id.starts_with("@setting/"))) {
+                row(class = "selected-field-row", class:hidden = move || workbench.selected_field.get().is_none_or(|id| id.starts_with("@setting/"))) {
                 text(class = "selected-field") {{move || workbench.selected_field.get().map_or_else(|| "Select a field or drag it onto a plot".into(), |field| workbench.field_name(&field))}}
                     FieldLabel(workbench = workbench)
                 }
-                text(class = "field-selection-count muted") {{move || format!("{} selected · drag selected fields together", workbench.selected_fields.with(|fields| fields.len()))}}
-                text(class = "muted") { "Ctrl-click toggles fields. Shift-click selects range. Drag selection onto plot or Filters. Enter plots focused field." }
+                if move ||workbench.selected_fields.with(|fields|fields.len()>1) {
+                    row(class="field-selection-actions") {
+                        text(class="field-selection-count muted") {{move ||format!("{} selected",workbench.selected_fields.with(|fields|fields.len()))}}
+                        ActionButton(a11y:label="Clear field selection",on:click=move |_|{workbench.selected_fields.set(Default::default());workbench.selected_field.set(None);workbench.selection_anchor.set(None);}) { "Clear" }
+                    }
+                }
                 if move || workbench.log.get().is_some_and(|log| !log.warnings.is_empty()) {
                     text(class = "warnings") {{move || workbench.log.with(|log| log.as_ref().map_or_else(String::new, |log| format!("{} load warnings", log.warnings.len())))}}
                 }

@@ -1,6 +1,7 @@
 //! Portable, explicit setup recipes. Firmware knowledge belongs in these files.
 #[cfg(test)]
 mod examples_tests;
+pub mod identity;
 pub mod prepare;
 pub mod resolve;
 #[cfg(test)]
@@ -212,6 +213,18 @@ pub enum Shape {
         source: Source,
         rules: Vec<crate::state_bands::StateRule>,
     },
+    Flags {
+        source: Source,
+        rules: Vec<FlagRule>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FlagRule {
+    pub mask: u64,
+    pub name: String,
+    pub color: [u8; 3],
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -297,7 +310,7 @@ pub fn discover_in(directory: &Path) -> Result<Vec<PathBuf>, String> {
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
             {
-                paths.push(entry.path());
+                paths.push(entry.path().canonicalize().map_err(|e| e.to_string())?);
                 if paths.len() > 4096 {
                     return Err("Profile directory exceeds 4096 files".into());
                 }
@@ -309,31 +322,6 @@ pub fn discover_in(directory: &Path) -> Result<Vec<PathBuf>, String> {
     scan(directory, 0, &mut paths)?;
     paths.sort();
     Ok(paths)
-}
-
-pub fn set_auto_apply(path: &Path, enabled: bool) -> Result<(), String> {
-    use std::io::Write;
-    let profile = load(path)?;
-    if enabled && profile.requires_settings.is_empty() {
-        return Err(
-            "Auto selection needs firmware/settings conditions in requires_settings".into(),
-        );
-    }
-    let mut value: serde_json::Value =
-        serde_json::from_reader(std::fs::File::open(path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    value["auto_apply"] = serde_json::Value::Bool(enabled);
-    let mut file =
-        tempfile::NamedTempFile::new_in(path.parent().ok_or("Profile needs a parent directory")?)
-            .map_err(|e| e.to_string())?;
-    writeln!(
-        file,
-        "{}",
-        serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?
-    )
-    .map_err(|e| e.to_string())?;
-    file.persist(path).map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 pub fn load(path: &Path) -> Result<Profile, String> {

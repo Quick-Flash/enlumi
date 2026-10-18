@@ -2,5 +2,5 @@
 name = "xtask"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR BSD-3-Clause"
+license = "AGPL-3.0-or-later"
 publish = false

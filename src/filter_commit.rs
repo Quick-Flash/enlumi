@@ -193,6 +193,13 @@ impl Workbench {
                 field.data = None;
             }
         }
+        self.profiles.overrides.update(|overrides| {
+            for field in &fields {
+                if field.data.is_none() {
+                    overrides.insert(field.key(), None);
+                }
+            }
+        });
         self.profiles.metadata.update(|metadata| {
             for field in &fields {
                 if field.data.is_none() {

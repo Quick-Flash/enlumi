@@ -1,0 +1,905 @@
+{
+  "version": 1,
+  "name": "Betaflight 2026.6 \u00b7 Motors and RPM",
+  "auto_apply": false,
+  "requires_settings": [
+    {
+      "setting": {
+        "name": "Firmware revision"
+      },
+      "starts_with": "Betaflight 2026.6."
+    }
+  ],
+  "signals": [
+    {
+      "id": "motor_1_raw",
+      "source": "blackbox/1/motor[0]",
+      "metadata": {
+        "name": "Motor 1 output raw",
+        "unit": "",
+        "axis": "Motor 1"
+      }
+    },
+    {
+      "id": "motor_1_erpm",
+      "source": "blackbox/1/eRPM[0]",
+      "metadata": {
+        "name": "Motor 1 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_1",
+      "source": "blackbox/1/servo[0]",
+      "metadata": {
+        "name": "Servo 1 output",
+        "unit": "us",
+        "axis": "Servo 1"
+      }
+    },
+    {
+      "id": "motor_2_raw",
+      "source": "blackbox/1/motor[1]",
+      "metadata": {
+        "name": "Motor 2 output raw",
+        "unit": "",
+        "axis": "Motor 2"
+      }
+    },
+    {
+      "id": "motor_2_erpm",
+      "source": "blackbox/1/eRPM[1]",
+      "metadata": {
+        "name": "Motor 2 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_2",
+      "source": "blackbox/1/servo[1]",
+      "metadata": {
+        "name": "Servo 2 output",
+        "unit": "us",
+        "axis": "Servo 2"
+      }
+    },
+    {
+      "id": "motor_3_raw",
+      "source": "blackbox/1/motor[2]",
+      "metadata": {
+        "name": "Motor 3 output raw",
+        "unit": "",
+        "axis": "Motor 3"
+      }
+    },
+    {
+      "id": "motor_3_erpm",
+      "source": "blackbox/1/eRPM[2]",
+      "metadata": {
+        "name": "Motor 3 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_3",
+      "source": "blackbox/1/servo[2]",
+      "metadata": {
+        "name": "Servo 3 output",
+        "unit": "us",
+        "axis": "Servo 3"
+      }
+    },
+    {
+      "id": "motor_4_raw",
+      "source": "blackbox/1/motor[3]",
+      "metadata": {
+        "name": "Motor 4 output raw",
+        "unit": "",
+        "axis": "Motor 4"
+      }
+    },
+    {
+      "id": "motor_4_erpm",
+      "source": "blackbox/1/eRPM[3]",
+      "metadata": {
+        "name": "Motor 4 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_4",
+      "source": "blackbox/1/servo[3]",
+      "metadata": {
+        "name": "Servo 4 output",
+        "unit": "us",
+        "axis": "Servo 4"
+      }
+    },
+    {
+      "id": "motor_5_raw",
+      "source": "blackbox/1/motor[4]",
+      "metadata": {
+        "name": "Motor 5 output raw",
+        "unit": "",
+        "axis": "Motor 5"
+      }
+    },
+    {
+      "id": "motor_5_erpm",
+      "source": "blackbox/1/eRPM[4]",
+      "metadata": {
+        "name": "Motor 5 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_5",
+      "source": "blackbox/1/servo[4]",
+      "metadata": {
+        "name": "Servo 5 output",
+        "unit": "us",
+        "axis": "Servo 5"
+      }
+    },
+    {
+      "id": "motor_6_raw",
+      "source": "blackbox/1/motor[5]",
+      "metadata": {
+        "name": "Motor 6 output raw",
+        "unit": "",
+        "axis": "Motor 6"
+      }
+    },
+    {
+      "id": "motor_6_erpm",
+      "source": "blackbox/1/eRPM[5]",
+      "metadata": {
+        "name": "Motor 6 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_6",
+      "source": "blackbox/1/servo[5]",
+      "metadata": {
+        "name": "Servo 6 output",
+        "unit": "us",
+        "axis": "Servo 6"
+      }
+    },
+    {
+      "id": "motor_7_raw",
+      "source": "blackbox/1/motor[6]",
+      "metadata": {
+        "name": "Motor 7 output raw",
+        "unit": "",
+        "axis": "Motor 7"
+      }
+    },
+    {
+      "id": "motor_7_erpm",
+      "source": "blackbox/1/eRPM[6]",
+      "metadata": {
+        "name": "Motor 7 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_7",
+      "source": "blackbox/1/servo[6]",
+      "metadata": {
+        "name": "Servo 7 output",
+        "unit": "us",
+        "axis": "Servo 7"
+      }
+    },
+    {
+      "id": "motor_8_raw",
+      "source": "blackbox/1/motor[7]",
+      "metadata": {
+        "name": "Motor 8 output raw",
+        "unit": "",
+        "axis": "Motor 8"
+      }
+    },
+    {
+      "id": "motor_8_erpm",
+      "source": "blackbox/1/eRPM[7]",
+      "metadata": {
+        "name": "Motor 8 logged eRPM",
+        "unit": "100 eRPM",
+        "axis": ""
+      }
+    },
+    {
+      "id": "servo_8",
+      "source": "blackbox/1/servo[7]",
+      "metadata": {
+        "name": "Servo 8 output",
+        "unit": "us",
+        "axis": "Servo 8"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "motor_1_span",
+      "inputs": [
+        "$motor_1_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 1 configured output",
+        "unit": "%",
+        "axis": "Motor 1"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_1_rpm",
+      "inputs": [
+        "$motor_1_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 1 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 1"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_1_hz",
+      "inputs": [
+        "$motor_1_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 1 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 1"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "motor_2_span",
+      "inputs": [
+        "$motor_2_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 2 configured output",
+        "unit": "%",
+        "axis": "Motor 2"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_2_rpm",
+      "inputs": [
+        "$motor_2_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 2 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 2"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_2_hz",
+      "inputs": [
+        "$motor_2_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 2 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 2"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "motor_3_span",
+      "inputs": [
+        "$motor_3_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 3 configured output",
+        "unit": "%",
+        "axis": "Motor 3"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_3_rpm",
+      "inputs": [
+        "$motor_3_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 3 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 3"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_3_hz",
+      "inputs": [
+        "$motor_3_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 3 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 3"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "motor_4_span",
+      "inputs": [
+        "$motor_4_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 4 configured output",
+        "unit": "%",
+        "axis": "Motor 4"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_4_rpm",
+      "inputs": [
+        "$motor_4_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 4 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 4"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_4_hz",
+      "inputs": [
+        "$motor_4_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 4 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 4"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "motor_5_span",
+      "inputs": [
+        "$motor_5_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 5 configured output",
+        "unit": "%",
+        "axis": "Motor 5"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_5_rpm",
+      "inputs": [
+        "$motor_5_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 5 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 5"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_5_hz",
+      "inputs": [
+        "$motor_5_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 5 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 5"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "motor_6_span",
+      "inputs": [
+        "$motor_6_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 6 configured output",
+        "unit": "%",
+        "axis": "Motor 6"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_6_rpm",
+      "inputs": [
+        "$motor_6_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 6 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 6"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_6_hz",
+      "inputs": [
+        "$motor_6_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 6 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 6"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "motor_7_span",
+      "inputs": [
+        "$motor_7_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 7 configured output",
+        "unit": "%",
+        "axis": "Motor 7"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_7_rpm",
+      "inputs": [
+        "$motor_7_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 7 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 7"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_7_hz",
+      "inputs": [
+        "$motor_7_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 7 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 7"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    },
+    {
+      "id": "motor_8_span",
+      "inputs": [
+        "$motor_8_raw",
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 0
+          }
+        },
+        {
+          "setting": {
+            "name": "motorOutput",
+            "element": 1
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 8 configured output",
+        "unit": "%",
+        "axis": "Motor 8"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "configured_span.rs"
+      }
+    },
+    {
+      "id": "motor_8_rpm",
+      "inputs": [
+        "$motor_8_erpm",
+        {
+          "setting": {
+            "name": "motor_poles"
+          }
+        }
+      ],
+      "metadata": {
+        "name": "Explorer motor 8 mechanical RPM",
+        "unit": "rpm",
+        "axis": "Motor 8"
+      },
+      "operation": {
+        "kind": "rust",
+        "path": "mechanical_rpm.rs"
+      }
+    },
+    {
+      "id": "motor_8_hz",
+      "inputs": [
+        "$motor_8_rpm"
+      ],
+      "metadata": {
+        "name": "Explorer motor 8 rotation frequency",
+        "unit": "Hz",
+        "axis": "Motor 8"
+      },
+      "operation": {
+        "kind": "affine",
+        "gain": {
+          "ratio": [
+            1,
+            60
+          ]
+        },
+        "offset": 0
+      }
+    }
+  ],
+  "geometry": [],
+  "views": [
+    {
+      "name": "Motors \u00b7 configured span (%)",
+      "fields": [
+        "$motor_1_span",
+        "$motor_2_span",
+        "$motor_3_span",
+        "$motor_4_span",
+        "$motor_5_span",
+        "$motor_6_span",
+        "$motor_7_span",
+        "$motor_8_span"
+      ]
+    },
+    {
+      "name": "Motors \u00b7 raw output",
+      "fields": [
+        "$motor_1_raw",
+        "$motor_2_raw",
+        "$motor_3_raw",
+        "$motor_4_raw",
+        "$motor_5_raw",
+        "$motor_6_raw",
+        "$motor_7_raw",
+        "$motor_8_raw"
+      ]
+    },
+    {
+      "name": "Motor mechanical RPM",
+      "fields": [
+        "$motor_1_rpm",
+        "$motor_2_rpm",
+        "$motor_3_rpm",
+        "$motor_4_rpm",
+        "$motor_5_rpm",
+        "$motor_6_rpm",
+        "$motor_7_rpm",
+        "$motor_8_rpm"
+      ]
+    },
+    {
+      "name": "Motor rotation frequency (Hz)",
+      "fields": [
+        "$motor_1_hz",
+        "$motor_2_hz",
+        "$motor_3_hz",
+        "$motor_4_hz",
+        "$motor_5_hz",
+        "$motor_6_hz",
+        "$motor_7_hz",
+        "$motor_8_hz"
+      ]
+    },
+    {
+      "name": "Logged electrical RPM (100 eRPM)",
+      "fields": [
+        "$motor_1_erpm",
+        "$motor_2_erpm",
+        "$motor_3_erpm",
+        "$motor_4_erpm",
+        "$motor_5_erpm",
+        "$motor_6_erpm",
+        "$motor_7_erpm",
+        "$motor_8_erpm"
+      ]
+    },
+    {
+      "name": "Servo outputs (us)",
+      "fields": [
+        "$servo_1",
+        "$servo_2",
+        "$servo_3",
+        "$servo_4",
+        "$servo_5",
+        "$servo_6",
+        "$servo_7",
+        "$servo_8"
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "source": "blackbox/1/motor",
+      "name": "Motor outputs",
+      "unit": "",
+      "components": {
+        "[0]": "Motor 1",
+        "[1]": "Motor 2",
+        "[2]": "Motor 3",
+        "[3]": "Motor 4",
+        "[4]": "Motor 5",
+        "[5]": "Motor 6",
+        "[6]": "Motor 7",
+        "[7]": "Motor 8"
+      }
+    },
+    {
+      "source": "blackbox/1/eRPM",
+      "name": "Electrical RPM",
+      "unit": "100 eRPM",
+      "components": {
+        "[0]": "Motor 1",
+        "[1]": "Motor 2",
+        "[2]": "Motor 3",
+        "[3]": "Motor 4",
+        "[4]": "Motor 5",
+        "[5]": "Motor 6",
+        "[6]": "Motor 7",
+        "[7]": "Motor 8"
+      }
+    },
+    {
+      "source": "blackbox/1/servo",
+      "name": "Servo outputs",
+      "unit": "us",
+      "components": {
+        "[0]": "Servo 1",
+        "[1]": "Servo 2",
+        "[2]": "Servo 3",
+        "[3]": "Servo 4",
+        "[4]": "Servo 5",
+        "[5]": "Servo 6",
+        "[6]": "Servo 7",
+        "[7]": "Servo 8"
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # Third-party notices
 
-Enlumi's `MIT OR BSD-3-Clause` license applies to this project's original code.
-Dependencies keep their own license terms.
+Enlumi is distributed under [AGPL-3.0-or-later](LICENSE).
+Dependencies and third-party material retain their own license terms and notices.
 
 | Component | Source | Declared license |
 | --- | --- | --- |
@@ -24,6 +24,25 @@ must include notices required by their resolved dependency set.
 PlotJuggler inspired the interaction model. Enlumi does not bundle its code.
 
 Blackbox support links `bbl_parser` 1.1.1, licensed AGPL-3.0-or-later.
-Enlumi's source license does not override that dependency's copyleft terms.
-Distributing a combined binary requires addressing those terms or obtaining
-an appropriate alternative license from the dependency author.
+Enlumi's AGPL licensing aligns the application with that decoder dependency.
+Distributors must satisfy applicable AGPL source and notice requirements as well
+as the retained terms of other dependencies.
+
+## Historical Enlumi notices
+
+Earlier Enlumi code was offered under `MIT OR BSD-3-Clause`. Its original
+copyright, permission, conditions, and warranty notices are retained in
+[legacy MIT notice](LICENSES/legacy/LICENSE-MIT) and
+[legacy BSD notice](LICENSES/legacy/LICENSE-BSD-3-Clause). Those notices apply to
+previously licensed material; they are not alternative licenses for all current
+Enlumi code. This migration does not revoke previously granted permissions.
+
+The bundled ULog fixture retains its [MIT license](tests/fixtures/LICENSE).
+The independently licensed zgui-plot dependency remains `MIT OR BSD-3-Clause`.
+
+## Portable filter compiler
+
+Portable distributions include Rust compiler, LLVM linker, and standard libraries.
+Their upstream copyright reports and license texts ship inside `rust-toolchain/`.
+These components retain their upstream licenses; Enlumi licensing does not replace them.
+Rust source: https://github.com/rust-lang/rust; LLVM source: https://github.com/llvm/llvm-project.

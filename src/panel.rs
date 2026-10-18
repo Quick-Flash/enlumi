@@ -50,10 +50,79 @@ pub fn Panel(
             }
             if move || workbench.drag.state.get().is_some_and(|drag| drag.3) {
                 column(class = "signal-drop-overlay", class:signal-drop-active = move || workbench.drop_target.get() == Some(pane.id)) {
-                    text(class = "drop-title") {{move || if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@profile-")) { if workbench.drop_target.get() == Some(pane.id) { "Release to add view" } else { "Drop view here" } } else if workbench.drop_target.get() == Some(pane.id) { "Release to add line" } else { "Drop field here" }}}
+                    text(class = "drop-title") {{move || if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@profile/")) { if workbench.drop_target.get() == Some(pane.id) { "Release to add view" } else { "Drop view here" } } else if workbench.drop_target.get() == Some(pane.id) { "Release to add line" } else { "Drop field here" }}}
                     text(class = "drop-name") {{move || workbench.drag.state.get().map(|drag| workbench.field_name(&drag.0)).unwrap_or_default()}}
                 }
             }
+        }
+    }
+}
+
+impl Workbench {
+    pub fn plot_units(self, pane: Pane) -> std::collections::BTreeSet<String> {
+        pane.lines.with(|lines| {
+            lines
+                .iter()
+                .filter_map(|line| {
+                    self.profiles
+                        .metadata
+                        .with(|all| all.get(&line.source).map(|m| m.unit.clone()))
+                })
+                .filter(|unit| !unit.is_empty())
+                .collect()
+        })
+    }
+    pub fn separate_plot_units(self, pane: Pane) {
+        let lines = pane.lines.get_untracked();
+        let mut groups = std::collections::BTreeMap::<String, Vec<crate::state::Line>>::new();
+        for line in lines {
+            let unit = self
+                .profiles
+                .metadata
+                .with_untracked(|all| all.get(&line.source).map(|m| m.unit.clone()))
+                .filter(|u| !u.is_empty())
+                .unwrap_or("Unknown unit".into());
+            groups.entry(unit).or_default().push(line);
+        }
+        if groups.len() < 2 {
+            return;
+        }
+        let styles = pane.plot.styles.get_untracked();
+        let hidden = pane.plot.hidden.get_untracked();
+        let drawing = pane.drawing.get_untracked();
+        for (index, (unit, lines)) in groups.into_iter().enumerate() {
+            let target = if index == 0 {
+                pane
+            } else {
+                self.add_plot(pane.id, true, false)
+            };
+            target.plot.styles.set(
+                styles
+                    .iter()
+                    .filter(|(id, _)| lines.iter().any(|line| line.id.to_string() == **id))
+                    .map(|(id, style)| (id.clone(), *style))
+                    .collect(),
+            );
+            target.plot.hidden.set(
+                hidden
+                    .iter()
+                    .filter(|id| lines.iter().any(|line| line.id.to_string() == **id))
+                    .cloned()
+                    .collect(),
+            );
+            target.drawing.set(
+                drawing
+                    .iter()
+                    .filter(|(id, _)| lines.iter().any(|line| line.id == **id))
+                    .map(|(id, options)| (*id, *options))
+                    .collect(),
+            );
+            target.lines.set(lines);
+            target.geometry.set(pane.geometry.get_untracked());
+            target.fit_axes(plot::interaction::Axes::BOTH);
+            self.profiles.titles.update(|titles| {
+                titles.insert(target.id, unit);
+            });
         }
     }
 }

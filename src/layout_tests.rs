@@ -1472,9 +1472,16 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     let stem = harness.app().windows()[0]
         .box_with_class("tree-stem")
         .unwrap();
-    let arrow = harness.app().windows()[0]
-        .box_with_class("tree-arrow")
+    // Parameters may precede raw topics; inspect arrow belonging to topic we opened.
+    let window = &harness.app().windows()[0];
+    let topic_node = window.nodes_with_class("topic-branch")[0];
+    let arrow_node = window
+        .dom()
+        .children(topic_node)
+        .into_iter()
+        .find(|node| window.nodes_with_class("tree-arrow").contains(node))
         .unwrap();
+    let arrow = zgui::view::ViewHost::window_box(window.host().as_ref(), arrow_node).unwrap();
     assert!(
         (arrow.origin.x.0 + arrow.size.width.0 / 2.0 - stem.origin.x.0).abs() < 1.0,
         "Chevron must align with connector trunk: {arrow:?} {stem:?}"
@@ -1485,7 +1492,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
             - topic.size.height.0 / 2.0)
             .abs()
             < 1.0,
-        "Chevron must center vertically in row"
+        "Chevron must center vertically in row: arrow={arrow:?}, topic={topic:?}"
     );
     let guide = harness.app().windows()[0]
         .box_with_class("tree-guide")
@@ -1875,7 +1882,13 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     harness.advance(Duration::from_millis(500));
     harness.settle(256);
     assert_eq!(
-        harness.app().windows()[0].nodes_with_class("hidden").len(),
+        harness.app().windows()[0]
+            .nodes_with_class("workbench-plot")
+            .iter()
+            .filter(|node| harness.app().windows()[0]
+                .nodes_with_class("hidden")
+                .contains(node))
+            .count(),
         1
     );
     let grouped = harness.app().windows()[0]
@@ -1939,7 +1952,12 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     harness.settle(256);
     let window = &harness.app().windows()[0];
     assert_eq!(window.nodes_with_class("split-grip-stacked").len(), 1);
-    assert!(window.nodes_with_class("hidden").is_empty());
+    assert!(
+        window
+            .nodes_with_class("workbench-plot")
+            .iter()
+            .all(|node| !window.nodes_with_class("hidden").contains(node))
+    );
     let first = window.box_with_class("workbench-plot").unwrap();
     let second = window.box_with_class("workbench-plot-active").unwrap();
     for rect in [first, second] {
@@ -3249,6 +3267,10 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
     click_class(&mut harness, "sidebar-toggle");
     harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
     harness.settle(128);
+    click_class(&mut harness, "theme-picker");
+    click_class(&mut harness, "theme-forest");
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
+    harness.settle(128);
     let idle = fill(&harness, &paints, "open-log");
     assert_ne!(disabled, idle);
     for class in [
@@ -3388,19 +3410,14 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
         )))
         .unwrap(),
     );
-    let source = "esc_status/0/esc[5].esc_rpm".to_owned();
-    let data = log.prepare(&source).unwrap();
-    workbench.log.set(Some(log));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("esc.json");
+    std::fs::write(&path,serde_json::json!({"version":1,"name":"ESC setup","views":[{"name":"ESC view","fields":["esc_status/0/esc[5].esc_rpm"]}]}).to_string()).unwrap();
     workbench
         .profiles
-        .views
-        .set(vec![crate::profile::prepare::PreparedView {
-            name: "ESC view".into(),
-            fields: vec![(source, data)],
-            geometry: Vec::new(),
-            tab: false,
-            stacked: true,
-        }]);
+        .directory
+        .set(Some(directory.path().to_path_buf()));
+    workbench.log.set(Some(log));
     harness.settle(128);
     assert!(
         harness.app().windows()[0]
@@ -3424,16 +3441,94 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
         library.size.width.0 > 200.0 && library.size.height.0 > 300.0,
         "{library:?}"
     );
-    click_class(&mut harness, "profile-loaded-toggle");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while harness.app().windows()[0]
+        .nodes_with_class("profile-file-name")
+        .is_empty()
+    {
+        assert!(Instant::now() < deadline, "Profile scan did not finish");
+        harness.settle(128);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    click_class(&mut harness, "profile-file-name");
+    harness.settle(128);
+    let fields_before = harness.app().windows()[0]
+        .box_with_class("profiles-trigger")
+        .unwrap();
+    click_class(&mut harness, "fields-menu");
+    harness.settle(128);
+    let fields_after = harness.app().windows()[0]
+        .box_with_class("profiles-trigger")
+        .unwrap();
+    assert_eq!(
+        fields_before.origin, fields_after.origin,
+        "Header spacing must stay fixed"
+    );
+    click_class(&mut harness, "profiles-trigger");
+    harness.settle(128);
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("profile-view-new")
+            .is_empty(),
+        "Expansion survives mode switch"
+    );
     click_class(&mut harness, "profile-view-new");
-    assert_eq!(workbench.panes.with_untracked(Vec::len), 2);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.profiles.busy.get_untracked() {
+        assert!(
+            Instant::now() < deadline,
+            "{}",
+            workbench.profiles.error.get_untracked()
+        );
+        harness.settle(128);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert_eq!(
+        workbench.panes.with_untracked(Vec::len),
+        2,
+        "{}",
+        workbench.profiles.error.get_untracked()
+    );
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
     workbench.activate(1);
-    harness.settle(128);
-    click_class(&mut harness, "profile-view-add");
-    click_class(&mut harness, "profile-view-add");
+    for _ in 0..2 {
+        click_class(&mut harness, "profile-view-add");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while workbench.profiles.busy.get_untracked() {
+            assert!(Instant::now() < deadline);
+            harness.settle(128);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        harness.settle(128);
+    }
     assert_eq!(workbench.panes.with_untracked(Vec::len), 2);
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
+    assert_eq!(
+        workbench
+            .profiles
+            .instances
+            .with_untracked(std::collections::BTreeMap::len),
+        1
+    );
+    click_class(&mut harness, "profile-menu");
+    harness.advance(Duration::from_millis(200));
+    harness.settle(128);
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("profile-auto")
+            .is_empty()
+    );
+    click_class(&mut harness, "profile-remove-open");
+    harness.settle(128);
+    assert!(workbench.profiles.removal.get_untracked().is_some());
+    assert_eq!(
+        workbench.pane().lines.with_untracked(Vec::len),
+        1,
+        "Preview must not remove outputs"
+    );
+    click_class(&mut harness, "profile-remove-cancel");
+    assert!(workbench.profiles.removal.get_untracked().is_none());
 }
 
 #[test]
@@ -4236,4 +4331,236 @@ fn mapping_builder_adds_custom_values_reports_duplicates_and_removes_rows() {
             .len(),
         0
     );
+}
+
+#[test]
+fn plot_tab_pointer_rename_and_keyboard_commit_cancel_blur() {
+    let (mut harness, workbench) = geometry_harness();
+    let key = |harness: &mut Harness<zgui::runtime::Runtime>, key: zgui::vocab::NamedKey| {
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::named(key, zgui::vocab::PhysicalKey::Unidentified(0)),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    };
+    let text = |harness: &mut Harness<zgui::runtime::Runtime>, value: &str| {
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character(value),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    };
+    click_class(&mut harness, "plot-tab-select");
+    click_class(&mut harness, "plot-tab-select");
+    harness.advance(Duration::from_millis(20));
+    harness.settle(128);
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("plot-tab-name")
+            .is_empty(),
+        "Pointer double-click opens tab editor"
+    );
+    text(&mut harness, "Roll PID");
+    key(&mut harness, zgui::vocab::NamedKey::Enter);
+    assert_eq!(
+        workbench
+            .profiles
+            .titles
+            .get_untracked()
+            .get(&1)
+            .map(String::as_str),
+        Some("Roll PID")
+    );
+    click_class(&mut harness, "plot-tab-select");
+    key(&mut harness, zgui::vocab::NamedKey::F2);
+    harness.advance(Duration::from_millis(20));
+    harness.settle(128);
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("plot-tab-name")
+            .is_empty()
+    );
+    text(&mut harness, "Discard");
+    key(&mut harness, zgui::vocab::NamedKey::Escape);
+    assert_eq!(workbench.profiles.titles.get_untracked()[&1], "Roll PID");
+    click_class(&mut harness, "plot-tab-select");
+    key(&mut harness, zgui::vocab::NamedKey::F2);
+    harness.advance(Duration::from_millis(20));
+    harness.settle(128);
+    text(&mut harness, "Pitch PID");
+    click_class(&mut harness, "fields-menu");
+    assert_eq!(
+        workbench.profiles.titles.get_untracked()[&1],
+        "Pitch PID",
+        "Blur saves rename"
+    );
+    assert!(
+        harness.app().windows()[0]
+            .pointer_capture(zgui::vocab::PointerId::MOUSE)
+            .is_none()
+    );
+}
+
+#[test]
+fn profile_reload_recovers_optional_output_and_failed_reload_keeps_live_lines() {
+    let (mut harness, workbench) = geometry_harness();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    workbench.log.set(Some(log));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("reload.json");
+    let mut recipe = serde_json::json!({"version":1,"name":"Reloadable","filters":[
+        {"id":"base","metadata":{"name":"Base"},"inputs":["esc_status/0/esc[5].esc_rpm"],"operation":{"kind":"affine","gain":1}},
+        {"id":"optional","metadata":{"name":"Optional"},"inputs":["missing/0/source"],"operation":{"kind":"affine","gain":2}}],
+        "views":[{"name":"Motor","fields":["$base","$optional"]}]});
+    std::fs::write(&path, recipe.to_string()).unwrap();
+    workbench.apply_profile(path.clone());
+    let wait = |harness: &mut Harness<zgui::runtime::Runtime>| {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while workbench.profiles.busy.get_untracked() {
+            assert!(Instant::now() < deadline, "Profile task stuck");
+            harness.settle(128);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        harness.settle(128);
+    };
+    wait(&mut harness);
+    let profile_key = crate::profile::identity::ProfileKey::new(path.canonicalize().unwrap(), 1);
+    let before = workbench.profiles.instances.get_untracked()[&profile_key]
+        .ids
+        .clone();
+    workbench.place_prepared_item(
+        profile_key.clone(),
+        crate::profile::identity::Item::View("Motor".into()),
+        crate::profile_state::Destination::Plot(Some(1)),
+    );
+    assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
+    let line = workbench.pane().lines.get_untracked()[0].clone();
+    recipe["filters"][0]["operation"]["gain"] = serde_json::json!(3);
+    recipe["filters"][1]["inputs"] = serde_json::json!(["esc_status/0/esc[5].esc_rpm"]);
+    std::fs::write(&path, recipe.to_string()).unwrap();
+    workbench.reload_profile(profile_key.clone());
+    wait(&mut harness);
+    assert!(
+        workbench.profiles.error.get_untracked().is_empty(),
+        "{}",
+        workbench.profiles.error.get_untracked()
+    );
+    assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 2);
+    assert_eq!(workbench.pane().lines.get_untracked()[0].id, line.id);
+    assert_eq!(
+        workbench.profiles.instances.get_untracked()[&profile_key]
+            .ids
+            .fields,
+        before.fields
+    );
+    let revision = workbench.pane().lines.get_untracked()[0].revision;
+    std::fs::write(&path, b"broken JSON").unwrap();
+    workbench.reload_profile(profile_key.clone());
+    wait(&mut harness);
+    assert!(!workbench.profiles.error.get_untracked().is_empty());
+    assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 2);
+    assert_eq!(workbench.pane().lines.get_untracked()[0].revision, revision);
+    recipe["filters"][0]["inputs"] = serde_json::json!(["missing/0/source"]);
+    std::fs::write(&path, recipe.to_string()).unwrap();
+    workbench.reload_profile(profile_key);
+    wait(&mut harness);
+    assert!(
+        workbench
+            .profiles
+            .error
+            .get_untracked()
+            .contains("previous setup")
+    );
+    assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 2);
+}
+
+#[test]
+fn multi_flight_profile_instances_use_separate_ids_names_settings_and_bands() {
+    let (mut harness, workbench) = geometry_harness();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/synthetic-multi-flight.BBL"
+        )))
+        .unwrap(),
+    );
+    assert_eq!(log.settings.len(), 2);
+    for flight in [1, 2] {
+        let parameter = log.settings[&flight]
+            .iter()
+            .position(|s| s.name == "motor_poles")
+            .unwrap();
+        assert_eq!(
+            log.prepare(&format!("@setting/{flight}/{parameter}"))
+                .unwrap()
+                .samples()
+                .last()
+                .unwrap()
+                .x,
+            3. * flight as f64
+        );
+    }
+    assert_eq!(
+        log.prepare("blackbox/2/gyroADC[0]").unwrap().samples()[0].y,
+        20.
+    );
+    workbench.log.set(Some(log));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("scope.json");
+    std::fs::write(&path,serde_json::json!({"version":1,"name":"Scoped","requires_settings":[{"setting":{"name":"Firmware revision"},"starts_with":"Betaflight 2026.6."}],
+        "filters":[{"id":"gyro","metadata":{"name":"Gyro","unit":"deg/s"},"inputs":["blackbox/1/gyroADC[0]"],"operation":{"kind":"affine","gain":1}}],
+        "geometry":[{"id":"flags","name":"Modes","shape":{"kind":"flags","source":"blackbox/1/flightModeFlags","rules":[{"mask":1,"name":"Example A","color":[1,2,3]},{"mask":4,"name":"Example B","color":[4,5,6]}]}}],
+        "views":[{"name":"Gyro","fields":["$gyro"],"geometry":["flags"]}]}).to_string()).unwrap();
+    for flight in [1, 2] {
+        workbench.profiles.flight.set(flight);
+        workbench.apply_profile(path.clone());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while workbench.profiles.busy.get_untracked() {
+            assert!(Instant::now() < deadline);
+            harness.settle(128);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(
+            workbench.profiles.error.get_untracked().is_empty(),
+            "{}",
+            workbench.profiles.error.get_untracked()
+        );
+    }
+    let instances = workbench.profiles.instances.get_untracked();
+    assert_eq!(instances.len(), 2);
+    let ids = instances
+        .values()
+        .map(|p| p.ids.fields["gyro"])
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(ids.len(), 2);
+    assert_eq!(workbench.derived.with_untracked(Vec::len), 2);
+    assert_eq!(workbench.geometry.items.with_untracked(Vec::len), 2);
+    for instance in instances.values() {
+        assert!(
+            instance.fields[0].sources[0]
+                .starts_with(&format!("blackbox/{}/", instance.key.flight))
+        );
+        assert!(
+            instance.fields[0]
+                .name
+                .contains(&format!("flight {}", instance.key.flight))
+        );
+        let bands = instance.geometry[0].states.as_ref().unwrap();
+        assert!(
+            bands
+                .rules
+                .iter()
+                .any(|rule| rule.name == "Example A + Example B")
+        );
+    }
 }

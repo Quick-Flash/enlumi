@@ -45,7 +45,7 @@ pub fn BandBackground(
         let ranges = pane.plot.ranges.get();
         let ids = pane.geometry.get();
         let hidden = pane.hidden_geometry.get();
-        let items = workbench.geometry.items.get();
+        let items = workbench.ordered_geometry(pane);
         for (row, item) in items
             .iter()
             .filter(|item| {

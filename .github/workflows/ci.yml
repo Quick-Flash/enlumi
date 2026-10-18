@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -33,9 +33,11 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-
+            target/debug
+            target/release
+            target/xtask
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
@@ -46,3 +48,5 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
       - name: Rust / WASM integration tests
         run: cargo test --locked -p enlumi script_e2e -- --ignored --nocapture
+      - name: Portable bundle and compiler check without system Rust
+        run: cargo xtask bundle

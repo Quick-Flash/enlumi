@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 mod action_button;
 mod app;
+mod app_icon;
 mod band_background;
 mod band_mapping;
 mod band_mapping_add;
@@ -11,6 +12,8 @@ mod band_state;
 mod browser;
 mod derived;
 mod derived_state;
+#[cfg(target_os = "linux")]
+mod desktop_icon;
 #[cfg(test)]
 mod editor;
 mod field_label;
@@ -52,6 +55,7 @@ mod geometry_legend_row;
 mod geometry_library;
 mod geometry_overlay;
 mod geometry_state;
+mod github_link;
 mod legend_drag;
 mod line_colors;
 mod log;
@@ -63,7 +67,13 @@ mod plot_bounds;
 mod plot_cursor;
 mod preferences;
 mod profile;
+mod profile_commit;
+mod profile_instance;
 mod profile_library;
+mod profile_output_row;
+mod profile_outputs;
+mod profile_placement;
+mod profile_preferences;
 mod profile_state;
 mod profile_view_source;
 mod script;
@@ -75,6 +85,9 @@ mod script_output_names;
 mod script_state;
 #[cfg(test)]
 mod script_tests;
+mod sidebar_help;
+mod sidebar_search;
+mod signal_provenance;
 mod startup;
 mod state;
 mod state_bands;
@@ -82,16 +95,35 @@ mod theme;
 mod theme_picker;
 #[cfg(test)]
 mod theme_tests;
+mod update_controls;
+mod update_download;
+mod update_install;
+mod update_notice;
+mod update_release;
+mod update_state;
+mod updates;
 mod workspace;
 
 use app::WorkbenchAppProps;
 use zgui::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
+    if update_install::startup()? {
+        return Ok(());
+    }
+    let path = std::env::args_os()
+        .nth(1)
+        .filter(|arg| arg != "--enlumi-finish-update")
+        .map(std::path::PathBuf::from);
     startup::reveal_if_first_frame_stalls();
+    app_icon::set_dock_icon();
+    #[cfg(target_os = "linux")]
+    if let Err(error) = desktop_icon::register() {
+        eprintln!("Could not register Enlumi desktop icon: {error}");
+    }
     app()
         .with_application_id("com.tealdrones.enlumi")
+        .with_icon(app_icon::window())
         .with_title("Enlumi - Log workbench")
         .with_size(1500.0, 850.0)
         .with_stylesheet(format!(

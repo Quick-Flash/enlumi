@@ -112,3 +112,42 @@ fn pid_example_computes_rate_error_and_rejects_high_resolution_mismatch() {
         .value = "1".into();
     assert!(example("betaflight-4.5-pid.json", &log).is_err());
 }
+
+#[test]
+#[ignore = "set ENLUMI_BLACKBOX_FIXTURE to private Basher log; needs wasm32 target"]
+fn real_blackbox_profiles_keep_partial_yaw_and_rpm() {
+    let path = std::env::var_os("ENLUMI_BLACKBOX_FIXTURE").expect("ENLUMI_BLACKBOX_FIXTURE");
+    let log = LogStore::read(Path::new(&path)).unwrap();
+    let pid = example("betaflight-2026.6-pid.json", &log).unwrap();
+    assert!(!pid.views.is_empty());
+    assert!(
+        pid.views
+            .iter()
+            .any(|v| v.name.to_lowercase().contains("yaw"))
+    );
+    assert!(
+        pid.metadata
+            .values()
+            .any(|m| m.name.to_lowercase().contains("roll"))
+    );
+    assert!(pid.warnings.iter().any(|w| w.contains("axisD[2]")));
+    let rpm = example("betaflight-2026.6-motor-rpm.json", &log).unwrap();
+    assert!(!rpm.fields.is_empty());
+    for field in rpm.fields {
+        assert!(
+            field
+                .data
+                .unwrap()
+                .samples()
+                .iter()
+                .any(|p| p.y.is_finite())
+        );
+    }
+    eprintln!(
+        "Real log: {} signals, {} PID fields, {} views, {} skipped causes",
+        log.catalogue.len(),
+        pid.fields.len(),
+        pid.views.len(),
+        pid.diagnostics.len()
+    );
+}

@@ -67,9 +67,7 @@ pub fn GeometryOverlay(
             let ranges = pane.plot.ranges.get();
             let ids = pane.geometry.get();
             let hidden = pane.hidden_geometry.get();
-            let selected = workbench.geometry.selected.get();
-            let mut items = workbench.geometry.items.get();
-            items.sort_by_key(|item| Some(item.id) == selected);
+            let items = workbench.ordered_geometry(pane);
             for item in items
                 .iter()
                 .filter(|item| ids.contains(&item.id) && !hidden.contains(&item.id))

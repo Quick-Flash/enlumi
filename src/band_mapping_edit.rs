@@ -14,6 +14,7 @@ impl Workbench {
             input: plot::time_series::SeriesData::new(vec![]).unwrap(),
             intervals: std::sync::Arc::from([]),
             rules: vec![],
+            flag_rules: None,
             error: None,
         }));
         self.geometry.items.update(|items| items.push(item));
