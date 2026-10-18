@@ -1,10 +1,8 @@
 name: Nightly releases
 
 on:
-  # Only merged code is checked out; never execute unmerged PR head code.
-  # Target event permits release publication for merged fork contributions too.
-  pull_request_target:
-    types: [closed]
+  push:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -17,9 +15,7 @@ concurrency:
 jobs:
   build:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       github.event.pull_request.base.ref == github.event.repository.default_branch)
+      github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
