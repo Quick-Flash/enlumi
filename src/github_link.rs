@@ -4,7 +4,7 @@ use zgui::prelude::*;
 #[component]
 pub fn GithubLink(workbench: Workbench) -> impl IntoView {
     view! {
-        ActionButton(icon = true, a11y:label = "Open Enlumi on GitHub",
+        ActionButton(icon = true, class = "github-link", a11y:label = "Open Enlumi on GitHub",
             on:click = move |_| {
                 workbench.task(async move {
                     if let Err(error) = blocking(crate::updates::open_repository).await {

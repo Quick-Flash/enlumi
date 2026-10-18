@@ -70,8 +70,8 @@ pub fn WorkbenchApp(
                     text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
                     UpdateControls(state = updates)
                     ActionButton(class:setting-active=move ||workbench.analysis.open.get(),on:click=move |_|{workbench.analysis.open.update(|open|*open = !*open);workbench.filters_open.set(false);}) {"Analyze"}
-                    GithubLink(workbench = workbench)
                     ThemePicker(palette = palette, preferences = preferences.clone())
+                    GithubLink(workbench = workbench)
                     Fps()
                 }
                 UpdateNotice(state = updates)

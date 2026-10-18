@@ -118,6 +118,44 @@ impl Workbench {
                 )
         })
     }
+    pub(crate) fn field_name_untracked(self, source: &str) -> String {
+        if let Some(drag) = crate::profile::identity::Drag::parse(source) {
+            return drag.item.name().into();
+        }
+        if let Some(label) = self
+            .profiles
+            .metadata
+            .with_untracked(|all| all.get(source).map(|m| m.label()))
+        {
+            return label;
+        }
+        self.derived.with_untracked(|fields| {
+            fields
+                .iter()
+                .find(|field| field.key() == source)
+                .map_or_else(
+                    || {
+                        self.profiles
+                            .metadata
+                            .with_untracked(|metadata| metadata.get(source).map(|meta| meta.label()))
+                            .or_else(|| {
+                                self.log.with_untracked(|log| {
+                                    log.as_ref().and_then(|log| log.setting_label(source))
+                                })
+                            })
+                            .unwrap_or_else(|| source.to_owned())
+                    },
+                    |field| {
+                        self.profiles.metadata.with_untracked(|metadata| {
+                            metadata.get(source).map_or_else(
+                                || field.name.clone(),
+                                |meta| meta.label_for(&field.name),
+                            )
+                        })
+                    },
+                )
+        })
+    }
     pub fn edit_filter(self, id: Option<u64>, source: Option<String>) {
         self.cancel_filter_input_drag();
         self.reset_filter_names();
@@ -137,7 +175,7 @@ impl Workbench {
                         name: if field.sources.len() == 1 {
                             field.name.clone()
                         } else {
-                            format!("{} filtered", self.field_name(source))
+                            format!("{} filtered", self.field_name_untracked(source))
                         },
                     })
                     .collect(),

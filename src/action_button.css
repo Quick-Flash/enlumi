@@ -1,6 +1,9 @@
 /* Single visual contract for app commands, independent of parent or sheet order. */
 .app-action.zui-button[data-variant="ghost"] { height: var(--app-control-height); min-height: var(--app-control-height); padding: 0 8px; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-control); color: var(--app-control-text); box-shadow: none; font-size: var(--app-font-sm); line-height: 16px; cursor: pointer; transition: none; }
 .app-action.zui-button[data-variant="ghost"][data-size="icon-xs"] { width: var(--app-control-height); min-width: var(--app-control-height); padding: 0; }
+.app-action.zui-button[data-variant="ghost"].github-link { border-color: transparent; background: transparent; }
+.app-action.zui-button[data-variant="ghost"].github-link:hover { border-color: transparent; background: transparent; color: var(--app-accent-text); }
+.app-action.zui-button[data-variant="ghost"].github-link:active { border-color: transparent; background: transparent; }
 .app-action.zui-button[data-variant="ghost"]:hover { background: var(--app-hover); color: var(--app-strong); border-color: var(--app-accent); }
 .app-action.zui-button[data-variant="ghost"].setting-active { background: var(--app-selected); color: var(--app-selected-text); border-color: var(--app-accent); }
 .app-action.zui-button[data-variant="ghost"].setting-active:hover { background: var(--app-selected-hover); }

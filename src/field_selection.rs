@@ -302,7 +302,7 @@ impl Workbench {
                         inputs.swap(existing, target);
                     } else {
                         inputs[target] = FilterInput {
-                            name: format!("{} filtered", self.field_name(&source)),
+                            name: format!("{} filtered", self.field_name_untracked(&source)),
                             source,
                         };
                     }
@@ -312,7 +312,7 @@ impl Workbench {
                 for source in sources {
                     if !inputs.iter().any(|input| input.source == source) {
                         inputs.push(FilterInput {
-                            name: format!("{} filtered", self.field_name(&source)),
+                            name: format!("{} filtered", self.field_name_untracked(&source)),
                             source,
                         });
                     }
@@ -363,7 +363,7 @@ impl Workbench {
             let label = fields
                 .iter()
                 .find(|field| field.key() == source)
-                .map_or_else(|| self.field_name(&source), |field| field.name.clone());
+                .map_or_else(|| self.field_name_untracked(&source), |field| field.name.clone());
             let stem = format!("{label} filtered");
             let mut name = stem.clone();
             let mut suffix = 2;
