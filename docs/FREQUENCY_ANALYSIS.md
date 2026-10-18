@@ -21,7 +21,7 @@ values: use converted profile/filter outputs when physical units are needed.
 
 ## Modes
 
-- **FFT amplitude:** one-sided peak-calibrated amplitude for each Hann window,
+- **FFT amplitude:** one-sided peak-calibrated amplitude for each selected window,
   combined using RMS across windows. Values retain input unit. This is averaged
   windowed amplitude, not one full-record complex transform or phase response.
 - **Welch PSD:** mean of one-sided, window-energy-normalized periodograms.
@@ -31,15 +31,25 @@ values: use converted profile/filter outputs when physical units are needed.
   mean PSD per conditioning bin as color. Add throttle, RPM, or another numeric
   field to inputs and choose it as conditioner. Uncheck it if its own spectrum
   is unwanted. Conditioner does not need same sample rate as analyzed signal,
-  but must cover complete analyzed windows without gaps. Heatmaps have 40 equal
-  conditioning bins; each populated bin averages its own contributing windows.
-  Empty or zero-power bins are blank. Color is dB relative to 1 input-unit²/Hz,
-  with per-plot auto color range shown above plot. Hover reads frequency, Y, dB.
+  but must cover complete analyzed windows without gaps. Choose 20, 40, 80, 160,
+  or 320 equal conditioning bins; each populated bin averages its contributing
+  windows. Empty or zero-power bins are blank. Color is dB relative to 1
+  input-unit²/Hz, with per-plot auto color range shown above plot.
+- **FFT over time (spectrogram):** time on X, frequency on Y, PSD in dB as color.
+  Each complete FFT window creates one time bin; window size sets frequency
+  resolution and overlap sets time spacing. Windows with missing samples stay
+  blank. Color range auto-scales per signal.
 
-Choose window size, optional time bounds, then **Run**. Results list measured
-sample rate, frequency resolution, accepted windows, and skipped windows.
-Plots support normal pan/zoom. **Cancel** stops active calculation. Results are
-snapshots; rerun after changing filters, metadata, inputs, or analysis settings.
+Choose FFT window size, window function, overlap (0%, 25%, 50%, or 75%), and
+optional time bounds, then **Run**. Hann is default. Mean removal stays enabled
+for each window. Results list measured sample rate, frequency resolution,
+accepted windows, and skipped windows. Plots support normal pan/zoom.
+**Cancel** stops active calculation. Results are snapshots; rerun after changing
+filters, metadata, inputs, or analysis settings.
+
+Analysis opens beside the normal plot workspace in a resizable panel. Drag the
+divider to change panel widths. Plot Analyze also opens this side-by-side view
+and copies visible signals and current X bounds into analysis.
 
 ## Sampling and scaling
 
@@ -51,8 +61,9 @@ nonfinite endpoint. Windows containing missing samples are skipped. No samples
 are replaced with zero to hide gaps. Strongly irregular sampling is unsuitable
 for interpreting high-frequency content through this interpolation method.
 
-Each complete window has its mean removed and periodic Hann weighting applied;
-overlap is 50%. For N samples, sample rate fs, and window w:
+Each complete window has its mean removed. The selected window function is
+periodic Hann, Hamming, Blackman, or rectangular; overlap is selectable. For N
+samples, sample rate fs, and window w:
 
 - Frequency bin k is `k * fs / N`; maximum is Nyquist `fs / 2`.
 - FFT amplitude is `factor * abs(FFT) / sum(w)` per window.
@@ -65,7 +76,8 @@ Only complete windows contribute; trailing partial windows are omitted.
 Short intervals, static parameters without sufficient samples, unavailable
 derived fields, and conditioners without varying values report errors per signal.
 Analysis is bounded to four million resampled points per signal and eight million
-temporary heatmap spectrum cells. Narrow time range when limits are exceeded.
+frequency-map cells. Narrow time range, reduce heatmap bins, or increase FFT size
+when limits are exceeded.
 
 Numerical implementation and native UI compile/lint checks are complete. Numerical
 reference comparisons and graphical interaction checks have not been run.

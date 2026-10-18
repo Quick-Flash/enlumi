@@ -18,10 +18,13 @@ pub fn AnalysisPlot(result: AnalysisResult) -> impl IntoView {
             "bounds",
             "Heatmap",
             SeriesData::new(vec![
-                plot::PlotPoint { x: 0., y: map.low },
                 plot::PlotPoint {
-                    x: (map.columns - 1) as f64 * map.frequency_step,
-                    y: map.high,
+                    x: map.x_low,
+                    y: map.y_low,
+                },
+                plot::PlotPoint {
+                    x: map.x_high,
+                    y: map.y_high,
                 },
             ])
             .expect("ordered heatmap bounds"),
@@ -33,7 +36,7 @@ pub fn AnalysisPlot(result: AnalysisResult) -> impl IntoView {
     view! {
         column(class = "analysis-result") {
             text(class = "heading") {{result.title}}
-            text(class = "muted") {{format!("X: Hz · {}",result.units)}}
+            text(class = "muted") {{move || heatmap.with_value(|map| map.as_ref().map_or_else(|| format!("X: Hz · {}",result.units), |map| format!("X: {} · {}", map.x_label, result.units)))}}
             text(class = "analysis-summary muted") {{result.summary}}
             if move || is_heatmap {
                 row(class = "analysis-color-key") {
@@ -52,16 +55,23 @@ pub fn AnalysisPlot(result: AnalysisResult) -> impl IntoView {
                 let ranges=state.ranges.get_untracked();let frequency=g.x_value(x,ranges.x);let value=g.y_value(y,ranges.y);
                 heatmap.with_value(|map| {
                     let Some(map)=map else {return;};
-                    if frequency<0. || frequency>(map.columns-1) as f64*map.frequency_step || value<map.low || value>map.high {return;}
-                    let column=(frequency/map.frequency_step).round() as usize;
-                    let row=(((value-map.low)/(map.high-map.low)*map.rows as f64) as usize).min(map.rows-1);
-                    readout.set(format!("{:.2} Hz · Y {:.3} · {}",column as f64*map.frequency_step,value,map.values[row*map.columns+column].map_or_else(||"No windows/power in bin".into(),|db|format!("{db:.2} dB"))));
+                    if frequency<map.x_low || frequency>map.x_high || value<map.y_low || value>map.y_high {return;}
+                    let column=(((frequency-map.x_low)/(map.x_high-map.x_low)*map.columns as f64) as usize).min(map.columns-1);
+                    let row=(((value-map.y_low)/(map.y_high-map.y_low)*map.rows as f64) as usize).min(map.rows-1);
+                    readout.set(format!("X {:.3} {} · Y {:.3} {} · {}",frequency,map.x_label,value,map.y_label,map.values[row*map.columns+column].map_or_else(||"No windows/power in bin".into(),|db|format!("{db:.2} dB"))));
                 });
             }) {
             TimeSeriesPlot(series = Signal::stored_local(series), state = state,
                 draw_series = Signal::stored_local(!is_heatmap), show_legend = !is_heatmap,
                 show_pointer = !is_heatmap, show_cursor_values = !is_heatmap,
-                format = UnsyncCallback::new(|(axis,value)|if axis==plot::labels::Axis::X {format!("{} Hz",plot::format_number(value))}else{plot::format_number(value)}),
+                format = UnsyncCallback::new(move |(axis,value)| {
+                    if axis == plot::labels::Axis::X {
+                        let is_time = heatmap.with_value(|map| map.as_ref().is_some_and(|map| map.x_label == "Time (s)"));
+                        format!("{} {}", plot::format_number(value), if is_time {"s"} else {"Hz"})
+                    } else {
+                        plot::format_number(value)
+                    }
+                }),
                 background_layer = move || AnyView::new(heatmap.get_value().map(|data|AnyView::new(view! {AnalysisHeatmap(data=data,state=state)}))))
             }
         }

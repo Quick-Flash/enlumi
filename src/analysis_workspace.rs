@@ -17,13 +17,39 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                     text(class = "muted") {"Drag fields or profile views here. Enable individual signals below."}
                     Select(value = ui.mode) {
                         SelectTrigger(label="Analysis type") {SelectValue()}
-                        SelectContent { SelectItem(value="fft") {"FFT amplitude"} SelectItem(value="psd") {"Welch PSD"} SelectItem(value="heatmap") {"FFT vs field heatmap"} }
+                        SelectContent {
+                            SelectItem(value="fft") {"FFT amplitude"}
+                            SelectItem(value="psd") {"Welch PSD"}
+                            SelectItem(value="heatmap") {"FFT vs field heatmap"}
+                            SelectItem(value="spectrogram") {"FFT over time (spectrogram)"}
+                        }
                     }
-                    text(class = "muted") {"FFT window samples · Hann · 50% overlap"}
                     Select(value = ui.size) {
                         SelectTrigger(label="FFT window size") {SelectValue()}
                         SelectContent {for size in ||[128,256,512,1024,2048,4096,8192,16384],key=|size|*size {SelectItem(value=size.to_string()) {{size.to_string()}}}}
                     }
+                    Select(value = ui.window) {
+                        SelectTrigger(label="Window function") {SelectValue()}
+                        SelectContent {
+                            SelectItem(value="hann") {"Hann"}
+                            SelectItem(value="hamming") {"Hamming"}
+                            SelectItem(value="blackman") {"Blackman"}
+                            SelectItem(value="rectangular") {"Rectangular"}
+                        }
+                    }
+                    Select(value = ui.overlap) {
+                        SelectTrigger(label="Window overlap") {SelectValue()}
+                        SelectContent {
+                            SelectItem(value="0") {"0%"}
+                            SelectItem(value="25") {"25%"}
+                            SelectItem(value="50") {"50%"}
+                            SelectItem(value="75") {"75%"}
+                        }
+                    }
+                    text(class = "muted") {{move || {
+                        let window = match ui.window.get().as_str() {"hamming"=>"Hamming","blackman"=>"Blackman","rectangular"=>"Rectangular",_=>"Hann"};
+                        format!("{}-sample {window} window · {}% overlap · remove mean per window", ui.size.get(), ui.overlap.get())
+                    }}}
                     text(class = "muted") {"Time range (log X seconds; blank = full signal)"}
                     row {Input(value=ui.start,placeholder="Start",a11y:label="Analysis start seconds") Input(value=ui.end,placeholder="End",a11y:label="Analysis end seconds")}
                     if move ||ui.mode.get()=="heatmap" {
@@ -34,7 +60,20 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                                 for source in move ||ui.sources.get(),key=|source|source.clone() {SelectItem(value=source.clone()) {{workbench.field_name(&source)}}}
                             }
                         }
+                        Select(value=ui.heatmap_bins) {
+                            SelectTrigger(label="Heatmap conditioning bins") {SelectValue()}
+                            SelectContent {
+                                SelectItem(value="20") {"20 bins"}
+                                SelectItem(value="40") {"40 bins"}
+                                SelectItem(value="80") {"80 bins"}
+                                SelectItem(value="160") {"160 bins"}
+                                SelectItem(value="320") {"320 bins"}
+                            }
+                        }
                         text(class="muted") {"X = frequency; Y = conditioning field; color = PSD in dB. Add throttle/RPM as input, then choose it here."}
+                    }
+                    if move ||ui.mode.get()=="spectrogram" {
+                        text(class="muted") {"X = time; Y = frequency; color = PSD in dB. Time bin spacing follows FFT window size and overlap."}
                     }
                     row {
                         ActionButton(disabled=Signal::derive_local(move ||ui.busy.get()),on:click=move |_|workbench.run_analysis()) {"Run"}

@@ -13,6 +13,8 @@ use crate::{
 };
 use std::path::PathBuf;
 use zgui::prelude::*;
+use zgui_ui::prelude::*;
+use zgui_ui_primitives::Orientation;
 
 #[component]
 pub fn WorkbenchApp(
@@ -75,9 +77,20 @@ pub fn WorkbenchApp(
                 UpdateNotice(state = updates)
                 row(class = "body") {
                     Browser(workbench = workbench)
-                    column(class = "plot-page", class:hidden = move || workbench.filters_open.get() || workbench.analysis.open.get()) { PlotWorkspace(workbench = workbench) }
+                    if move || !workbench.filters_open.get() {
+                        ResizablePanelGroup(direction = Orientation::Horizontal, label = "Plots and frequency analysis", class = "workbench-analysis-split") {
+                            ResizablePanel(default_size = 65.0, min_size = 35.0, min_pixels = 350.0, label = "Plots", class = "analysis-plots-panel") {
+                                column(class = "plot-page") { PlotWorkspace(workbench = workbench) }
+                            }
+                            if move || workbench.analysis.open.get() {
+                                ResizableHandle(label = "Resize plot and analysis panels", with_handle = true)
+                                ResizablePanel(default_size = 35.0, min_size = 25.0, min_pixels = 300.0, label = "Frequency analysis", class = "analysis-side-panel") {
+                                    AnalysisWorkspace(workbench = workbench)
+                                }
+                            }
+                        }
+                    }
                     if move || workbench.filters_open.get() { FilterWorkspace(workbench = workbench) }
-                    if move || workbench.analysis.open.get() && !workbench.filters_open.get() { AnalysisWorkspace(workbench = workbench) }
                 }
             }
         }

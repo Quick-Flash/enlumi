@@ -32,10 +32,11 @@ pub fn AnalysisHeatmap(data: Heatmap, state: PlotState) -> impl IntoView {
                 return;
             };
             let ranges = state.ranges.get();
-            let dy = (data.high - data.low) / data.rows as f64;
+            let dx = (data.x_high - data.x_low) / data.columns as f64;
+            let dy = (data.y_high - data.y_low) / data.rows as f64;
             let mut paths = vec![kurbo::BezPath::new(); 256];
             for row in 0..data.rows {
-                let low = data.low + row as f64 * dy;
+                let low = data.y_low + row as f64 * dy;
                 let high = low + dy;
                 if high < ranges.y.min || low > ranges.y.max {
                     continue;
@@ -44,9 +45,8 @@ pub fn AnalysisHeatmap(data: Heatmap, state: PlotState) -> impl IntoView {
                     let Some(db) = data.values[row * data.columns + column] else {
                         continue;
                     };
-                    let left = ((column as f64 - 0.5) * data.frequency_step).max(0.);
-                    let right = ((column as f64 + 0.5) * data.frequency_step)
-                        .min((data.columns - 1) as f64 * data.frequency_step);
+                    let left = data.x_low + column as f64 * dx;
+                    let right = left + dx;
                     if right < ranges.x.min || left > ranges.x.max {
                         continue;
                     }

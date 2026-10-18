@@ -30,6 +30,9 @@ pub struct AnalysisUi {
     pub condition: RwSignal<String, LocalStorage>,
     pub mode: RwSignal<String, LocalStorage>,
     pub size: RwSignal<String, LocalStorage>,
+    pub window: RwSignal<String, LocalStorage>,
+    pub overlap: RwSignal<String, LocalStorage>,
+    pub heatmap_bins: RwSignal<String, LocalStorage>,
     pub start: RwSignal<String, LocalStorage>,
     pub end: RwSignal<String, LocalStorage>,
     pub busy: RwSignal<bool, LocalStorage>,
@@ -49,6 +52,9 @@ impl AnalysisUi {
             condition: RwSignal::new_local(String::new()),
             mode: RwSignal::new_local("fft".into()),
             size: RwSignal::new_local("2048".into()),
+            window: RwSignal::new_local("hann".into()),
+            overlap: RwSignal::new_local("50".into()),
+            heatmap_bins: RwSignal::new_local("40".into()),
             start: RwSignal::new_local(String::new()),
             end: RwSignal::new_local(String::new()),
             busy: RwSignal::new_local(false),
@@ -139,6 +145,7 @@ impl Workbench {
                 mode: match ui.mode.get_untracked().as_str() {
                     "psd" => Mode::Psd,
                     "heatmap" => Mode::Heatmap,
+                    "spectrogram" => Mode::Spectrogram,
                     _ => Mode::Fft,
                 },
                 size: ui
@@ -146,6 +153,14 @@ impl Workbench {
                     .get_untracked()
                     .parse()
                     .map_err(|_| "Invalid FFT size")?,
+                window: match ui.window.get_untracked().as_str() {
+                    "hamming" => spectral::Window::Hamming,
+                    "blackman" => spectral::Window::Blackman,
+                    "rectangular" => spectral::Window::Rectangular,
+                    _ => spectral::Window::Hann,
+                },
+                overlap: ui.overlap.get_untracked().parse().map_err(|_| "Invalid window overlap")?,
+                heatmap_bins: ui.heatmap_bins.get_untracked().parse().map_err(|_| "Invalid heatmap bin count")?,
                 start: parse_time(ui.start.get_untracked())?,
                 end: parse_time(ui.end.get_untracked())?,
             })
@@ -185,6 +200,18 @@ impl Workbench {
         let condition_unit = metadata
             .get(&condition)
             .map_or_else(String::new, |m| m.unit.clone());
+        let window_name = match options.window {
+            spectral::Window::Hann => "Hann",
+            spectral::Window::Hamming => "Hamming",
+            spectral::Window::Blackman => "Blackman",
+            spectral::Window::Rectangular => "Rectangular",
+        };
+        let completion = format!("Complete. {window_name} window, {}% overlap, mean removed per window; gaps excluded. {}", options.overlap, match options.mode {
+            Mode::Fft => "FFT shows RMS average of peak-amplitude spectra.",
+            Mode::Psd => "PSD shows Welch mean power density.",
+            Mode::Heatmap => "Heatmap averages PSD within conditioning bins.",
+            Mode::Spectrogram => "Spectrogram shows PSD for each time window.",
+        });
         ui.cancel();
         let revision = ui.revision.get_untracked();
         let generation = self.generation.get_untracked();
@@ -213,12 +240,16 @@ impl Workbench {
                     let units = if options.mode == Mode::Fft {unit.to_owned()} else {format!("({unit})²/Hz")};
                     let summary = format!("{name}: {:.2} samples/s · Δf {:.3} Hz · {} windows · {} skipped",spectrum.rate,spectrum.rate/options.size as f64,spectrum.windows,spectrum.skipped);
                     let series = TimeSeries::new(source.clone(),name.clone(),SeriesData::new(spectrum.points).expect("frequency bins sorted"));
-                    let key = if options.mode == Mode::Heatmap || unit == "unknown unit" {source} else {units.clone()};
+                    let key = if matches!(options.mode, Mode::Heatmap | Mode::Spectrogram) || unit == "unknown unit" {source} else {units.clone()};
                     let id = revision.wrapping_mul(32) + grouped.len() as u64;
                     let entry = grouped.entry(key).or_insert_with(|| AnalysisResult {
                         id,
-                        title: match options.mode {Mode::Fft=>"FFT amplitude".into(),Mode::Psd=>"Welch PSD".into(),Mode::Heatmap=>format!("{name} · FFT vs {condition_name}")},
-                        units: if options.mode==Mode::Heatmap {format!("Y: {condition_name} [{condition_unit}] · color: dB re 1 {units}")}else{units},
+                        title: match options.mode {Mode::Fft=>"FFT amplitude".into(),Mode::Psd=>"Welch PSD".into(),Mode::Heatmap=>format!("{name} · FFT vs {condition_name}"),Mode::Spectrogram=>format!("{name} · Spectrogram")},
+                        units: match options.mode {
+                            Mode::Heatmap => format!("Y: {condition_name} [{condition_unit}] · color: dB re 1 {units}"),
+                            Mode::Spectrogram => format!("Y: Frequency (Hz) · color: dB re 1 {units}"),
+                            _ => units,
+                        },
                         summary: String::new(), series: TimeSeriesSet::new(Vec::new()).expect("empty series valid"),heatmap: spectrum.heatmap.clone(),
                     });
                     if !entry.summary.is_empty(){entry.summary.push('\n');} entry.summary.push_str(&summary);
@@ -229,7 +260,7 @@ impl Workbench {
             }).await;
             if self.generation.get_untracked()!=generation || ui.revision.get_untracked()!=revision {return;}
             ui.busy.set(false); ui.cancel.set_value(None);
-            ui.message.set(if messages.is_empty(){"Complete. Hann window, mean removed per window, 50% overlap; gaps excluded. FFT shows RMS average of peak-amplitude spectra.".into()}else{messages.join("\n")});
+            ui.message.set(if messages.is_empty(){completion}else{messages.join("\n")});
             ui.results.set(results);
         });
     }

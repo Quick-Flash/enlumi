@@ -1,4 +1,4 @@
-//! One-sided, mean-removed Hann spectra over contiguous, uniformly resampled runs.
+//! One-sided, mean-removed spectra over contiguous, uniformly resampled runs.
 use plot::{PlotPoint, time_series::SeriesData};
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,11 +8,23 @@ pub enum Mode {
     Fft,
     Psd,
     Heatmap,
+    Spectrogram,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Window {
+    Hann,
+    Hamming,
+    Blackman,
+    Rectangular,
 }
 
 pub struct Options {
     pub mode: Mode,
     pub size: usize,
+    pub window: Window,
+    pub overlap: usize,
+    pub heatmap_bins: usize,
     pub start: Option<f64>,
     pub end: Option<f64>,
 }
@@ -22,9 +34,12 @@ pub struct Heatmap {
     pub values: Vec<Option<f64>>,
     pub columns: usize,
     pub rows: usize,
-    pub frequency_step: f64,
-    pub low: f64,
-    pub high: f64,
+    pub x_low: f64,
+    pub x_high: f64,
+    pub y_low: f64,
+    pub y_high: f64,
+    pub x_label: String,
+    pub y_label: String,
     pub min_db: f64,
     pub max_db: f64,
 }
@@ -100,6 +115,12 @@ pub fn compute(
     if !n.is_power_of_two() || !(128..=65536).contains(&n) {
         return Err("FFT size must be power of two from 128 to 65536".into());
     }
+    if options.overlap >= 100 {
+        return Err("Window overlap must be below 100%".into());
+    }
+    if !(8..=512).contains(&options.heatmap_bins) {
+        return Err("Heatmap bin count must be from 8 to 512".into());
+    }
     if options.start.is_some_and(|v| !v.is_finite())
         || options.end.is_some_and(|v| !v.is_finite())
         || options.start.zip(options.end).is_some_and(|(a, b)| a >= b)
@@ -136,7 +157,15 @@ pub fn compute(
         None
     };
     let window = (0..n)
-        .map(|i| 0.5 - 0.5 * (std::f64::consts::TAU * i as f64 / n as f64).cos())
+        .map(|i| {
+            let phase = std::f64::consts::TAU * i as f64 / n as f64;
+            match options.window {
+                Window::Hann => 0.5 - 0.5 * phase.cos(),
+                Window::Hamming => 0.54 - 0.46 * phase.cos(),
+                Window::Blackman => 0.42 - 0.5 * phase.cos() + 0.08 * (2. * phase).cos(),
+                Window::Rectangular => 1.,
+            }
+        })
         .collect::<Vec<_>>();
     let sum_w = window.iter().sum::<f64>();
     let sum_w2 = window.iter().map(|v| v * v).sum::<f64>();
@@ -148,14 +177,16 @@ pub fn compute(
     let fft = FftPlanner::<f64>::new().plan_fft_forward(n);
     let mut buffer = vec![Complex::new(0., 0.); n];
     let mut scratch = vec![Complex::new(0., 0.); fft.get_inplace_scratch_len()];
-    for offset in (0..=count.saturating_sub(n)).step_by(n / 2) {
+    let step = (n * (100 - options.overlap) / 100).max(1);
+    for offset in (0..=count.saturating_sub(n)).step_by(step) {
         cancelled(cancel)?;
         let samples = &uniform[offset..offset + n];
         if samples.iter().any(Option::is_none) {
             skipped += 1;
             continue;
         }
-        let mut coordinate = None;
+        let mut coordinate = (options.mode == Mode::Spectrogram)
+            .then_some(start + (offset as f64 + (n - 1) as f64 / 2.) * dt);
         if let Some((points, gap)) = condition {
             let mut cursor = points
                 .partition_point(|p| p.x < start + offset as f64 * dt)
@@ -201,10 +232,12 @@ pub fn compute(
         }
         if let Some(value) = coordinate {
             // Bound temporary spectra storage for long logs and large transforms.
-            if frames.len() * bins > 8_000_000 {
-                return Err("Heatmap too large; narrow time range or increase FFT size".into());
+            if frames.len().saturating_add(1).saturating_mul(bins) > 8_000_000 {
+                return Err(
+                    "Frequency map too large; narrow time range or increase FFT size".into(),
+                );
             }
-            frames.push((value, power));
+            frames.push((offset / step, value, power));
         }
         windows += 1;
     }
@@ -225,30 +258,85 @@ pub fn compute(
             },
         })
         .collect();
-    let heatmap = if options.mode == Mode::Heatmap {
-        let low = frames.iter().map(|v| v.0).fold(f64::INFINITY, f64::min);
-        let high = frames.iter().map(|v| v.0).fold(f64::NEG_INFINITY, f64::max);
-        if !low.is_finite() || !high.is_finite() || high <= low {
-            return Err("Conditioning field needs varying values over FFT windows".into());
-        }
-        let rows = 40;
-        let mut totals = vec![0.; rows * bins];
-        let mut counts = vec![0_usize; rows];
-        for (coordinate, power) in frames {
-            let row = (((coordinate - low) / (high - low) * rows as f64) as usize).min(rows - 1);
-            counts[row] += 1;
-            for (k, value) in power.into_iter().enumerate() {
-                totals[row * bins + k] += value;
+    let heatmap = if matches!(options.mode, Mode::Heatmap | Mode::Spectrogram) {
+        let (columns, rows, x_low, x_high, y_low, y_high, x_label, y_label, values) = if options
+            .mode
+            == Mode::Heatmap
+        {
+            if options.heatmap_bins * bins > 8_000_000 {
+                return Err("Heatmap too large; reduce bin count or increase FFT size".into());
             }
-        }
-        let values = totals
-            .into_iter()
-            .enumerate()
-            .map(|(i, value)| {
-                (counts[i / bins] > 0 && value > 0.)
-                    .then(|| 10. * (value / counts[i / bins] as f64).log10())
-            })
-            .collect::<Vec<_>>();
+            let low = frames.iter().map(|v| v.1).fold(f64::INFINITY, f64::min);
+            let high = frames.iter().map(|v| v.1).fold(f64::NEG_INFINITY, f64::max);
+            if !low.is_finite() || !high.is_finite() || high <= low {
+                return Err("Conditioning field needs varying values over FFT windows".into());
+            }
+            let rows = options.heatmap_bins;
+            let mut totals = vec![0.; rows * bins];
+            let mut counts = vec![0_usize; rows];
+            for (_, coordinate, power) in frames {
+                let row =
+                    (((coordinate - low) / (high - low) * rows as f64) as usize).min(rows - 1);
+                counts[row] += 1;
+                for (k, value) in power.into_iter().enumerate() {
+                    totals[row * bins + k] += value;
+                }
+            }
+            let values: Vec<Option<f64>> = totals
+                .into_iter()
+                .enumerate()
+                .map(|(i, value)| {
+                    (counts[i / bins] > 0 && value > 0.)
+                        .then(|| 10. * (value / counts[i / bins] as f64).log10())
+                })
+                .collect();
+            (
+                bins,
+                rows,
+                0.,
+                rate / 2.,
+                low,
+                high,
+                "Frequency (Hz)".into(),
+                "Condition".into(),
+                values,
+            )
+        } else {
+            let columns = (count - n) / step + 1;
+            if columns * bins > 8_000_000 {
+                return Err("Spectrogram too large; narrow time range or increase FFT size".into());
+            }
+            let mut totals = vec![0.; columns * bins];
+            let mut counts = vec![0_usize; columns];
+            for (column, _, power) in frames {
+                counts[column] += 1;
+                for (row, value) in power.into_iter().enumerate() {
+                    totals[row * columns + column] += value;
+                }
+            }
+            let values: Vec<Option<f64>> = totals
+                .into_iter()
+                .enumerate()
+                .map(|(i, value)| {
+                    (counts[i % columns] > 0 && value > 0.)
+                        .then(|| 10. * (value / counts[i % columns] as f64).log10())
+                })
+                .collect();
+            let first_center = start + (n - 1) as f64 * dt / 2.;
+            let hop = step as f64 * dt;
+            let last_center = first_center + (columns.saturating_sub(1)) as f64 * hop;
+            (
+                columns,
+                bins,
+                first_center - hop / 2.,
+                last_center + hop / 2.,
+                0.,
+                rate / 2.,
+                "Time (s)".into(),
+                "Frequency (Hz)".into(),
+                values,
+            )
+        };
         let min_db = values
             .iter()
             .flatten()
@@ -264,11 +352,14 @@ pub fn compute(
         }
         Some(Heatmap {
             values,
-            columns: bins,
+            columns,
             rows,
-            frequency_step: rate / n as f64,
-            low,
-            high,
+            x_low,
+            x_high,
+            y_low,
+            y_high,
+            x_label,
+            y_label,
             min_db,
             max_db,
         })

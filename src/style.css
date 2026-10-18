@@ -6,6 +6,7 @@
 .fps-readout { flex: none; width: 70px; font-size: var(--app-font-xs); color: var(--app-muted); text-align: right; white-space: nowrap; }
 .body { flex: 1; height: 0; min-width: 0; min-height: 0; overflow: hidden; }
 .plot-page { flex: 1; min-width: 0; min-height: 0; }
+.workbench-analysis-split, .analysis-plots-panel, .analysis-side-panel { flex: 1; min-width: 0; min-height: 0; }
 .browser { flex: none; min-width: 0; min-height: 0; overflow: hidden; }
 .signal-sidebar { flex: 1; min-width: 0; min-height: 0; overflow: hidden; gap: 6px; padding: 8px; background: var(--app-surface); }
 .sidebar-search-row { flex: none; min-width: 0; gap: 4px; align-items: center; }
