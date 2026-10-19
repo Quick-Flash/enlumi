@@ -114,19 +114,20 @@ pub fn build() -> Result<(), String> {
                 ));
             }
         };
-        let revision = Command::new("git")
+        let commit = Command::new("git")
             .args(["rev-parse", "HEAD"])
             .current_dir(root)
-            .output()?;
-        let commit = String::from_utf8_lossy(&revision.stdout).trim().to_owned();
-        if !revision.status.success()
-            || commit.len() != 40
-            || !commit.bytes().all(|b| b.is_ascii_hexdigit())
-        {
-            return Err(std::io::Error::other(
-                "Portable updater needs Git revision metadata",
-            ));
-        }
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+            .filter(|sha| sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
+            .or_else(|| {
+                env::var("ENLUMI_BUILD_COMMIT")
+                    .ok()
+                    .filter(|sha| sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
+            })
+            .ok_or_else(|| std::io::Error::other("Portable updater needs Git revision metadata"))?;
         fs::write(
             staging.join("enlumi-bundle.json"),
             format!("{{\"format\":1,\"platform\":\"{platform}\",\"commit\":\"{commit}\"}}\n"),

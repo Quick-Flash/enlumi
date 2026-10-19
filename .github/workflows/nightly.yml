@@ -35,6 +35,7 @@ jobs:
     container: ${{ matrix.container }}
     env:
       ENLUMI_BUILD_PLATFORM: ${{ matrix.platform }}
+      ENLUMI_BUILD_COMMIT: ${{ github.sha }}
     timeout-minutes: 60
     steps:
       - name: Arch build libraries

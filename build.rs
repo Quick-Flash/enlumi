@@ -15,6 +15,7 @@ fn main() {
     icon::build();
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_PLATFORM");
+    println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_COMMIT");
     let platform = std::env::var("ENLUMI_BUILD_PLATFORM").unwrap_or_default();
     println!("cargo:rustc-env=ENLUMI_BUILD_PLATFORM={platform}");
     // Watch actual ref files, including worktrees and packed refs.
@@ -31,6 +32,7 @@ fn main() {
         }
     }
     let commit = git(&["rev-parse", "HEAD"])
+        .or_else(|| std::env::var("ENLUMI_BUILD_COMMIT").ok())
         .filter(|sha| sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
         .unwrap_or_default();
     println!("cargo:rustc-env=ENLUMI_BUILD_COMMIT={commit}");
