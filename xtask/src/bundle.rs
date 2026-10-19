@@ -99,6 +99,11 @@ pub fn build() -> Result<(), String> {
             fs::copy(root.join(name), staging.join(name))?;
         }
         let platform = match (env::consts::OS, env::consts::ARCH) {
+            ("linux", "x86_64")
+                if env::var("ENLUMI_BUILD_PLATFORM").as_deref() == Ok("arch-linux-x86_64") =>
+            {
+                "arch-linux-x86_64"
+            }
             ("linux", "x86_64") => "linux-x86_64",
             ("windows", "x86_64") => "windows-x86_64",
             ("macos", "aarch64") => "macos-aarch64",

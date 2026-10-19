@@ -61,7 +61,7 @@ impl TextMetrics {
     ///
     /// `line_height_px` is what the style asked for, when it asked; the face's own natural
     /// height carries otherwise.
-    #[allow(clippy::too_many_arguments)]
+
     pub fn from_face(
         resolved: &ResolvedLineMetrics,
         size_device_px: f32,

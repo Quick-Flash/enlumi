@@ -37,7 +37,7 @@ pub fn Fps() -> impl IntoView {
     let clock = Timers::current().expect("FPS window clock");
     sample(clock, meter, frame, fps);
     on_cleanup_local(move || frame.set_value(None));
-    view! { text(class = "fps-readout", a11y:label = "Frames per second") {{move || fps.get().map_or_else(|| "-- FPS".into(), |fps| format!("{fps:.0} FPS"))}} }
+    view! { text(class = "fps-readout", a11y:label = "Frames per second") {{move || fps.get().map_or_else(|| "--".into(), |fps| format!("{:.0}", fps.clamp(0., 999.)))}} }
 }
 fn sample(
     clock: Timers,

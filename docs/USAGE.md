@@ -8,6 +8,17 @@ shown. File filters include lowercase and uppercase suffixes (such as `.BBL`).
 Use **All files** for renamed or mixed-case files; their contents must still be
 a supported log format. Decoder failures and frame limits appear as load warnings.
 
+Press **M**, then click and drag across a plot to measure between data points.
+Initial click picks nearest sample. Drag endpoint follows horizontal position on chosen line.
+Time plots show elapsed time and reciprocal frequency; FFT/PSD plots show frequency
+spacing and reciprocal period. Release mouse clears highlight. Escape has no effect
+while measuring.
+M leaves text entry alone.
+
+Use each plot's camera menu for SVG/PNG screenshots. Toolbar camera exports all
+visible docks together, preserving layout and current X/Y views. PNG renders
+the same vector content at twice the SVG dimensions.
+
 Expand **Parameters** in field tree, alongside **Derived fields**. Search
 matches names, values, and record types. Recorded Blackbox flight settings and ULog
 parameter/info records appear here; repeated records stay separate. Decoder schema
@@ -233,4 +244,4 @@ its own collapsed state; line settings remain available while collapsed.
 
 ## Frequency analysis
 
-Open **Analyze**, drag fields or whole profile views into inputs, choose FFT amplitude, PSD, FFT vs field heatmap, or FFT over time, then **Run**. Expand profile views to drag individual members. Plot header **Analyze** seeds visible signals and current time range. See [frequency analysis](FREQUENCY_ANALYSIS.md) for scaling, sampling, units, and limits.
+Open toolbar **Analyze**, drag fields or profile views into inputs, choose analysis mode, then drag signals onto a plot. Drop heatmap conditioning field into its dedicated target. **Select on plot** chooses time bounds by dragging; **Use visible range** copies active time plot bounds. **Remove DC** toggles mean subtraction. Expand profile views to drag individual members. See [frequency analysis](FREQUENCY_ANALYSIS.md) for scaling, sampling, units, and limits.

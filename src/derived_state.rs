@@ -81,6 +81,7 @@ impl Workbench {
         }
     }
     pub fn field_name(self, source: &str) -> String {
+        let source = source.strip_prefix("@analysis/").unwrap_or(source);
         if let Some(drag) = crate::profile::identity::Drag::parse(source) {
             return drag.item.name().into();
         }
@@ -119,6 +120,7 @@ impl Workbench {
         })
     }
     pub(crate) fn field_name_untracked(self, source: &str) -> String {
+        let source = source.strip_prefix("@analysis/").unwrap_or(source);
         if let Some(drag) = crate::profile::identity::Drag::parse(source) {
             return drag.item.name().into();
         }

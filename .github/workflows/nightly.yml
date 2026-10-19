@@ -22,6 +22,9 @@ jobs:
         include:
           - os: ubuntu-22.04
             platform: linux-x86_64
+          - os: ubuntu-latest
+            platform: arch-linux-x86_64
+            container: archlinux:base-devel
           - os: windows-latest
             platform: windows-x86_64
           - os: macos-15
@@ -29,13 +32,23 @@ jobs:
           - os: macos-15-intel
             platform: macos-x86_64
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    env:
+      ENLUMI_BUILD_PLATFORM: ${{ matrix.platform }}
     timeout-minutes: 60
     steps:
+      - name: Arch build libraries
+        if: matrix.container != ''
+        working-directory: .
+        run: |
+          pacman -Syu --noconfirm --needed git rustup python pkgconf \
+            libx11 libxkbcommon libxkbcommon-x11 wayland libxcb libxcursor \
+            libxi libxrandr fontconfig ttf-dejavu
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
       - name: Linux build libraries
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.container == ''
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential pkg-config \
@@ -113,7 +126,8 @@ jobs:
           Includes offline Rust filter compiler and example profiles.
           Windows: ZIP. Linux/macOS: tar.gz. Choose matching architecture.
           Builds are unsigned; macOS builds are not notarized.
-          Linux build targets Ubuntu 22.04 or newer compatible systems.
+          Linux: linux-x86_64 targets Ubuntu 22.04+ compatible systems.
+          Arch Linux / rolling Arch derivatives: choose arch-linux-x86_64.
 
           Experimental build. Previous nightlies remain available.
           EOF

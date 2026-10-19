@@ -3,13 +3,22 @@ use zgui::prelude::*;
 
 impl Workbench {
     pub fn select_field(self, source: String, ctrl: bool, shift: bool, visible: &[String]) {
-        let profile = source.starts_with("@profile/");
+        let family = |id: &str| {
+            if id.starts_with("@profile/") {
+                1
+            } else if id.starts_with("@analysis/") {
+                2
+            } else {
+                0
+            }
+        };
+        let group = family(&source);
         self.selected_fields
-            .update(|fields| fields.retain(|id| id.starts_with("@profile/") == profile));
+            .update(|fields| fields.retain(|id| family(id) == group));
         if self
             .selection_anchor
             .get_untracked()
-            .is_some_and(|id| id.starts_with("@profile/") != profile)
+            .is_some_and(|id| family(&id) != group)
         {
             self.selection_anchor.set(None);
         }
@@ -88,19 +97,44 @@ impl Workbench {
             } else {
                 fields.sort_by(|a, b| crate::field_tree::natural_cmp(a, b));
             }
+            if source.starts_with("@analysis/") {
+                fields.retain(|id| {
+                    id.strip_prefix("@analysis/").is_some_and(|id| {
+                        self.analysis
+                            .sources
+                            .with_untracked(|sources| sources.iter().any(|source| source == id))
+                    })
+                });
+            }
             fields
         } else {
             vec![source]
         }
     }
     pub fn field_drag_move(self, x: f32, y: f32) {
+        self.analysis.condition_hover.set(
+            self.analysis.open.get_untracked()
+                && self.analysis.mode.get_untracked() == "heatmap"
+                && Self::inside(self.analysis.condition_drop, x, y),
+        );
         self.analysis.hover.set(
             self.analysis.open.get_untracked()
                 && !self.filters_open.get_untracked()
                 && Self::inside(self.analysis.drop, x, y),
         );
-        if self.analysis.hover.get_untracked() {
+        if self.analysis.hover.get_untracked() || self.analysis.condition_hover.get_untracked() {
             self.drop_target.set(None);
+            self.filter_drop_active.set(false);
+            self.bands.hover.set(false);
+            return;
+        }
+        if self
+            .drag
+            .state
+            .get_untracked()
+            .is_some_and(|drag| drag.0.starts_with("@analysis/"))
+        {
+            self.drop_target.set(self.hit_any_plot(x, y));
             self.filter_drop_active.set(false);
             self.bands.hover.set(false);
             return;
@@ -133,6 +167,7 @@ impl Workbench {
         self.drop_target.set(self.hit_plot(x, y));
     }
     pub fn finish_field_drag(self) {
+        self.analysis.condition_hover.set(false);
         self.analysis.hover.set(false);
         self.bands.hover.set(false);
         self.filter_drop_active.set(false);
@@ -140,11 +175,32 @@ impl Workbench {
         self.drop_target.set(None);
     }
     pub fn drop_fields(self, source: String, x: f32, y: f32) {
+        if source.starts_with("@analysis/") {
+            let sources = self
+                .drag_fields(source)
+                .into_iter()
+                .filter_map(|source| source.strip_prefix("@analysis/").map(str::to_owned))
+                .collect::<Vec<_>>();
+            if self.analysis.open.get_untracked()
+                && self.analysis.mode.get_untracked() == "heatmap"
+                && Self::inside(self.analysis.condition_drop, x, y)
+            {
+                self.set_analysis_condition(sources);
+            } else if let Some(target) = self.hit_any_plot(x, y) {
+                self.drop_analysis_sources(sources, Some(target));
+            }
+            self.finish_field_drag();
+            return;
+        }
         if self.analysis.open.get_untracked()
             && !self.filters_open.get_untracked()
-            && Self::inside(self.analysis.drop, x, y)
+            && (Self::inside(self.analysis.drop, x, y)
+                || self.analysis.mode.get_untracked() == "heatmap"
+                    && Self::inside(self.analysis.condition_drop, x, y))
         {
             let sources = self.drag_fields(source);
+            let conditioning = self.analysis.mode.get_untracked() == "heatmap"
+                && Self::inside(self.analysis.condition_drop, x, y);
             if sources
                 .first()
                 .is_some_and(|source| source.starts_with("@profile/"))
@@ -154,10 +210,18 @@ impl Workbench {
                         .iter()
                         .filter_map(|source| crate::profile::identity::Drag::parse(source))
                         .collect(),
-                    crate::profile_state::Destination::Analysis,
+                    if conditioning {
+                        crate::profile_state::Destination::AnalysisCondition
+                    } else {
+                        crate::profile_state::Destination::Analysis
+                    },
                 );
             } else {
-                self.add_analysis_sources(sources);
+                if conditioning {
+                    self.set_analysis_condition(sources);
+                } else {
+                    self.add_analysis_sources(sources);
+                }
             }
             self.finish_field_drag();
             return;

@@ -1,6 +1,6 @@
-# Temporary text scrolling fixes
+# Temporary UI fixes
 
-Direct framework dependencies remain upstream. Two existing dependency crates
+Direct framework dependencies remain upstream. Dependency crates
 are patched locally until upstream carries these behaviors:
 
 - `zgui-runtime`: zortax/zgui `f6badfb1af02b08ed1924687237028fb98a97bd8`.
@@ -10,6 +10,6 @@ are patched locally until upstream carries these behaviors:
   Add horizontal selection autoscroll and Shift-wheel scrolling.
 
 Focused source diff is in `text-scrolling.patch`.
-Sources and Apache-2.0 licenses are included. Runtime manifest is expanded from
+Runtime/editor sources and Apache-2.0 licenses are included. Runtime manifest is expanded from
 upstream workspace metadata; framework dependencies still resolve upstream.
 Remove these patch entries and directories after upstream fixes are adopted.

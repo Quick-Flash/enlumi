@@ -51,7 +51,7 @@ pub fn Panel(
             }
             column(class = "plot-content", class:legend-drop-active = move || workbench.line_drag.target.get().is_some_and(|target| target.pane == pane.id)) {
                 if move || pane.analysis.with(|result| result.as_ref().is_some_and(|result| result.heatmap.is_some())) {
-                    {move || pane.analysis.get().map(|result| AnyView::new(view! {AnalysisPlot(result=result,state=pane.plot,visible=visible)}))}
+                    {move || pane.analysis.get().map(|result| AnyView::new(view! {AnalysisPlot(result=result,state=pane.plot,visible=visible,snapshot=pane.snapshot)}))}
                 } else {
                     CursorPlot(workbench = workbench, pane = pane, visible = visible, linked = cursor)
                 }
@@ -63,9 +63,9 @@ pub fn Panel(
                 }
 
             }
-            if move || pane.analysis.get().is_none() && workbench.drag.state.get().is_some_and(|drag| drag.3) {
+            if move || workbench.drag.state.get().is_some_and(|drag| drag.3 && (pane.analysis.get().is_none() || drag.0.starts_with("@analysis/"))) {
                 column(class = "signal-drop-overlay", class:signal-drop-active = move || workbench.drop_target.get() == Some(pane.id)) {
-                    text(class = "drop-title") {{move || if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@profile/")) { if workbench.drop_target.get() == Some(pane.id) { "Release to add view" } else { "Drop view here" } } else if workbench.drop_target.get() == Some(pane.id) { "Release to add line" } else { "Drop field here" }}}
+                    text(class = "drop-title") {{move || if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@analysis/")) { if pane.analysis.get().is_some() { "Drop to add compatible spectrum or create analysis plot" } else { "Drop to create separate analysis plot" } } else if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@profile/")) { if workbench.drop_target.get() == Some(pane.id) { "Release to add view" } else { "Drop view here" } } else if workbench.drop_target.get() == Some(pane.id) { "Release to add line" } else { "Drop field here" }}}
                     text(class = "drop-name") {{move || workbench.drag.state.get().map(|drag| workbench.field_name(&drag.0)).unwrap_or_default()}}
                 }
             }

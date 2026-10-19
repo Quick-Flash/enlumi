@@ -42,10 +42,10 @@ impl Workbench {
         };
         let pane = match target {
             Destination::Plot(pane) => pane,
-            Destination::Analysis => {
+            Destination::Analysis | Destination::AnalysisCondition => {
                 self.use_profile_items(
                     vec![profile::identity::Drag { profile: key, item }],
-                    Destination::Analysis,
+                    target,
                 );
                 return;
             }

@@ -21,7 +21,7 @@ impl Buffer {
     /// A buffer holding `text`.
     ///
     /// Named after [`Rope::from_str`], deliberately; there is no parse and so no `FromStr`.
-    #[allow(clippy::should_implement_trait)]
+
     pub fn from_str(text: &str) -> Self {
         Self {
             rope: Rope::from_str(text),
@@ -56,7 +56,7 @@ impl Buffer {
     ///
     /// Deliberately not `Display`: formatting a multi-hundred-megabyte buffer into another
     /// buffer is a decision a caller should make by name.
-    #[allow(clippy::inherent_to_string)]
+
     pub fn to_string(&self) -> String {
         self.rope.to_string()
     }

@@ -1,13 +1,17 @@
 .analysis-workspace { flex: 1; min-width: 0; min-height: 0; padding: 8px; gap: 8px; }
-.analysis-workspace.analysis-drop-active { outline: 2px solid var(--app-accent); outline-offset: -2px; }
+.analysis-inputs.analysis-drop-active { outline: 2px solid var(--app-accent); outline-offset: -2px; }
 .analysis-heading { align-items: center; gap: 12px; }
 .analysis-heading .heading { flex: 1; }
 .analysis-body { flex: 1; min-width: 0; min-height: 0; gap: 12px; }
 .analysis-controls { flex: 1; width: 0; min-width: 0; overflow-y: auto; min-height: 0; gap: 8px; }
 .analysis-controls > row { gap: 6px; }
 .analysis-controls .zui-field { min-width: 0; flex: 1; }
-.analysis-inputs { flex: 1; min-height: 80px; overflow-y: auto; }
+.analysis-inputs { flex: none; min-height: 80px; max-height: 220px; overflow-y: auto; border: 1px dashed var(--app-border-strong); border-radius: var(--app-radius); }
 .analysis-input { align-items: center; gap: 6px; min-height: 28px; }
+.analysis-input .field-leaf { flex: 1; min-width: 0; }
+.analysis-condition-drop { flex: none; gap: 6px; min-height: 64px; padding: 10px; border: 1px dashed var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-inset); }
+.analysis-condition-drop.analysis-drop-active { border-color: var(--app-accent); background: var(--app-selected); }
+.analysis-drop-empty { padding: 20px 8px; text-align: center; }
 .analysis-input .zui-label { flex: 1; min-width: 0; font-size: var(--app-font-sm); }
 .analysis-results { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; gap: 12px; }
 .analysis-result { flex: 1; height: 0; min-height: 0; min-width: 0; gap: 4px; padding: 8px; background: var(--app-surface); border: 1px solid var(--app-border); }
@@ -17,3 +21,9 @@
 .analysis-heatmap, .analysis-heatmap-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .analysis-color-key { align-items: center; gap: 8px; }
 .analysis-color-gradient { flex: none; width: 120px; height: 10px; background: linear-gradient(to right, #0000ff, #00bf40, #80bf00, #ff0000); }
+.analysis-modes, .analysis-range-actions { flex-wrap: wrap; gap: 4px; }
+.analysis-option { align-items: center; gap: 6px; }
+.analysis-context-actions { flex-wrap: wrap; gap: 4px; }
+.analysis-range-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.analysis-range-selection { position: absolute; top: 0; bottom: 0; background: var(--app-drop); border-left: 1px solid var(--app-accent); border-right: 1px solid var(--app-accent); pointer-events: none; }
+.analysis-range-picker { position: absolute; inset: 0; pointer-events: auto; cursor: crosshair; }

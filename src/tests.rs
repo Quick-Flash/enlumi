@@ -86,6 +86,111 @@ fn load(window: &Window, workbench: Workbench) {
 }
 
 #[test]
+fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_separate() {
+    use plot::line_draw::Connection;
+    let window = Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    load(&window, workbench);
+    let normal = workbench.pane();
+    let sources = workbench
+        .log
+        .get_untracked()
+        .unwrap()
+        .catalogue
+        .iter()
+        .filter(|field| field.count > 2)
+        .take(2)
+        .map(|field| field.id.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(sources.len(), 2);
+    window.scope.with(|| workbench.add(sources[0].clone()));
+    settle(&window, || !normal.lines.get_untracked().is_empty());
+    window
+        .scope
+        .with(|| workbench.drop_analysis_sources(vec![sources[0].clone()], Some(normal.id)));
+    settle(&window, || !workbench.analysis.busy.get_untracked());
+    assert_eq!(
+        workbench.panes.get_untracked().len(),
+        2,
+        "{}",
+        workbench.analysis.message.get_untracked()
+    );
+    let fft = workbench.pane();
+    let id = fft.lines.get_untracked()[0].id;
+    assert_eq!(
+        fft.drawing.get_untracked()[&id].connection,
+        Connection::Linear
+    );
+    fft.drawing
+        .update(|drawing| drawing.get_mut(&id).unwrap().connection = Connection::Post);
+    window
+        .scope
+        .with(|| workbench.drop_analysis_sources(vec![sources[1].clone()], Some(normal.id)));
+    settle(&window, || !workbench.analysis.busy.get_untracked());
+    assert_eq!(workbench.panes.get_untracked().len(), 2);
+    assert_eq!(fft.lines.get_untracked().len(), 2);
+    assert_eq!(normal.lines.get_untracked().len(), 1);
+    assert_eq!(
+        fft.drawing.get_untracked()[&id].connection,
+        Connection::Post
+    );
+    assert!(!workbench.can_place_line(fft.id, id, normal.id));
+    window.scope.with(|| {
+        workbench.edit_analysis(fft);
+        workbench.analysis.remove_dc.set(false);
+        workbench.run_analysis();
+    });
+    let updated_view = plot::Ranges::new((10., 20.), (-4., 8.));
+    fft.plot.set_view(updated_view).unwrap();
+    settle(&window, || !workbench.analysis.busy.get_untracked());
+    assert_eq!(fft.plot.ranges.get_untracked(), updated_view);
+    assert_eq!(
+        fft.drawing.get_untracked()[&id].connection,
+        Connection::Post
+    );
+    assert!(!fft.analysis.get_untracked().unwrap().options.remove_dc);
+    window.scope.with(|| workbench.edit_analysis(fft));
+    assert!(!workbench.analysis.remove_dc.get_untracked());
+    let second = window
+        .scope
+        .with(|| workbench.add_analysis_panel(fft.analysis.get_untracked().unwrap()));
+    assert!(!workbench.can_place_line(fft.id, id, second.id));
+    let other_id = second.lines.get_untracked()[0].id;
+    second.remove_line(other_id);
+    assert!(workbench.can_place_line(fft.id, id, second.id));
+}
+
+#[test]
+fn analysis_selection_stays_separate_and_conditioner_is_not_a_spectral_input() {
+    let window = Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    workbench
+        .selected_fields
+        .set(std::collections::BTreeSet::from(["raw".into()]));
+    window.scope.with(|| {
+        workbench.select_field(
+            "@analysis/raw".into(),
+            false,
+            false,
+            &["@analysis/raw".into()],
+        )
+    });
+    assert_eq!(
+        workbench
+            .selected_fields
+            .get_untracked()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        ["@analysis/raw"]
+    );
+    workbench.set_analysis_condition(vec!["rpm".into()]);
+    assert_eq!(workbench.analysis.condition.get_untracked(), "rpm");
+    assert!(workbench.analysis.sources.get_untracked().is_empty());
+    workbench.set_analysis_condition(vec!["x".into(), "y".into()]);
+    assert_eq!(workbench.analysis.condition.get_untracked(), "rpm");
+}
+
+#[test]
 fn app_starts_with_one_full_workspace_and_adds_plots_with_keyboard() {
     let window = Window::open();
     let mut built = window.scope.with(|| {
@@ -266,10 +371,12 @@ fn filtering_and_plot_state_survive_transient_settings_owner() {
         .set(plot::Ranges::new((1.0, 5.0), (-2.0, 2.0)));
     workbench.activate(pane.id);
     let moving = pane.selected.get_untracked().unwrap();
-    let appearance = plot::line_draw::LineDraw {
-        connection: plot::line_draw::Connection::Post,
-        markers: true,
-        ..Default::default()
+    let appearance = {
+        plot::line_draw::LineDraw {
+            connection: plot::line_draw::Connection::Post,
+            markers: true,
+            ..Default::default()
+        }
     };
     pane.drawing.update(|drawing| {
         drawing.insert(moving, appearance);
@@ -358,10 +465,12 @@ fn docking_tabs_split_close_duplicate_and_maximize_preserve_data() {
         plot::workspace::layout::Layout::Split { ratio: 0.5, .. }
     ));
     assert_eq!(first.lines.get_untracked()[0].id, original.id);
-    let appearance = plot::line_draw::LineDraw {
-        connection: plot::line_draw::Connection::Pre,
-        markers: true,
-        ..Default::default()
+    let appearance = {
+        plot::line_draw::LineDraw {
+            connection: plot::line_draw::Connection::Pre,
+            markers: true,
+            ..Default::default()
+        }
     };
     first.drawing.update(|drawing| {
         drawing.insert(original.id, appearance);

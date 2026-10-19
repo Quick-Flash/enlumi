@@ -14,6 +14,9 @@ fn git(args: &[&str]) -> Option<String> {
 fn main() {
     icon::build();
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_PLATFORM");
+    let platform = std::env::var("ENLUMI_BUILD_PLATFORM").unwrap_or_default();
+    println!("cargo:rustc-env=ENLUMI_BUILD_PLATFORM={platform}");
     // Watch actual ref files, including worktrees and packed refs.
     for name in [
         Some("HEAD".to_owned()),

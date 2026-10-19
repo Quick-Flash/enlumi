@@ -55,9 +55,12 @@ pub fn GeometryOverlay(
                     })
                 }))
     };
-    let canvas = zgui::elements::canvas()
-        .class("geometry-canvas")
-        .draw(move |cx| {
+    let handle = zgui::elements::canvas::CanvasHandle::new();
+    plot::zgui_svg::register_canvas(&handle, plot::zgui_svg::SnapshotLayer::Foreground);
+    let drawing = handle.clone();
+    plot::zgui_renderer::redraw_on_change(move || {
+        drawing.draw(|canvas_scene| {
+            canvas_scene.clear();
             if !visible.get() {
                 return;
             }
@@ -76,21 +79,25 @@ pub fn GeometryOverlay(
                 let [r, g, b] = item.color;
                 let color = Color::srgb_u8(r, g, b, 255);
                 if !fill.is_empty() {
-                    cx.scene.push(
+                    canvas_scene.push(
                         ShapeBuilder::new(fill)
                             .fill(flat(color.with_alpha(item.opacity as f32)))
                             .build(),
                     );
                 }
                 if !stroke.is_empty() {
-                    cx.scene.push(
+                    canvas_scene.push(
                         ShapeBuilder::new(stroke)
                             .stroke(flat(color), item.width)
                             .build(),
                     );
                 }
             }
-        });
+        })
+    });
+    let canvas = zgui::elements::canvas()
+        .class("geometry-canvas")
+        .scene(&handle);
     view! { column(class="geometry-overlay",node_ref=host,style:cursor=move ||workbench.geometry_cursor(pane.id),class:geometry-drop-target=move || workbench.geometry.target.get()==Some(pane.id),
         on:pointer_down=move |event| {if workbench.geometry.drag.get_untracked().is_some_and(|drag|drag.pane==pane.id) || workbench.geometry.editor_drag.get_untracked().is_some_and(|drag|drag.pane==pane.id){event.capture_pointer();event.prevent_default();event.stop_propagation();}},
         on:pointer_move=move |event| {workbench.move_geometry_editor(pane.id,event.position);if workbench.geometry.drag.get_untracked().is_some_and(|drag|drag.pane==pane.id){if let (Some((x,y)),Some(g))=(local_position(&host,event.position),geometry.get_untracked()){workbench.move_geometry(pane,Point::new(x,y),g);}event.stop_propagation();}},

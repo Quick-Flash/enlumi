@@ -2,6 +2,7 @@ use crate::action_button::ActionButtonProps;
 use crate::analysis_workspace::AnalysisWorkspaceProps;
 use crate::github_link::GithubLinkProps;
 use crate::preferences::ThemePreference;
+use crate::screenshot::ScreenshotProps;
 use crate::{
     browser::BrowserProps, filter_workspace::FilterWorkspaceProps, fps::FpsProps, state::Workbench,
     workspace::PlotWorkspaceProps,
@@ -31,6 +32,12 @@ pub fn WorkbenchApp(
         AppTheme(palette = palette) {
             column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
                 on:key_down:capture = move |event| {
+                    if workbench.measurement_shortcut(event, event.modifiers) {
+                        event.prevent_default();event.stop_propagation();return;
+                    }
+                    if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && workbench.analysis.picking_range.get_untracked() {
+                        workbench.analysis.picking_range.set(false); event.prevent_default(); event.stop_propagation(); return;
+                    }
                     if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && (workbench.geometry.editing.get_untracked() || workbench.geometry.library_drag.get_untracked().is_some() || workbench.bands.open.get_untracked()) {
                         workbench.cancel_band_source(); workbench.finish_geometry_editing(); event.prevent_default(); event.stop_propagation(); return;
                     }
@@ -69,7 +76,12 @@ pub fn WorkbenchApp(
                     text(class = "file-name") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Enlumi".into(), |log| log.name.clone()))}}
                     text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
                     UpdateControls(state = updates)
-                    ActionButton(class:setting-active=move ||workbench.analysis.open.get(),on:click=move |_|{workbench.analysis.open.update(|open|*open = !*open);workbench.filters_open.set(false);}) {"Analyze"}
+                    Screenshot(workbench=workbench)
+                    ActionButton(class="analyze-toggle",class:setting-active=move ||workbench.analysis.open.get(),on:click=move |_|{
+                        if workbench.analysis.open.get_untracked() {workbench.analysis.open.set(false);workbench.analysis.picking_range.set(false);}
+                        else {workbench.new_analysis();}
+                        workbench.filters_open.set(false);
+                    }) {"Analyze"}
                     ThemePicker(palette = palette, preferences = preferences.clone())
                     row(class="toolbar-brand") {
                         GithubLink(workbench = workbench)
@@ -85,7 +97,7 @@ pub fn WorkbenchApp(
                                 column(class = "plot-page") { PlotWorkspace(workbench = workbench) }
                             }
                             if move || workbench.analysis.open.get() {
-                                ResizableHandle(label = "Resize plot and analysis panels", with_handle = true)
+                                ResizableHandle(label = "Resize plot and analysis panels", class = "workspace-divider")
                                 ResizablePanel(default_size = 25.0, min_size = 25.0, min_pixels = 300.0, label = "Frequency analysis", class = "analysis-side-panel") {
                                     AnalysisWorkspace(workbench = workbench)
                                 }

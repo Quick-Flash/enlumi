@@ -12,6 +12,7 @@ fields onto docked plots.
 - JSON profiles for field names/units, filter chains, geometry, flight-mode bands,
   and reusable views, with optional firmware matching.
 - FFT, PSD, spectrograms, and field-conditioned heatmaps in docked plots.
+- SVG and PNG screenshots of individual plots or visible docks together.
 
 ## Downloads
 
@@ -23,6 +24,9 @@ filters. No separate Rust installation is needed to use them.
 Each push to `master` starts a nightly build. Downloads publish after all platform
 checks pass. Builds are unsigned; macOS builds are not notarized.
 
+Linux archives include Ubuntu 22.04+ (`linux-x86_64`) and rolling Arch Linux
+(`arch-linux-x86_64`) builds. Choose matching distribution.
+
 To receive update notices, enable **Nightly builds** under **Updates**, then restart.
 Checks run once at startup. Portable installations offer **Update & restart** when
 a newer completed build is available. Restart closes current log and unsaved work.
@@ -32,6 +36,8 @@ a newer completed build is available. Restart closes current log and unsaved wor
 Install [Rust through rustup](https://rustup.rs/), Git, and native build tools.
 Repository selects its required nightly toolchain; keep `Cargo.lock` for
 reproducible dependency versions.
+
+Shared plotting library uses upstream Git revision pinned in `Cargo.toml`.
 
 - **Windows:** Visual Studio Build Tools with **Desktop development with C++**
   and a Windows SDK. Use the MSVC Rust target.
@@ -44,6 +50,16 @@ sudo apt-get install -y build-essential pkg-config libx11-dev libxkbcommon-dev \
   libxkbcommon-x11-dev libwayland-dev libxcb1-dev libxcursor-dev libxi-dev \
   libxrandr-dev libfontconfig1-dev fonts-dejavu-core
 ```
+
+- **Linux (Arch and derivatives):**
+
+```sh
+sudo pacman -Syu --needed base-devel rustup git libx11 libxkbcommon \
+  libxkbcommon-x11 wayland libxcb libxcursor libxi libxrandr fontconfig ttf-dejavu
+```
+
+Set `ENLUMI_BUILD_PLATFORM=arch-linux-x86_64` when making Arch portable bundles
+so built-in updater keeps selecting Arch archives.
 
 From repository root:
 
@@ -67,8 +83,8 @@ to package the app with its offline filter compiler.
 ## Limits
 
 Enlumi is under active development. One log file is open at a time; plots and
-filters are kept in memory. Full session saving, cross-file comparison, and
-exports are not implemented. Lines within a plot share one Y axis.
+filters are kept in memory. Full session saving and cross-file comparison are
+not implemented. Lines within a plot share one Y axis.
 
 Blackbox values retain raw log units until profiles or filters convert them.
 GPS/home records and event annotations are not exposed. Incomplete logs and

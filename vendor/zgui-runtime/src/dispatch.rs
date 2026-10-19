@@ -84,7 +84,7 @@ pub type Handler = std::rc::Rc<dyn Fn(&mut EventCx<'_>)>;
 /// Each handler is looked up **by identity at the moment it is due to run**, never by position: a
 /// handler that removes a listener and adds another from inside a dispatch would otherwise have
 /// the replacement run in the removed one's place.
-#[allow(clippy::too_many_arguments)]
+
 pub fn run(
     handlers: &dyn Handlers,
     steps: &[zgui_input::Step],

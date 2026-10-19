@@ -13,13 +13,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest, macos-15-intel]
+        include:
+          - os: windows-latest
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: macos-15-intel
+          - os: ubuntu-latest
+            container: archlinux:base-devel
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    container: ${{ matrix.container }}
+    timeout-minutes: 60
     steps:
+      - name: Arch build libraries
+        if: matrix.container != ''
+        working-directory: .
+        run: |
+          pacman -Syu --noconfirm --needed git rustup python pkgconf \
+            libx11 libxkbcommon libxkbcommon-x11 wayland libxcb libxcursor \
+            libxi libxrandr fontconfig ttf-dejavu
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Linux build libraries
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.container == ''
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential pkg-config \
@@ -36,8 +50,8 @@ jobs:
             target/debug
             target/release
             target/xtask
-          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.container }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.container }}-cargo-${{ hashFiles('rust-toolchain.toml') }}-
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy

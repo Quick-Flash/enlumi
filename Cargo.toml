@@ -19,7 +19,7 @@ resolver = "3"
 bbl_parser = { version = "1.1.1", default-features = false }
 flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 kurbo = "0.13.1"
-plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "2d2aede977e0902a7541ff240123a4afcb63f13a", features = ["workspace"] }
+plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "4bc31c79a20bd1c911f9ec24d0000931c6cc76a3", features = ["workspace", "raster"] }
 px4-ulog = "0.6.1"
 rfd = "0.17.2"
 rustfft = { version = "6.4.1", default-features = false }
@@ -60,7 +60,7 @@ zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 
-# Temporary upstream fixes for horizontal text scrolling. See vendor/README.md.
+# Temporary upstream UI fixes. See vendor/README.md.
 [patch."https://github.com/zortax/zgui"]
 zgui-runtime = { path = "vendor/zgui-runtime" }
 

@@ -47,14 +47,22 @@ impl Workbench {
             self.profiles.error.set("Open a log first".into());
             return;
         }
-        if matches!(target, Destination::Filter | Destination::Bands)
-            && items
-                .iter()
-                .any(|drag| !matches!(drag.item, Item::Field(_)))
+        if matches!(
+            target,
+            Destination::Filter | Destination::Bands | Destination::AnalysisCondition
+        ) && items
+            .iter()
+            .any(|drag| !matches!(drag.item, Item::Field(_)))
         {
             self.profiles
                 .error
                 .set("Choose fields for filters or state bands".into());
+            return;
+        }
+        if matches!(target, Destination::AnalysisCondition) && items.len() != 1 {
+            self.analysis
+                .message
+                .set("Drop one conditioning field".into());
             return;
         }
         if matches!(target, Destination::Bands) && items.len() != 1 {
@@ -88,7 +96,7 @@ impl Workbench {
         }
         self.profiles.pending_drop.set_value(None);
         match target {
-            Destination::Analysis => {
+            Destination::Analysis | Destination::AnalysisCondition => {
                 let sources: Vec<String> = self.profiles.instances.with_untracked(|instances| {
                     items
                         .iter()
@@ -114,6 +122,8 @@ impl Workbench {
                 if sources.is_empty() {
                     self.analysis.run_selection.set(false);
                     self.analysis.message.set("No sample fields available. Drop fields or a usable profile view; geometry has no samples.".into());
+                } else if matches!(target, Destination::AnalysisCondition) {
+                    self.set_analysis_condition(sources);
                 } else {
                     self.add_analysis_sources(sources);
                     if self.analysis.run_selection.get_untracked() {

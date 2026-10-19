@@ -20,9 +20,12 @@ fn color(value: usize) -> Color {
 pub fn AnalysisHeatmap(data: Heatmap, state: PlotState) -> impl IntoView {
     let host = NodeRef::new();
     let size = host.observe_border_box();
-    let canvas = zgui::elements::canvas()
-        .class("analysis-heatmap-canvas")
-        .draw(move |cx| {
+    let handle = zgui::elements::canvas::CanvasHandle::new();
+    plot::zgui_svg::register_canvas(&handle, plot::zgui_svg::SnapshotLayer::Background);
+    let drawing = handle.clone();
+    plot::zgui_renderer::redraw_on_change(move || {
+        drawing.draw(|canvas_scene| {
+            canvas_scene.clear();
             let Some(size) = size.get() else {
                 return;
             };
@@ -68,7 +71,7 @@ pub fn AnalysisHeatmap(data: Heatmap, state: PlotState) -> impl IntoView {
                 .filter(|(_, path)| !path.is_empty())
             {
                 let color = color(level);
-                cx.scene.push(
+                canvas_scene.push(
                     ShapeBuilder::new(path)
                         .fill(Brush::Linear {
                             start: (0., 0.).into(),
@@ -79,6 +82,10 @@ pub fn AnalysisHeatmap(data: Heatmap, state: PlotState) -> impl IntoView {
                         .build(),
                 );
             }
-        });
+        })
+    });
+    let canvas = zgui::elements::canvas()
+        .class("analysis-heatmap-canvas")
+        .scene(&handle);
     view! { column(class = "analysis-heatmap", node_ref = host) { {canvas.into_view()} } }
 }

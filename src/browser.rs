@@ -98,7 +98,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
     });
     let resize = RwSignal::new_local(None::<(f32, f32)>);
     view! {
-        row(class = "browser", class:hidden = move || !workbench.sidebar_visible.get(), style:width = move || Some(format!("{}px", workbench.sidebar_width.get() + 6.0))) {
+        row(class = "browser", class:hidden = move || !workbench.sidebar_visible.get(), style:width = move || Some(format!("{}px", workbench.sidebar_width.get() + 3.0))) {
             column(class = "signal-sidebar") {
                 row(class = "browser-heading") {
                     ActionButton(class = "fields-menu", class:setting-active = move || !workbench.profiles.browsing.get(), on:click = move |_| workbench.profiles.browsing.set(false)) { "Fields" }
@@ -108,7 +108,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                         ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
                     }
                 }
-                if move || workbench.selected_field.get().is_some_and(|source| !source.starts_with("@setting/")) {
+                if move || workbench.selected_field.get().is_some_and(|source| !source.starts_with("@setting/") && !source.starts_with("@analysis/")) {
                     row(class = "field-selection-actions") {
                         ActionButton(on:click = move |_| workbench.create_selected_spectra("fft")) { "Create FFTs" }
                         ActionButton(on:click = move |_| workbench.create_selected_spectra("psd")) { "Create PSDs" }
@@ -147,7 +147,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 }
                 }
             }
-            control(class = "sidebar-grip", tabindex = Focus::Sequential, a11y:label = "Resize field browser",
+            control(class = "sidebar-grip workspace-divider", tabindex = Focus::Sequential, a11y:label = "Resize field browser",
                 on:pointer_down = move |event| { resize.set(Some((event.position.x.0, workbench.sidebar_width.get_untracked()))); event.capture_pointer(); },
                 on:pointer_move = move |event| { if let Some((x, width)) = resize.get_untracked() { workbench.sidebar_width.set((width + event.position.x.0 - x).clamp(220.0, 480.0)); } },
                 on:pointer_up = move |event| { resize.set(None); event.release_pointer(); },

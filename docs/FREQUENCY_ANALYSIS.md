@@ -3,13 +3,14 @@
 Select fields or profile views in sidebar, then click **Create FFTs** or
 **Create PSDs**. Each selected signal opens its own spectral plot; profile groups
 expand into their member signals. No time plot or extra Run click needed.
-Choose **Configure** to adjust settings before running. **One plot per signal**
-creates separate plots; turn it off to overlay signals with matching known units.
+Choose **Configure** to adjust settings before dragging signals onto plots.
 
-Open **Analyze** from toolbar, or use plot header's **Analyze** to copy visible
-plot signals and current X range into analysis workspace. Existing time plots
+Open **Analyze** from toolbar. Existing time plots
 remain intact. Toolbar Analyze starts with full signal range unless bounds were
 previously entered. Time bounds use same log X coordinates as time plots.
+Use **Select on plot** and drag across a time plot to choose FFT bounds visually.
+Selection stays shaded while Analyze is open. **Use visible range** copies active
+time plot's X bounds; **Full signal** clears bounds. Escape cancels picking.
 
 Drag raw fields, derived fields, profile fields, or whole profile views into
 workspace. A view contributes its available member signals, not their sum or
@@ -20,24 +21,27 @@ Expand arrow beside profile view to see individual available member fields.
 Each member supports same selection and dragging as other profile outputs.
 This works for literal view sources as well as named profile aliases.
 
-Input checkboxes control which signals run. Remove button removes an input.
-Enabled signals compute sequentially in one cancellable batch; same known unit overlays curves, while
-different or unknown units produce separate plots. Metadata labels never convert
+Analyze inputs use the same draggable rows and sample counts as plot fields.
+Ctrl/Shift-click selects multiple inputs. Drag selected signals onto a plot, or
+press Enter on a focused signal, to compute analysis. FFT/PSD drops reuse a plot
+of the same mode, creating a new plot when none exists. Spectra never mix with
+normal time-domain fields. Heatmaps and spectrograms create separate result plots.
+Remove button removes an input. Metadata labels never convert
 values: use converted profile/filter outputs when physical units are needed.
 
 ## Modes
 
 - **FFT amplitude:** one-sided peak-calibrated amplitude from one transform over
-  all uniformly resampled samples in selected contiguous range. Transform length
+  longest valid uniformly resampled run in selected range. Transform length
   follows data, including non-power-of-two and odd lengths. No zero padding.
   Values retain input unit.
-- **PSD:** one-sided, window-energy-normalized power density over full selected
-  contiguous range, using same arbitrary transform length. Values have
+- **PSD:** one-sided, window-energy-normalized power density over longest valid
+  run in selected range, using same arbitrary transform length. Values have
   input-unit squared per Hz. Integrating PSD estimates windowed signal variance.
 - **FFT vs field heatmap:** frequency on X, window-mean conditioning value on Y,
   mean PSD per conditioning bin as color. Add throttle, RPM, or another numeric
-  field to inputs and choose it as conditioner. Uncheck it if its own spectrum
-  is unwanted. Conditioner does not need same sample rate as analyzed signal,
+  field onto the dedicated conditioning drop target, then drag the analyzed
+  signal from the input list onto a plot. Conditioner does not need same sample rate as analyzed signal,
   but must cover complete analyzed windows without gaps. Choose 20, 40, 80, 160,
   or 320 equal conditioning bins; each populated bin averages its contributing
   windows. Empty or zero-power bins are blank. Color is dB relative to 1
@@ -47,15 +51,16 @@ values: use converted profile/filter outputs when physical units are needed.
   resolution and overlap sets time spacing. Windows with missing samples stay
   blank. Color range auto-scales per signal.
 
-Choose window function and optional time bounds, then **Run**. Hann is default.
+Choose window function and optional time bounds, then drag signals onto a plot. Hann is default.
 FFT size and overlap (0%, 25%, 50%, or 75%) appear only for heatmaps and
 spectrograms. Size choices require complete windows in every enabled input and
-must fit frequency-map memory limits. Mean removal stays enabled per transform. Results list measured sample rate, frequency resolution,
-accepted windows, and skipped windows. Plots support normal pan/zoom.
+must fit frequency-map memory limits. **Remove DC (subtract mean)** controls
+mean removal per transform and starts enabled. Results list measured sample rate, frequency resolution,
+accepted windows, skipped windows, and samples excluded from FFT/PSD runs. Plots support normal pan/zoom.
 **Cancel** stops active calculation. Results are snapshots; rerun after changing
 filters, metadata, inputs, or analysis settings.
 
-Analyze opens a resizable settings panel beside docking workspace. **Run** creates
+Analyze opens a resizable settings panel beside docking workspace. Dropping signals creates
 result tabs inside same docking workspace as normal plots. Drag tabs to place
 spectra above, below, or beside other plots; rename, duplicate, maximize, and close
 with normal tab controls. Closing Analyze keeps result plots.
@@ -70,13 +75,14 @@ links start disabled on new analysis plots; enable intended links explicitly.
 Median positive timestamp difference locates nominal cadence; averaging intervals
 within 10% of median refines sample interval against timestamp quantization. Values linearly
 resample onto that interval to handle timestamp jitter. Interpolation never
-extrapolates, bridges gaps above 1.5 nominal sample intervals, or crosses a
-nonfinite endpoint. Heatmap/spectrogram windows containing missing samples are skipped. Full-range
-FFT/PSD reports gaps and asks for a contiguous range instead of dropping samples. No samples
+extrapolates or bridges gaps above 3.5 nominal sample intervals. Short dropouts,
+including nonfinite samples, interpolate between finite neighbors. Heatmap/spectrogram
+windows crossing longer gaps are skipped. FFT/PSD uses the longest valid run and
+reports excluded samples. No samples
 are replaced with zero to hide gaps. Strongly irregular sampling is unsuitable
 for interpreting high-frequency content through this interpolation method.
 
-Each complete window has its mean removed. The selected window function is
+Each complete window has its mean removed when **Remove DC** is enabled. The selected window function is
 periodic Hann, Hamming, Blackman, or rectangular. Map window overlap is selectable. For N
 samples, sample rate fs, and window w:
 
@@ -88,7 +94,7 @@ samples, sample rate fs, and window w:
 - FFT/PSD has one full-range transform. Maps average window PSDs within bins.
 
 Maps use complete windows; trailing partial map windows are omitted. Full-range
-FFT/PSD uses every sample in selected contiguous range.
+FFT/PSD uses every resampled value in the longest valid run.
 Short intervals, static parameters without sufficient samples, unavailable
 derived fields, and conditioners without varying values report errors per signal.
 Analysis is bounded to four million resampled points per signal and eight million
@@ -112,7 +118,22 @@ FFT/PSD plots share normal plot legend and line settings: color, width, line
 pattern, markers, visibility, removal, and drag ordering. Long legends scroll.
 Spectral lines stay separate from time-domain lines and other analysis modes.
 
-FFT/PSD always render Steps pre. Connection controls are omitted. Use
-**Analysis settings** in plot header or **FFT / PSD settings** in legend line
+FFT/PSD default to Linear and expose normal connection controls, including
+Steps pre and Steps post. Use
+toolbar **Analyze** with a result plot active, or **FFT / PSD settings** in legend line
 settings to restore that plot's window and time range. **Update plot** recomputes
-in place, retaining line colors and other appearance settings.
+in place, retaining current X/Y bounds, line colors, and other appearance settings.
+
+Press **M** and drag between spectral samples to measure frequency spacing and
+its reciprocal period. Time plots show elapsed time and reciprocal frequency.
+Drag endpoint snaps by horizontal position on selected line. Readout sits inside
+red highlight behind curves. Release clears measurement; Escape has no effect.
+
+Toolbar **Analyze** opens new-analysis mode. All four analysis types remain
+visible while editing; choosing another type starts new analysis and keeps
+existing results. **Edit selected plot** loads the active result's settings;
+**New analysis** returns to creation without clearing source fields.
+
+Camera menu on each plot saves SVG or PNG. Toolbar camera captures all visible
+docks in their current arrangement. Exports include FFT lines, heatmap cells,
+and annotations; PNG renders the same SVG at 2× dimensions.

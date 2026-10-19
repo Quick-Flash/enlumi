@@ -3,7 +3,7 @@
 .sidebar-toggle-icon { width: 16px; height: 16px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.5px; pointer-events: none; }
 .workbench .zui-button.setting-active { background-color: var(--app-selected); border-color: var(--app-accent); }
 .file-name { flex: 1; min-width: 0; font-size: var(--app-font-sm); color: var(--app-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.fps-readout { flex: none; width: 70px; font-size: var(--app-font-xs); color: var(--app-muted); text-align: right; white-space: nowrap; }
+.fps-readout { flex: none; width: 3ch; font-variant-numeric: tabular-nums; font-size: var(--app-font-xs); color: var(--app-muted); text-align: right; white-space: nowrap; }
 .body { flex: 1; height: 0; min-width: 0; min-height: 0; overflow: hidden; }
 .plot-page { flex: 1; min-width: 0; min-height: 0; }
 .workbench-analysis-split, .analysis-plots-panel, .analysis-side-panel { flex: 1; min-width: 0; min-height: 0; }
@@ -51,9 +51,12 @@
 .signal-name { flex: 1; min-width: 0; font-size: var(--app-font-sm); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .page .metric-option-count { flex: none; color: var(--app-muted); font-size: var(--app-font-tiny); }
 .selected-field { flex: none; height: 30px; overflow: hidden; font-size: var(--app-font-xs); color: var(--app-muted); }
-.sidebar-grip { flex: none; width: 6px; cursor: ew-resize; background: var(--app-border); }
-.sidebar-grip:hover { background: var(--app-accent); }
-.sidebar-grip:focus-visible { background: var(--app-focus); outline: 2px solid var(--app-foreground); outline-offset: -2px; }
+.workspace-divider { cursor: ew-resize; }
+.sidebar-grip { flex: none; width: 3px; background: var(--app-border); }
+.workspace-divider.zui-resizable__handle { width: 9px; margin-left: -3px; margin-right: -3px; }
+.workspace-divider > .zui-resizable__line { left: 3px; width: 3px; background: var(--app-border); }
+.sidebar-grip:hover, .sidebar-grip:active, .workspace-divider:hover > .zui-resizable__line, .workspace-divider[data-dragging="true"] > .zui-resizable__line { background: var(--app-accent); }
+.sidebar-grip:focus-visible, .workspace-divider:focus-visible > .zui-resizable__line { background: var(--app-focus); outline: 1px solid var(--app-foreground); outline-offset: -1px; }
 .workbench-plot.workbench-plot-active { border-color: var(--app-accent); }
 .workbench .plot-grid { overflow: hidden; }
 .workbench .workbench-plot { min-width: 0; min-height: 0; overflow: hidden; }
@@ -344,7 +347,6 @@
 .geometry-state-colors.geometry-legend-hidden { opacity: 0.4; }
 .geometry-state-colors text { font-size: var(--app-font-sm); }
 
-.toolbar-brand { align-items: center; flex: none; gap: 10px; }
-.toolbar-brand .fps-readout { width: 70px; min-width: 70px; }
+.toolbar-brand { align-items: center; flex: none; gap: 3px; }
 
 .page field { overflow-x: auto; }

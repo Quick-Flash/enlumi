@@ -37,6 +37,8 @@ pub struct AnalysisUi {
     pub heatmap_bins: RwSignal<String, LocalStorage>,
     pub start: RwSignal<String, LocalStorage>,
     pub end: RwSignal<String, LocalStorage>,
+    pub remove_dc: RwSignal<bool, LocalStorage>,
+    pub picking_range: RwSignal<bool, LocalStorage>,
     pub separate: RwSignal<bool, LocalStorage>,
     pub run_selection: RwSignal<bool, LocalStorage>,
     pub target: RwSignal<Option<u64>, LocalStorage>,
@@ -45,6 +47,8 @@ pub struct AnalysisUi {
     pub results: RwSignal<Vec<AnalysisResult>, LocalStorage>,
     pub revision: RwSignal<u64, LocalStorage>,
     pub drop: NodeRef,
+    pub condition_drop: NodeRef,
+    pub condition_hover: RwSignal<bool, LocalStorage>,
     pub hover: RwSignal<bool, LocalStorage>,
     cancel: StoredValue<Option<Arc<AtomicBool>>, LocalStorage>,
 }
@@ -62,6 +66,8 @@ impl AnalysisUi {
             heatmap_bins: RwSignal::new_local("40".into()),
             start: RwSignal::new_local(String::new()),
             end: RwSignal::new_local(String::new()),
+            remove_dc: RwSignal::new_local(true),
+            picking_range: RwSignal::new_local(false),
             separate: RwSignal::new_local(false),
             run_selection: RwSignal::new_local(false),
             target: RwSignal::new_local(None),
@@ -70,6 +76,8 @@ impl AnalysisUi {
             results: RwSignal::new_local(Vec::new()),
             revision: RwSignal::new_local(0),
             drop: NodeRef::new(),
+            condition_drop: NodeRef::new(),
+            condition_hover: RwSignal::new_local(false),
             hover: RwSignal::new_local(false),
             cancel: StoredValue::new_local(None),
         }
@@ -83,6 +91,7 @@ impl AnalysisUi {
     }
     pub fn reset(self) {
         self.cancel();
+        self.picking_range.set(false);
         self.run_selection.set(false);
         self.target.set(None);
         self.sources.set(Vec::new());
@@ -95,6 +104,36 @@ impl AnalysisUi {
     }
 }
 impl Workbench {
+    pub fn new_analysis(self) {
+        self.analysis.cancel();
+        self.analysis.run_selection.set(false);
+        self.analysis.picking_range.set(false);
+        self.analysis.target.set(None);
+        self.analysis.open.set(true);
+        self.filters_open.set(false);
+        self.analysis
+            .message
+            .set("Choose analysis type, then drag signals onto a plot".into());
+    }
+    pub fn select_analysis_mode(self, mode: &str) {
+        if self.analysis.mode.get_untracked() != mode {
+            self.new_analysis();
+            self.analysis.mode.set(mode.into());
+        }
+    }
+    pub fn set_analysis_condition(self, sources: Vec<String>) {
+        if sources.len() != 1 {
+            self.analysis
+                .message
+                .set("Drop one conditioning field".into());
+            return;
+        }
+        self.analysis.cancel();
+        self.analysis.condition.set(sources[0].clone());
+        self.analysis
+            .message
+            .set("Conditioning field set. Drag signal onto plot to create heatmap.".into());
+    }
     pub fn create_selected_spectra(self, mode: &'static str) {
         if self.loading.get_untracked()
             || self.derived_busy.get_untracked()
@@ -179,6 +218,7 @@ impl Workbench {
                 .end
                 .map_or_else(String::new, |value| value.to_string()),
         );
+        ui.remove_dc.set(result.options.remove_dc);
         ui.condition.set(result.condition);
         ui.separate.set(false);
     }
@@ -213,25 +253,16 @@ impl Workbench {
             );
         }
     }
-    pub fn analyze_plot(self, pane: Pane) {
-        self.analysis.target.set(None);
-        self.analysis.open.set(true);
-        self.filters_open.set(false);
-        self.add_analysis_sources(pane.lines.with_untracked(|lines| {
-            lines
-                .iter()
-                .filter(|line| {
-                    !pane
-                        .plot
-                        .hidden
-                        .with_untracked(|hidden| hidden.contains(&line.id.to_string()))
-                })
-                .map(|line| line.source.clone())
-                .collect()
-        }));
+    pub fn use_visible_analysis_range(self) {
+        let pane = self.pane();
+        if pane.analysis.get_untracked().is_some() {
+            self.analysis.message.set("Select a time plot first".into());
+            return;
+        }
         let range = pane.plot.ranges.get_untracked().x;
         self.analysis.start.set(range.min.to_string());
         self.analysis.end.set(range.max.to_string());
+        self.analysis.picking_range.set(false);
     }
     pub fn add_analysis_sources(self, sources: Vec<String>) {
         self.analysis.cancel();
@@ -242,9 +273,51 @@ impl Workbench {
                 }
             }
         });
-        self.analysis.message.set("Select signals, then Run. Results are snapshots; rerun after changing inputs, filters, or settings.".into());
+        self.analysis.message.set("Drag signals onto a plot to create analysis. Results are snapshots; drag again after changing settings.".into());
     }
     pub fn run_analysis(self) {
+        self.run_analysis_request(None, self.analysis.target.get_untracked(), false);
+    }
+    pub fn drop_analysis_sources(self, sources: Vec<String>, target: Option<u64>) {
+        if self.analysis.busy.get_untracked() {
+            self.analysis.message.set(
+                "Wait for current analysis to finish, or Cancel before dropping another signal"
+                    .into(),
+            );
+            return;
+        }
+        let mode = self.analysis.mode.get_untracked();
+        let accepts = |pane: &Pane| {
+            pane.analysis.with_untracked(|result| {
+                result.as_ref().is_some_and(|result| {
+                    result.heatmap.is_none()
+                        && matches!(
+                            (mode.as_str(), result.mode),
+                            ("fft", Mode::Fft) | ("psd", Mode::Psd)
+                        )
+                })
+            })
+        };
+        let target = if matches!(mode.as_str(), "fft" | "psd") {
+            target
+                .and_then(|id| self.find(id))
+                .filter(accepts)
+                .or_else(|| {
+                    self.panes
+                        .with_untracked(|panes| panes.iter().copied().find(accepts))
+                })
+                .map(|pane| pane.id)
+        } else {
+            None
+        };
+        self.run_analysis_request(Some(sources), target, true);
+    }
+    fn run_analysis_request(
+        self,
+        requested: Option<Vec<String>>,
+        target: Option<u64>,
+        append: bool,
+    ) {
         let ui = self.analysis;
         if self.loading.get_untracked()
             || self.derived_busy.get_untracked()
@@ -303,6 +376,7 @@ impl Workbench {
                     .map_err(|_| "Invalid heatmap bin count")?,
                 start: parse_time(ui.start.get_untracked())?,
                 end: parse_time(ui.end.get_untracked())?,
+                remove_dc: ui.remove_dc.get_untracked(),
             })
         })();
         let options = match options {
@@ -312,21 +386,22 @@ impl Workbench {
                 return;
             }
         };
-        let sources = ui.sources.with_untracked(|all| {
-            all.iter()
-                .filter(|source| {
-                    !ui.disabled
-                        .with_untracked(|disabled| disabled.contains(*source))
-                })
-                .cloned()
-                .collect::<Vec<_>>()
+        let sources = requested.unwrap_or_else(|| {
+            ui.sources.with_untracked(|all| {
+                all.iter()
+                    .filter(|source| {
+                        !ui.disabled
+                            .with_untracked(|disabled| disabled.contains(*source))
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
         });
         if sources.is_empty() {
             ui.message.set("Enable at least one signal".into());
             return;
         }
-        let separate = ui.separate.get_untracked();
-        let target = ui.target.get_untracked();
+        let separate = !append && ui.separate.get_untracked();
         let condition = ui.condition.get_untracked();
         if options.mode == Mode::Heatmap && condition.is_empty() {
             ui.message.set("Choose heatmap conditioning field".into());
@@ -335,10 +410,10 @@ impl Workbench {
         let fields = self.derived.get_untracked();
         let names = sources
             .iter()
-            .map(|source| (source.clone(), self.field_name(source)))
+            .map(|source| (source.clone(), self.field_name_untracked(source)))
             .collect::<BTreeMap<_, _>>();
         let metadata = self.profiles.metadata.get_untracked();
-        let condition_name = self.field_name(&condition);
+        let condition_name = self.field_name_untracked(&condition);
         let condition_unit = metadata
             .get(&condition)
             .map_or_else(String::new, |m| m.unit.clone());
@@ -351,13 +426,20 @@ impl Workbench {
         let overlap_description = if options.mode.windowed() {
             format!("{}% overlap", options.overlap)
         } else {
-            "full selected range".into()
+            "longest valid run".into()
         };
         let completion = format!(
-            "Complete. {window_name} window · {overlap_description} · mean removed. {}",
+            "Complete. {window_name} window · {overlap_description} · {}. {}",
+            if options.remove_dc {
+                "DC removed"
+            } else {
+                "DC retained"
+            },
             match options.mode {
-                Mode::Fft => "FFT uses all samples in selected contiguous range; no zero padding.",
-                Mode::Psd => "PSD uses full selected contiguous range; no zero padding.",
+                Mode::Fft =>
+                    "FFT uses longest valid run; brief dropouts interpolated; no zero padding.",
+                Mode::Psd =>
+                    "PSD uses longest valid run; brief dropouts interpolated; no zero padding.",
                 Mode::Heatmap => "Heatmap averages PSD within conditioning bins.",
                 Mode::Spectrogram => "Spectrogram shows PSD for each time window.",
             }
@@ -422,18 +504,21 @@ impl Workbench {
                         format!("({unit})²/Hz")
                     };
                     let summary = format!(
-                        "{name}: {:.2} samples/s · Δf {:.3} Hz · {} windows · {} skipped",
+                        "{name}: {:.2} samples/s · Δf {:.3} Hz · {} windows · {} skipped windows · {} excluded samples",
                         spectrum.rate,
                         spectrum.rate / spectrum.size as f64,
                         spectrum.windows,
-                        spectrum.skipped
+                        spectrum.skipped,
+                        spectrum.excluded_samples
                     );
                     let series = TimeSeries::new(
                         source.clone(),
                         name.clone(),
                         SeriesData::new(spectrum.points).expect("frequency bins sorted"),
                     );
-                    let key = if separate
+                    let key = if (append || target.is_some()) && !options.mode.windowed() {
+                        String::new()
+                    } else if separate
                         || matches!(options.mode, Mode::Heatmap | Mode::Spectrogram)
                         || unit == "unknown unit"
                     {
@@ -493,13 +578,24 @@ impl Workbench {
             ui.busy.set(false);
             ui.cancel.set_value(None);
             ui.message.set(if messages.is_empty() {
-                completion
+                format!("{completion}\n{}", results.iter().map(|result| result.summary.as_str()).collect::<Vec<_>>().join("\n"))
             } else {
                 messages.join("\n")
             });
             for (index, result) in results.iter().enumerate() {
-                if let Some(pane) = target.filter(|_| index == 0).and_then(|id| self.find(id)) {
-                    self.set_analysis_panel(pane, result.clone());
+                if let Some(pane) = target.filter(|_| append || index == 0).and_then(|id| self.find(id)) {
+                    let mut result = result.clone();
+                    if append && let Some(previous) = pane.analysis.get_untracked() {
+                        let mut series = pane.lines.with_untracked(|lines| lines.iter().filter_map(|line| {
+                            let source = line.source.strip_prefix("@spectrum/")?;
+                            (!result.series.series().iter().any(|series| series.id() == source)).then(|| TimeSeries::new(source, line.name.clone(), line.data.clone()))
+                        }).collect::<Vec<_>>());
+                        series.extend_from_slice(result.series.series());
+                        result.series = TimeSeriesSet::new(series).expect("unique spectral sources");
+                        result.summary = format!("{}\n{}", previous.summary, result.summary);
+                    }
+                    self.set_analysis_panel(pane, result);
+                    if append { self.activate(pane.id); }
                 } else {
                     self.add_analysis_panel(result.clone());
                 }
@@ -521,6 +617,10 @@ impl Workbench {
         pane
     }
     fn set_analysis_panel(self, pane: Pane, result: AnalysisResult) {
+        let updating = pane.analysis.with_untracked(Option::is_some);
+        if updating {
+            pane.plot.auto_fit.set(false);
+        }
         self.profiles.titles.update(|titles| {
             titles
                 .entry(pane.id)
@@ -560,12 +660,14 @@ impl Workbench {
             pane.drawing.update(|drawing| {
                 drawing.retain(|id, _| ids.contains(id));
                 for id in ids {
-                    drawing.entry(id).or_default().connection = plot::line_draw::Connection::Pre;
+                    drawing.entry(id).or_default();
                 }
             });
         }
         pane.analysis.set(Some(result));
-        pane.fit_axes(plot::interaction::Axes::BOTH);
+        if !updating {
+            pane.fit_axes(plot::interaction::Axes::BOTH);
+        }
     }
 
     pub fn analysis_size_job(self) -> impl FnOnce() -> Vec<usize> + Send {

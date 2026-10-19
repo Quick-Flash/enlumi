@@ -148,7 +148,7 @@ mod tests {
         let selections = Selections::new();
         let key = document.store().key_of(field);
         // Written the way a caller with a backwards drag has it: the range reads high to low.
-        #[allow(clippy::reversed_empty_ranges)]
+
         let backwards = 4..2;
         selections.set(key, backwards, length);
         assert_eq!(

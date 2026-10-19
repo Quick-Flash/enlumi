@@ -28,3 +28,4 @@
 
 .workbench-legend.workbench-legend { max-height: calc(100% - 8px); overflow-y: auto; }
 .workbench-legend .legend-heading, .workbench-legend .geometry-legend, .workbench-legend .legend-entry { flex-shrink: 0; }
+.legend-chevron { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.5px; pointer-events: none; }

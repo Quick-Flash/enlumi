@@ -266,7 +266,7 @@ impl RuntimeHost {
     ///
     /// Call inside the window's own reactive scope: the focus signal is created here and must
     /// belong to the window rather than to whatever built the first view.
-    #[allow(clippy::too_many_arguments)]
+
     pub fn new(
         document_id: DocumentId,
         document: Rc<RefCell<Document>>,

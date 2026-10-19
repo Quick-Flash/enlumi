@@ -127,7 +127,7 @@ impl Workbench {
                     self.layout.get_untracked(),
                 )
             }),
-            hit_plot: UnsyncCallback::new(move |(x, y)| self.hit_plot(x, y)),
+            hit_plot: UnsyncCallback::new(move |(x, y)| self.hit_any_plot(x, y)),
             accepts: UnsyncCallback::new(move |(source, id, target)| {
                 self.can_place_line(source, id, target)
             }),

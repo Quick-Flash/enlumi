@@ -13,6 +13,9 @@ pub struct Nightly {
 
 pub fn platform() -> Result<&'static str, String> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") if matches!(env!("ENLUMI_BUILD_PLATFORM"), "arch-linux-x86_64") => {
+            Ok("arch-linux-x86_64")
+        }
         ("linux", "x86_64") => Ok("linux-x86_64"),
         ("windows", "x86_64") => Ok("windows-x86_64"),
         ("macos", "aarch64") => Ok("macos-aarch64"),

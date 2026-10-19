@@ -559,7 +559,7 @@ impl Window {
     /// Returns [`AppError::Stylesheet`](crate::AppError::Stylesheet) when the application's own
     /// sheet was rejected outright. A sheet with one unrecognised declaration is not rejected: the
     /// rest of it applies and the drop is reported.
-    #[allow(clippy::too_many_arguments)]
+
     pub fn open(
         surface: Arc<dyn Surface>,
         document: zgui_dom::DocumentId,

@@ -1,4 +1,5 @@
 use crate::action_button::ActionButtonProps;
+use crate::screenshot::ScreenshotProps;
 use crate::state::{Pane, Workbench};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
@@ -6,6 +7,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn PlotActions(workbench: Workbench, pane: Pane) -> impl IntoView {
     view! {
+        Screenshot(workbench=workbench,pane=pane)
         if move || workbench.plot_units(pane).len() > 1 {
             Popover {
                 PopoverTrigger(size = ButtonSize::Xs, variant = ButtonVariant::Ghost,
@@ -17,8 +19,6 @@ pub fn PlotActions(workbench: Workbench, pane: Pane) -> impl IntoView {
             }
         }
 
-        if move || pane.analysis.get().is_none() { ActionButton(on:click=move |_|workbench.analyze_plot(pane)) {"Analyze"} }
-        if move || pane.analysis.get().is_some() { ActionButton(on:click=move |_|workbench.edit_analysis(pane)) {"Analysis settings"} }
         ActionButton(class = "duplicate-plot-button", a11y:label = "Duplicate plot",
             on:click = move |_| workbench.duplicate_plot(pane)) { "Duplicate" }
         ActionButton(class = "maximize-button", class:setting-active = move || workbench.maximized.get() == Some(pane.id), on:click = move |_| workbench.maximize(pane.id)) {

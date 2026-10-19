@@ -2,7 +2,7 @@ use crate::{field_tree::TreeRow, log::LogStore};
 use std::collections::BTreeSet;
 
 pub fn rows(log: &LogStore, query: &str, expanded: &BTreeSet<String>) -> Vec<TreeRow> {
-    let query = query.to_lowercase();
+    let query = query.trim().to_lowercase();
     let mut entries = Vec::new();
     for (flight, records) in &log.settings {
         for (index, setting) in records.iter().enumerate() {
@@ -24,7 +24,7 @@ pub fn rows(log: &LogStore, query: &str, expanded: &BTreeSet<String>) -> Vec<Tre
             };
             let values = setting.numbers().unwrap_or_default();
             let array = values.len() > 1;
-            let open = array && (!query.is_empty() || expanded.contains(&id));
+            let open = array && expanded.contains(&id);
             entries.push(TreeRow {
                 id: id.clone(),
                 label: name.clone(),
@@ -61,7 +61,7 @@ pub fn rows(log: &LogStore, query: &str, expanded: &BTreeSet<String>) -> Vec<Tre
     if entries.is_empty() {
         return Vec::new();
     }
-    let open = !query.is_empty() || expanded.contains("@settings");
+    let open = expanded.contains("@settings");
     let mut rows = vec![TreeRow {
         id: "@settings".into(),
         label: "Parameters".into(),
@@ -76,4 +76,61 @@ pub fn rows(log: &LogStore, query: &str, expanded: &BTreeSet<String>) -> Vec<Tre
         rows.extend(entries);
     }
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::log::LogSetting;
+
+    #[test]
+    fn search_filters_parameters_without_overriding_manual_expansion() {
+        let mut log = LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap();
+        log.settings = std::collections::BTreeMap::from([(
+            1,
+            vec![
+                LogSetting {
+                    name: "GAIN".into(),
+                    value: "[1, 2, 3]".into(),
+                    kind: "Initial parameter".into(),
+                },
+                LogSetting {
+                    name: "RATE".into(),
+                    value: "100".into(),
+                    kind: "Initial parameter".into(),
+                },
+            ],
+        )]);
+        let mut expanded = BTreeSet::new();
+        let collapsed = rows(&log, " GAIN ", &expanded);
+        assert_eq!(collapsed.len(), 1);
+        assert_eq!(collapsed[0].count, 1);
+        assert!(!collapsed[0].open);
+
+        expanded.insert("@settings".into());
+        let matching = rows(&log, "gain", &expanded);
+        assert_eq!(matching.len(), 2);
+        assert_eq!(matching[1].label, "GAIN");
+        assert!(!matching[1].open);
+        expanded.insert("@setting/1/0".into());
+        let open = rows(&log, "gain", &expanded);
+        assert_eq!(open.len(), 5);
+        assert_eq!(
+            open.last().unwrap().field.as_deref(),
+            Some("@setting/1/0/2")
+        );
+        assert_eq!(rows(&log, "", &expanded).len(), 6);
+        assert_eq!(rows(&log, "parameters", &expanded).len(), 6);
+        assert!(rows(&log, "missing", &expanded).is_empty());
+
+        expanded.remove("@setting/1/0");
+        assert_eq!(rows(&log, "gain", &expanded).len(), 2);
+        expanded.remove("@settings");
+        assert_eq!(rows(&log, "gain", &expanded).len(), 1);
+        assert!(expanded.is_empty());
+    }
 }

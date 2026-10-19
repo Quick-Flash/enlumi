@@ -54,7 +54,7 @@ const BLINK_INTERVAL: Duration = Duration::from_millis(500);
 /// by `on_ready` (and through local context); everything modal — a vim layer — is built on
 /// `on_key`, which hears every key first.
 #[component]
-#[allow(clippy::too_many_arguments)]
+
 pub fn Editor(
     /// What the buffer starts as. Ignored when `document` is given, which brings its own text.
     #[prop(optional, into)]

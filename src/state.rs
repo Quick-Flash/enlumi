@@ -35,6 +35,7 @@ pub struct Pane {
     pub id: u64,
     pub dock: DockPane,
     pub analysis: RwSignal<Option<crate::analysis_state::AnalysisResult>, LocalStorage>,
+    pub snapshot: plot::zgui_svg::PlotSnapshotSource,
     pub links: RwSignal<LinkOptions, LocalStorage>,
     pub lines: RwSignal<Vec<Line>, LocalStorage>,
     pub geometry: RwSignal<BTreeSet<u64>, LocalStorage>,
@@ -77,6 +78,7 @@ impl Pane {
             id,
             dock: DockPane::new(id),
             analysis: RwSignal::new_local(None),
+            snapshot: StoredValue::new_local(None),
             links: RwSignal::new_local(LinkOptions {
                 x: false,
                 y: false,
@@ -130,6 +132,7 @@ pub struct Workbench {
     pub geometry: crate::geometry_state::GeometryUi,
     pub bands: crate::band_state::BandUi,
     pub analysis: crate::analysis_state::AnalysisUi,
+    pub measurement: crate::measurement_state::MeasurementUi,
     pub profiles: crate::profile_state::ProfileUi,
     pub derived_busy: RwSignal<bool, LocalStorage>,
     pub filters_open: RwSignal<bool, LocalStorage>,
@@ -188,6 +191,7 @@ impl Workbench {
             geometry: crate::geometry_state::GeometryUi::new(),
             bands: crate::band_state::BandUi::new(),
             analysis: crate::analysis_state::AnalysisUi::new(),
+            measurement: crate::measurement_state::MeasurementUi::new(),
             profiles: crate::profile_state::ProfileUi::new(),
             log: RwSignal::new_local(None),
             status: RwSignal::new_local("Open a log file to begin".into()),
@@ -278,6 +282,7 @@ impl Workbench {
             self.loading.set(false);
             match result {
                 Ok(log) => {
+                    self.measurement.clear();
                     self.profiles.reset();
                     self.cancel_filter_run();
                     self.status.set(format!(
@@ -329,6 +334,10 @@ impl Workbench {
         });
     }
     pub fn add(self, source: String) {
+        if let Some(source) = source.strip_prefix("@analysis/") {
+            self.drop_analysis_sources(vec![source.to_owned()], Some(self.active.get_untracked()));
+            return;
+        }
         if self.loading.get_untracked() {
             return;
         }
@@ -508,6 +517,14 @@ impl Workbench {
     }
     pub fn close_plot(self, id: u64) {
         if self
+            .measurement
+            .selection
+            .get_untracked()
+            .is_some_and(|measurement| measurement.pane == id)
+        {
+            self.measurement.clear();
+        }
+        if self
             .geometry
             .drag
             .get_untracked()
@@ -560,6 +577,12 @@ impl Workbench {
             .update(|current| *current = if *current == Some(id) { None } else { Some(id) });
     }
     pub fn hit_plot(self, x: f32, y: f32) -> Option<u64> {
+        self.hit_plot_kind(x, y, false)
+    }
+    pub fn hit_any_plot(self, x: f32, y: f32) -> Option<u64> {
+        self.hit_plot_kind(x, y, true)
+    }
+    fn hit_plot_kind(self, x: f32, y: f32, analysis: bool) -> Option<u64> {
         if self.filters_open.get_untracked() {
             return None;
         }
@@ -567,7 +590,7 @@ impl Workbench {
         let maximized = self.maximized.get_untracked();
         self.panes.with_untracked(|panes| {
             panes.iter().find_map(|pane| {
-                if pane.analysis.get_untracked().is_some()
+                if (!analysis && pane.analysis.get_untracked().is_some())
                     || !plot_visible(pane.id, maximized, layout.clone())
                 {
                     return None;

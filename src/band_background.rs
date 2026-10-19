@@ -110,13 +110,35 @@ pub fn BandBackground(
         }
         out
     });
-    let canvas = zgui::elements::canvas()
-        .class("band-fill-canvas")
-        .draw(move |cx| {
+    let handle = zgui::elements::canvas::CanvasHandle::new();
+    plot::zgui_svg::register_canvas(&handle, plot::zgui_svg::SnapshotLayer::Background);
+    plot::zgui_svg::register_description(
+        plot::zgui_svg::SnapshotLayer::Foreground,
+        move |description| {
+            for label in scene.get_untracked().labels {
+                description.text.push(plot::SvgText {
+                    x: label.left + 3.,
+                    y: 20. + label.row as f64 * 20.,
+                    text: label.name,
+                    color: "#ffffff".into(),
+                    opacity: 1.,
+                    font_size: 11.,
+                    font_weight: 400,
+                    anchor: plot::TextAnchor::Start,
+                    stroke: None,
+                    stroke_width: 0.,
+                });
+            }
+        },
+    );
+    let drawing = handle.clone();
+    plot::zgui_renderer::redraw_on_change(move || {
+        drawing.draw(|canvas_scene| {
+            canvas_scene.clear();
             scene.with(|scene| {
                 for (_, path, [r, g, b], alpha) in &scene.paints {
                     let color = Color::srgb_u8(*r, *g, *b, 255).with_alpha(*alpha as f32);
-                    cx.scene.push(
+                    canvas_scene.push(
                         ShapeBuilder::new(path.clone())
                             .fill(Brush::Linear {
                                 start: (0., 0.).into(),
@@ -128,7 +150,11 @@ pub fn BandBackground(
                     );
                 }
             })
-        });
+        })
+    });
+    let canvas = zgui::elements::canvas()
+        .class("band-fill-canvas")
+        .scene(&handle);
     view! {column(class="band-background",node_ref=host) {
         {canvas.into_view()}
         for key in move ||scene.with(|scene|scene.labels.iter().map(|label|label.key).collect::<Vec<_>>()),key=|key|*key {

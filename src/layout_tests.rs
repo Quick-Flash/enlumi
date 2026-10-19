@@ -1313,6 +1313,16 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     assert!(window.nodes_with_class("plot-settings-trigger").is_empty());
     let fps = window.box_with_class("fps-readout").unwrap();
     assert!(
+        fps.size.width.0 <= 26.,
+        "FPS reserves three digits: {fps:?}"
+    );
+    let github = window.box_with_class("github-link").unwrap();
+    assert!(
+        fps.origin.x.0 - github.origin.x.0 - github.size.width.0 <= 4.,
+        "GitHub and FPS stay adjacent"
+    );
+    assert_eq!(window.nodes_with_class("analyze-toggle").len(), 1);
+    assert!(
         fps.origin.x.0 > 1400.0 && fps.origin.y.0 < 40.0,
         "FPS must sit top-right: {fps:?}"
     );
@@ -2159,12 +2169,17 @@ fn shift_release_cancels_box_zoom_before_mouse_release() {
             let pointer = PlotPointer::new(HitZones::default(), Axes::BOTH);
             let ranges = RwSignal::new_local(plot::Ranges::new((0.0, 10.0), (0.0, 10.0)));
             *built.borrow_mut() = Some((pointer, ranges));
-            view! { PlotSurface(node_ref = NodeRef::new(), class = "zoom-test", label = "Zoom test".into(), pointer = pointer,
-                geometry = UnsyncCallback::new(|()| plot::PlotGeometry::with_bounds(0.0, 0.0, 900.0, 600.0, 900.0, 600.0)),
-                ranges = UnsyncCallback::new(move |()| ranges.get_untracked()),
-                on_update = UnsyncCallback::new(move |update: plot::interaction::RangeUpdate| ranges.update(|ranges| *ranges = update.apply(*ranges))),
-                on_cancel = UnsyncCallback::new(move |initial| ranges.set(initial)), on_reset = UnsyncCallback::new(|()| {}),
-                on_hover = UnsyncCallback::new(|_| {}), ticks = Memo::new(|_| Vec::new()), background = "#12181c".into()) { box {} } }
+            let surface_interaction = plot::zgui_surface::SurfaceInteraction {
+                geometry: UnsyncCallback::new(|()| plot::PlotGeometry::with_bounds(0.0,0.0,900.0,600.0,900.0,600.0)),
+                ranges: UnsyncCallback::new(move |()| ranges.get_untracked()),
+                on_update: UnsyncCallback::new(move |update: plot::interaction::RangeUpdate| ranges.update(|ranges| *ranges = update.apply(*ranges))),
+                on_reset: UnsyncCallback::new(|()| {}), on_hover: UnsyncCallback::new(|_| {}),
+            };
+            let surface_options = plot::zgui_surface::SurfaceOptions {
+                on_cancel: Some(UnsyncCallback::new(move |initial| ranges.set(initial))),
+                ticks: Memo::new(|_| Vec::new()), background: "#12181c".into(), ..Default::default()
+            };
+            view! { PlotSurface(node_ref=NodeRef::new(),class="zoom-test",label="Zoom test".into(),pointer=pointer,interaction=surface_interaction,options=surface_options) {box {}} }
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -4653,7 +4668,7 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
             normal.lines.set(vec![crate::state::Line{id:1,source:"raw".into(),name:"Raw gyro".into(),revision:0,data:SeriesData::new(vec![plot::PlotPoint{x:0.0,y:0.0},plot::PlotPoint{x:10.0,y:1.0}]).unwrap()}]);
             let result=|mode|AnalysisResult{
                 title:if mode==Mode::Spectrogram {"Gyro over time".into()}else{"Gyro FFT".into()},units:"test".into(),summary:"Snapshot".into(),mode,
-                options:crate::spectral::Options{mode,size:2048,window:crate::spectral::Window::Hann,overlap:50,heatmap_bins:40,start:None,end:None},condition:String::new(),
+                options:crate::spectral::Options{mode,size:2048,window:crate::spectral::Window::Hann,overlap:50,heatmap_bins:40,start:None,end:None,remove_dc:true},condition:String::new(),
                 series:TimeSeriesSet::new(vec![TimeSeries::new("fft","Gyro",SeriesData::new(vec![plot::PlotPoint{x:0.0,y:0.0},plot::PlotPoint{x:500.0,y:1.0}]).unwrap())]).unwrap(),
                 heatmap:(mode==Mode::Spectrogram).then(||Heatmap{values:vec![Some(0.0),Some(1.0),Some(2.0),Some(3.0)].into(),columns:2,rows:2,x_low:0.0,x_high:10.0,y_low:0.0,y_high:500.0,x_label:"Time (s)".into(),y_label:"Frequency (Hz)".into(),min_db:0.0,max_db:3.0}),
             };
@@ -4671,6 +4686,32 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
     )));
     harness.settle(128);
     let (workbench, normal, time, frequency) = saved.borrow().unwrap();
+    let normal_svg = workbench.capture_screenshot(Some(normal)).unwrap();
+    let map_svg = workbench.capture_screenshot(Some(time)).unwrap();
+    assert!(normal_svg.contains("Raw gyro") && !normal_svg.contains("Gyro over time"));
+    assert!(map_svg.contains("Gyro over time"), "Missing heatmap title");
+    assert!(
+        map_svg.contains("linearGradient"),
+        "Missing heatmap cells: {}",
+        map_svg.chars().take(1600).collect::<String>()
+    );
+    let workspace_svg = workbench.capture_screenshot(None).unwrap();
+    assert_eq!(
+        workspace_svg.matches("<svg ").count(),
+        4,
+        "Visible dock layout contains three nested plot SVGs"
+    );
+    for svg in [&normal_svg, &map_svg, &workspace_svg] {
+        let png = plot::zgui_svg::ScreenshotFormat::Png.encode(svg).unwrap();
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        assert!(u32::from_be_bytes(png[16..20].try_into().unwrap()) > 0);
+    }
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("legend-chevron")
+            .len(),
+        2
+    );
     assert!(normal.dock.node.window_bounds().unwrap().size.width.0 > 200.0);
     assert!(
         time.dock.node.window_bounds().unwrap().origin.x.0
@@ -4710,6 +4751,391 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
     assert_eq!(workbench.maximized.get_untracked(), Some(copy.id));
     workbench.close_plot(copy.id);
     assert_eq!(workbench.panes.with_untracked(|panes| panes.len()), 3);
+}
+
+#[test]
+fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs() {
+    use crate::{
+        analysis_workspace::AnalysisWorkspaceProps, state::Workbench, workspace::PlotWorkspaceProps,
+    };
+    use plot::time_series::SeriesData;
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    let handler = app().with_size(1200., 1000.)
+        .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
+        .into_handler(move || {
+            let workbench = Workbench::new();
+            workbench.log.set(Some(log.clone()));
+            let mut sources = Vec::new();
+            for condition in [false, true] {
+                let id = workbench.id();
+                let data = SeriesData::new((0..512).map(|i| plot::PlotPoint { x: i as f64 / 1000., y: if condition { i as f64 } else { (i as f64 * 0.2).sin() } }).collect::<Vec<_>>()).unwrap();
+                let field = crate::derived::DerivedField { id, name: if condition { "RPM" } else { "Gyro" }.into(), sources: Vec::new(), group: id, filter: crate::derived::FilterSpec::MovingAverage(1), data: Some(data) };
+                sources.push(field.key());
+                workbench.derived.update(|fields| fields.push(field));
+            }
+            workbench.analysis.open.set(true);
+            workbench.analysis.sources.set(sources);
+            let normal = workbench.pane();
+            *captured.borrow_mut() = Some((workbench, normal));
+            view! { column(class="page workbench") { row(class="body") {
+                column(class="plot-page") { PlotWorkspace(workbench=workbench) }
+                column(style:width=Some("360px".to_owned()),style:flex=Some("none".to_owned())) { AnalysisWorkspace(workbench=workbench) }
+            } } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.),
+        DevicePx(1000.),
+    )));
+    harness.settle(128);
+    let (workbench, normal) = saved.borrow().unwrap();
+    let drag = |harness: &mut Harness<zgui::runtime::Runtime>, index: usize, target: (f32, f32)| {
+        let window = &harness.app().windows()[0];
+        let bounds = zgui::view::ViewHost::window_box(
+            window.host().as_ref(),
+            window.nodes_with_class("metric-option")[index],
+        )
+        .unwrap();
+        let start = (
+            bounds.origin.x.0 + bounds.size.width.0 / 2.,
+            bounds.origin.y.0 + bounds.size.height.0 / 2.,
+        );
+        harness.deliver_to_first(pointer(PointerAction::Pressed, start.0, start.1));
+        harness.deliver_to_first(pointer(PointerAction::Moved, target.0, target.1));
+        harness.settle(128);
+        harness.deliver_to_first(pointer(PointerAction::Released, target.0, target.1));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while workbench.analysis.busy.get_untracked() {
+            assert!(Instant::now() < deadline);
+            harness.pump();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        harness.settle(128);
+    };
+    let bounds = normal.dock.node.window_bounds().unwrap();
+    let target = (
+        (bounds.origin.x.0 + bounds.size.width.0 / 2.) / normal.dock.node.scale(),
+        (bounds.origin.y.0 + bounds.size.height.0 / 2.) / normal.dock.node.scale(),
+    );
+    drag(&mut harness, 0, target);
+    assert_eq!(
+        workbench.panes.get_untracked().len(),
+        2,
+        "{}",
+        workbench.analysis.message.get_untracked()
+    );
+    assert!(normal.lines.get_untracked().is_empty());
+    let fft = workbench.pane();
+    assert!(fft.analysis.with_untracked(|result| {
+        result
+            .as_ref()
+            .is_some_and(|result| result.mode == crate::spectral::Mode::Fft)
+    }));
+    let inputs = workbench.analysis.sources.get_untracked();
+    let zoom = plot::Ranges::new((12., 80.), (0.01, 0.2));
+    fft.plot.set_view(zoom).unwrap();
+    workbench.edit_analysis(fft);
+    workbench.run_analysis();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.analysis.busy.get_untracked() {
+        assert!(Instant::now() < deadline);
+        harness.pump();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert_eq!(
+        fft.plot.ranges.get_untracked(),
+        zoom,
+        "Analysis renderer must retain both viewed axes after update"
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("analysis-mode")
+            .len(),
+        4,
+        "All modes remain available while editing"
+    );
+    let window = &harness.app().windows()[0];
+    let psd = window
+        .nodes_with_class("analysis-mode")
+        .into_iter()
+        .find(|node| window.dom().text_content(*node) == "PSD")
+        .unwrap();
+    let bounds = zgui::view::ViewHost::window_box(window.host().as_ref(), psd).unwrap();
+    let point = (
+        bounds.origin.x.0 + bounds.size.width.0 / 2.,
+        bounds.origin.y.0 + bounds.size.height.0 / 2.,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, point.0, point.1));
+    harness.deliver_to_first(pointer(PointerAction::Released, point.0, point.1));
+    harness.settle(128);
+    assert_eq!(workbench.analysis.mode.get_untracked(), "psd");
+    assert!(
+        workbench.analysis.target.get_untracked().is_none(),
+        "Choosing a new mode must detach existing FFT edit target"
+    );
+    assert!(fft.analysis.get_untracked().unwrap().mode == crate::spectral::Mode::Fft);
+    workbench.analysis.target.set(None);
+    workbench.analysis.sources.set(inputs);
+    workbench.analysis.mode.set("heatmap".into());
+    harness.settle(128);
+    let condition = workbench.analysis.condition_drop;
+    let bounds = condition.window_bounds().unwrap();
+    drag(
+        &mut harness,
+        1,
+        (
+            (bounds.origin.x.0 + bounds.size.width.0 / 2.) / condition.scale(),
+            (bounds.origin.y.0 + bounds.size.height.0 / 2.) / condition.scale(),
+        ),
+    );
+    assert_eq!(
+        workbench.analysis.condition.get_untracked(),
+        workbench.analysis.sources.get_untracked()[1]
+    );
+    workbench.analysis.size.set("128".into());
+    harness.settle(128);
+    drag(&mut harness, 0, target);
+    assert_eq!(
+        workbench.panes.get_untracked().len(),
+        3,
+        "{}",
+        workbench.analysis.message.get_untracked()
+    );
+    assert!(workbench.pane().analysis.with_untracked(|result| {
+        result
+            .as_ref()
+            .is_some_and(|result| result.heatmap.is_some())
+    }));
+    assert_eq!(fft.lines.get_untracked().len(), 1);
+}
+
+#[test]
+fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
+    use crate::{analysis_range::AnalysisRangeProps, state::Workbench};
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler = app().with_size(900., 500.)
+        .with_renderer(Box::new(|_, target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n.range-test {{width:800px;height:400px;position:relative;}}", crate::theme::stylesheet()))
+        .into_handler(move || {
+            let workbench = Workbench::new();
+            let pane = workbench.pane();
+            pane.plot.set_view(plot::Ranges::new((0., 10.), (-1., 1.))).unwrap();
+            workbench.analysis.open.set(true);
+            workbench.analysis.picking_range.set(true);
+            *captured.borrow_mut()=Some((workbench,pane));
+            view! { column(class="page") { column(class="range-test") {AnalysisRange(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(900.),
+        DevicePx(500.),
+    )));
+    harness.settle(128);
+    let (workbench, pane) = saved.borrow().unwrap();
+    let before = pane.plot.ranges.get_untracked();
+    let bounds = harness.app().windows()[0]
+        .box_with_class("analysis-range-picker")
+        .unwrap();
+    let y = bounds.origin.y.0 + bounds.size.height.0 / 2.;
+    let right = bounds.origin.x.0 + bounds.size.width.0 * 0.7;
+    let left = bounds.origin.x.0 + bounds.size.width.0 * 0.2;
+    harness.deliver_to_first(pointer(PointerAction::Pressed, right, y));
+    harness.deliver_to_first(pointer(PointerAction::Moved, left, y));
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("analysis-range-selection")
+            .is_some()
+    );
+    harness.deliver_to_first(pointer(PointerAction::Released, left, y));
+    harness.settle(128);
+    assert!(!workbench.analysis.picking_range.get_untracked());
+    assert!(
+        (workbench
+            .analysis
+            .start
+            .get_untracked()
+            .parse::<f64>()
+            .unwrap()
+            - 2.)
+            .abs()
+            < 1e-6
+    );
+    assert!(
+        (workbench
+            .analysis
+            .end
+            .get_untracked()
+            .parse::<f64>()
+            .unwrap()
+            - 7.)
+            .abs()
+            < 1e-6
+    );
+    assert_eq!(pane.plot.ranges.get_untracked(), before);
+    pane.plot
+        .set_view(plot::Ranges::new((1., 4.), (-1., 1.)))
+        .unwrap();
+    workbench.use_visible_analysis_range();
+    assert_eq!(workbench.analysis.start.get_untracked(), "1");
+    assert_eq!(workbench.analysis.end.get_untracked(), "4");
+}
+
+#[test]
+fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
+    use crate::{state::Workbench, workspace::PlotWorkspaceProps};
+    use plot::time_series::{SeriesData, TimeSeries, TimeSeriesSet};
+    use zgui_ui::prelude::*;
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler=app().with_size(1200.,700.)
+        .with_renderer(Box::new(|_,target|{let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
+        .into_handler(move || {
+            let workbench=Workbench::new();let normal=workbench.pane();
+            let data=SeriesData::new(vec![plot::PlotPoint{x:0.25,y:1.},plot::PlotPoint{x:0.75,y:0.1}]).unwrap();
+            normal.lines.set(vec![crate::state::Line{id:100,source:"wave".into(),name:"Wave".into(),revision:0,data:data.clone()}]);
+            let fft=workbench.add_analysis_panel(crate::analysis_state::AnalysisResult {
+                title:"FFT".into(),units:String::new(),summary:String::new(),heatmap:None,mode:crate::spectral::Mode::Fft,condition:String::new(),
+                options:crate::spectral::Options{mode:crate::spectral::Mode::Fft,size:0,window:crate::spectral::Window::Hann,overlap:50,heatmap_bins:40,start:None,end:None,remove_dc:true},
+                series:TimeSeriesSet::new(vec![TimeSeries::new("wave","Wave",data)]).unwrap(),
+            });
+            workbench.layout.update(|layout|{assert!(layout.dock_split(fft.id,normal.id,plot::workspace::layout::DropZone::Right));});
+            for pane in [normal,fft]{pane.plot.set_view(plot::Ranges::new((0.,1.),(0.,2.))).unwrap();}
+            let input=NodeRef::new();let keys=NodeRef::new();*captured.borrow_mut()=Some((workbench,normal,fft,input,keys));
+            view! {column(class="page workbench",node_ref=keys,tabindex=Focus::Sequential,on:key_down:capture=move |event| {
+                if workbench.measurement_shortcut(event,event.modifiers){event.prevent_default();event.stop_propagation();}
+            }) {
+                Input(node_ref=input,default_value="",a11y:label="Search")
+                row(class="body") {PlotWorkspace(workbench=workbench)}
+            }}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.),
+        DevicePx(700.),
+    )));
+    harness.settle(128);
+    let (workbench, normal, fft, input, keys) = saved.borrow().unwrap();
+    for pane in [normal, fft] {
+        keys.focus();
+        harness.settle(128);
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character("m"),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+        assert!(workbench.measurement.active.get_untracked());
+        let window = &harness.app().windows()[0];
+        let bounds = window
+            .nodes_with_class("measurement-picker")
+            .into_iter()
+            .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+            .find(|bounds| {
+                let pane_bounds = pane.dock.node.window_bounds().unwrap();
+                bounds.origin.x.0 >= pane_bounds.origin.x.0 / pane.dock.node.scale()
+                    && bounds.origin.x.0
+                        < (pane_bounds.origin.x.0 + pane_bounds.size.width.0)
+                            / pane.dock.node.scale()
+            })
+            .unwrap();
+        let start = (
+            bounds.origin.x.0 + bounds.size.width.0 * 0.26,
+            bounds.origin.y.0 + bounds.size.height.0 * 0.51,
+        );
+        let end = (
+            bounds.origin.x.0 + bounds.size.width.0 * 0.74,
+            bounds.origin.y.0 + bounds.size.height.0 * 0.05,
+        );
+        let view = pane.plot.ranges.get_untracked();
+        harness.deliver_to_first(pointer(PointerAction::Pressed, start.0, start.1));
+        harness.settle(128);
+        let started = workbench.measurement.selection.get_untracked().unwrap();
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::named(
+                zgui::vocab::NamedKey::Escape,
+                zgui::vocab::PhysicalKey::Unidentified(0),
+            ),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+        assert!(workbench.measurement.active.get_untracked());
+        assert_eq!(
+            workbench.measurement.selection.get_untracked(),
+            Some(started),
+            "Escape must leave measurement and pointer capture intact"
+        );
+        harness.deliver_to_first(pointer(PointerAction::Moved, end.0, end.1));
+        harness.settle(128);
+        assert!(
+            harness.app().windows()[0]
+                .box_with_class("measurement-region")
+                .unwrap()
+                .size
+                .width
+                .0
+                > 100.
+        );
+        let measurement = workbench.measurement.selection.get_untracked().unwrap();
+        assert_eq!(measurement.pane, pane.id);
+        assert_eq!(measurement.start, plot::PlotPoint { x: 0.25, y: 1. });
+        assert_eq!(measurement.end, plot::PlotPoint { x: 0.75, y: 0.1 });
+        assert_eq!(pane.plot.ranges.get_untracked(), view);
+        assert!(workbench.measurement.active.get_untracked());
+        let window = &harness.app().windows()[0];
+        let text = window
+            .dom()
+            .text_content(window.nodes_with_class("measurement-readout")[0]);
+        assert!(
+            text.contains(if pane.id == normal.id { "2 Hz" } else { "2 s" }),
+            "{text}"
+        );
+        harness.deliver_to_first(pointer(PointerAction::Released, end.0, end.1));
+        harness.settle(128);
+        assert!(!workbench.measurement.active.get_untracked());
+        assert!(workbench.measurement.selection.get_untracked().is_none());
+        assert!(
+            harness.app().windows()[0]
+                .nodes_with_class("measurement-readout")
+                .is_empty()
+        );
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::named(
+                zgui::vocab::NamedKey::Escape,
+                zgui::vocab::PhysicalKey::Unidentified(0),
+            ),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+        assert!(workbench.measurement.selection.get_untracked().is_none());
+    }
+    input.focus();
+    harness.settle(128);
+    harness.deliver_to_first(SurfaceEvent::Key {
+        state: zgui::vocab::KeyState::Pressed,
+        event: zgui::vocab::KeyEvent::character("m"),
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.settle(128);
+    assert!(!workbench.measurement.active.get_untracked());
 }
 
 #[test]

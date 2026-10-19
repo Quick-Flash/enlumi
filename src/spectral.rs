@@ -34,6 +34,7 @@ pub struct Options {
     pub heatmap_bins: usize,
     pub start: Option<f64>,
     pub end: Option<f64>,
+    pub remove_dc: bool,
 }
 
 #[derive(Clone)]
@@ -57,6 +58,7 @@ pub struct Spectrum {
     pub size: usize,
     pub windows: usize,
     pub skipped: usize,
+    pub excluded_samples: usize,
 }
 
 fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
@@ -91,7 +93,7 @@ fn interval(points: &[PlotPoint]) -> Result<f64, String> {
     Ok(nearby.iter().sum::<f64>() / nearby.len() as f64)
 }
 
-// Interpolate only within measured cadence; never extrapolate or bridge log gaps.
+// Bridge brief dropped samples only; never extrapolate or bridge long log gaps.
 fn at(points: &[PlotPoint], time: f64, max_gap: f64, cursor: &mut usize) -> Option<f64> {
     while *cursor + 1 < points.len() && points[*cursor + 1].x <= time {
         *cursor += 1;
@@ -138,39 +140,74 @@ pub fn compute(
     let all = data.samples();
     let first = all.partition_point(|p| options.start.is_some_and(|start| p.x < start));
     let last = all.partition_point(|p| options.end.is_none_or(|end| p.x <= end));
-    let points = all.get(first..last).ok_or("Invalid time range")?;
+    let selected = all.get(first..last).ok_or("Invalid time range")?;
+    let finite = selected
+        .iter()
+        .copied()
+        .filter(|p| p.y.is_finite())
+        .collect::<Vec<_>>();
+    let points = finite.as_slice();
     if points.len() < 2 {
         return Err("Need at least two samples in selected time range".into());
     }
-    let dt = interval(points)?;
+    let dt = interval(selected)?;
     let rate = 1. / dt;
-    let start = points[0].x;
+    let mut start = points[0].x;
     let count = (((points[points.len() - 1].x - start) / dt) + 1e-6).floor() + 1.;
     if !rate.is_finite() || !(2.0..=4_000_000.).contains(&count) {
         return Err("Analysis needs 2–4,000,000 uniformly sampled points; narrow time range or reduce FFT size".into());
     }
-    let count = count as usize;
-    let n = if windowed { options.size } else { count };
-    if n > count {
-        return Err(format!("Need {n} samples in selected time range"));
-    }
+    let mut count = count as usize;
     let mut uniform = Vec::with_capacity(count);
     let mut cursor = 0;
     for i in 0..count {
         if i % 8192 == 0 {
             cancelled(cancel)?;
         }
-        uniform.push(at(points, start + i as f64 * dt, dt * 1.5, &mut cursor));
+        uniform.push(at(points, start + i as f64 * dt, dt * 3.5, &mut cursor));
     }
-    if !windowed && uniform.iter().any(Option::is_none) {
-        return Err(
-            "Selected range contains gaps; select a contiguous range for full-length FFT/PSD"
-                .into(),
-        );
+    let mut excluded_samples = 0;
+    if !windowed {
+        let mut best = 0..0;
+        let mut begin = 0;
+        for (i, sample) in uniform.iter().chain(std::iter::once(&None)).enumerate() {
+            if sample.is_none() {
+                if i - begin > best.len() {
+                    best = begin..i;
+                }
+                begin = i + 1;
+            }
+        }
+        if best.len() < 2 {
+            return Err("Need at least two samples in a valid run".into());
+        }
+        start += best.start as f64 * dt;
+        uniform = uniform[best].to_vec();
+        count = uniform.len();
+        let end = start + (count - 1) as f64 * dt;
+        let tolerance = dt * 1e-6;
+        excluded_samples = selected
+            .iter()
+            .filter(|p| p.x < start - tolerance || p.x > end + tolerance)
+            .count();
     }
+    let n = if windowed { options.size } else { count };
+    if n > count {
+        return Err(format!("Need {n} samples in selected time range"));
+    }
+    let condition_points = condition.map(|data| {
+        data.samples()
+            .iter()
+            .copied()
+            .filter(|p| p.y.is_finite())
+            .collect::<Vec<_>>()
+    });
     let condition = if options.mode == Mode::Heatmap {
         let data = condition.ok_or("Choose conditioning field for heatmap")?;
-        Some((data.samples(), interval(data.samples())? * 1.5))
+        Some((
+            condition_points.as_ref().unwrap().as_slice(),
+            interval(data.samples())? * 3.5,
+        ))
     } else {
         None
     };
@@ -230,7 +267,11 @@ pub fn compute(
             }
             coordinate = Some(total / n as f64);
         }
-        let mean = samples.iter().map(|v| v.unwrap()).sum::<f64>() / n as f64;
+        let mean = if options.remove_dc {
+            samples.iter().map(|v| v.unwrap()).sum::<f64>() / n as f64
+        } else {
+            0.
+        };
         for (i, value) in samples.iter().enumerate() {
             buffer[i] = Complex::new((value.unwrap() - mean) * window[i], 0.);
         }
@@ -399,6 +440,7 @@ pub fn compute(
         size: n,
         windows,
         skipped,
+        excluded_samples,
     })
 }
 
@@ -418,14 +460,12 @@ pub fn available_size(data: &SeriesData, start: Option<f64>, end: Option<f64>) -
     let mut previous: Option<f64> = None;
     for point in points {
         if !point.y.is_finite() {
-            run = 0;
-            previous = None;
             continue;
         }
-        if previous.is_none_or(|time| point.x - time > dt * 1.5) {
+        if previous.is_none_or(|time| point.x - time > dt * 3.5) {
             run = 1;
         } else if previous.is_some_and(|time| point.x > time) {
-            run += 1;
+            run += ((point.x - previous.unwrap()) / dt).round() as usize;
         }
         previous = Some(point.x);
         longest = longest.max(run);

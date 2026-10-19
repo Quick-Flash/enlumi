@@ -21,6 +21,7 @@ pub enum Destination {
     Filter,
     Bands,
     Analysis,
+    AnalysisCondition,
 }
 
 #[derive(Clone, Copy)]

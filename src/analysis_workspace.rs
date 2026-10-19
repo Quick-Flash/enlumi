@@ -1,4 +1,6 @@
-use crate::{action_button::ActionButtonProps, state::Workbench};
+use crate::{
+    action_button::ActionButtonProps, analysis_source::AnalysisSourceProps, state::Workbench,
+};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
@@ -40,24 +42,31 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
     });
     on_cleanup_local(move || drop(size_sync));
     view! {
-        column(class = "analysis-workspace", node_ref = ui.drop, class:analysis-drop-active = move || ui.hover.get()) {
+        column(class = "analysis-workspace") {
             row(class = "analysis-heading") {
                 text(class = "heading") {"Frequency analysis"}
-                ActionButton(on:click=move |_|{ui.open.set(false);ui.hover.set(false);}) {"Close"}
+                ActionButton(on:click=move |_|{ui.open.set(false);ui.hover.set(false);ui.picking_range.set(false);}) {"Close"}
             }
             row(class = "analysis-body") {
                 column(class = "analysis-controls") {
-                    text(class = "muted") {{move || if ui.target.get().is_some() { "Editing existing analysis plot. Update plot applies changed settings." } else { "Drag fields or profile views here. Enable individual signals below." }}}
-                    if move || ui.target.get().is_none() {
-                    Select(value = ui.mode) {
-                        SelectTrigger(label="Analysis type") {SelectValue()}
-                        SelectContent {
-                            SelectItem(value="fft") {"FFT amplitude"}
-                            SelectItem(value="psd") {"PSD"}
-                            SelectItem(value="heatmap") {"FFT vs field heatmap"}
-                            SelectItem(value="spectrogram") {"FFT over time (spectrogram)"}
+                    text(class = "muted") {{move || ui.target.get().map_or_else(||"New analysis · drag signals onto a plot to create results".into(),|id|format!("Editing plot {id} · Update plot applies settings; choosing another type starts new analysis"))}}
+                    row(class="analysis-context-actions") {
+                        if move ||ui.target.get().is_some() {ActionButton(class="analysis-new",on:click=move |_|workbench.new_analysis()) {"New analysis"}}
+                        if move ||{let active=workbench.active.get();workbench.find(active).is_some_and(|pane|pane.analysis.get().is_some()) && ui.target.get()!=Some(active)} {
+                            ActionButton(class="analysis-edit-selected",on:click=move |_|workbench.edit_analysis(workbench.pane())) {"Edit selected plot"}
                         }
                     }
+                    row(class="analysis-modes",a11y:label="Analysis type") {
+                        for mode in move || [("fft", "FFT amplitude"), ("psd", "PSD"), ("heatmap", "FFT vs field heatmap"), ("spectrogram", "Spectrogram")],key=|mode|mode.0 {
+                            ActionButton(class="analysis-mode",class:setting-active=move ||ui.mode.get()==mode.0,on:click=move |_|workbench.select_analysis_mode(mode.0)) {{mode.1}}
+                        }
+                    }
+                    text(class="muted") {"Signals · drag onto a plot to analyze"}
+                    scroll(class="analysis-inputs",node_ref=ui.drop,class:analysis-drop-active=move ||ui.hover.get(),a11y:label="Draggable analysis signals") {
+                        if move || ui.sources.with(Vec::is_empty) { text(class="analysis-drop-empty muted") {"Drop signal fields or profile views here"} }
+                        for source in move ||ui.sources.get(),key=|source|source.clone() {
+                            AnalysisSource(workbench=workbench,source=source)
+                        }
                     }
                     if move || matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") {
                     Select(value = ui.size) {
@@ -76,6 +85,12 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                             SelectItem(value="rectangular") {"Rectangular"}
                         }
                     }
+                    {{let dc = NodeRef::new();view! {
+                        row(class="analysis-option") {
+                            Checkbox(node_ref=dc,checked=Binding::controlled(Signal::derive_local(move ||if ui.remove_dc.get(){Checked::Yes}else{Checked::No}),move |value|ui.remove_dc.set(value==Checked::Yes)))
+                            Label(control=dc) {"Remove DC (subtract mean)"}
+                        }
+                    }}}
                     if move || matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") {
                     Select(value = ui.overlap) {
                         SelectTrigger(label="Window overlap") {SelectValue()}
@@ -89,16 +104,22 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                     }
                     text(class = "muted") {{move || {
                         let window = match ui.window.get().as_str() {"hamming"=>"Hamming","blackman"=>"Blackman","rectangular"=>"Rectangular",_=>"Hann"};
-                        if matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") { format!("{} samples · {window} · {}% overlap", ui.size.get(), ui.overlap.get()) } else { format!("Full selected range · {window} · no zero padding") }
+                        if matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") { format!("{} samples · {window} · {}% overlap", ui.size.get(), ui.overlap.get()) } else { format!("Longest valid run · {window} · no zero padding") }
                     }}}
                     text(class = "muted") {"Time range (log X seconds; blank = full signal)"}
                     row {Input(value=ui.start,placeholder="Start",a11y:label="Analysis start seconds") Input(value=ui.end,placeholder="End",a11y:label="Analysis end seconds")}
+                    row(class="analysis-range-actions") {
+                        ActionButton(class="analysis-pick-range",class:setting-active=move ||ui.picking_range.get(),on:click=move |_|{workbench.finish_geometry_editing();workbench.measurement.active.set(false);ui.picking_range.update(|picking|*picking = !*picking);}) {"Select on plot"}
+                        ActionButton(class="analysis-visible-range",on:click=move |_|workbench.use_visible_analysis_range()) {"Use visible range"}
+                        ActionButton(on:click=move |_|{ui.start.set(String::new());ui.end.set(String::new());ui.picking_range.set(false);}) {"Full signal"}
+                    }
+                    if move ||ui.picking_range.get() {text(class="muted",a11y:role=Role::Status) {"Drag across a time plot to select range. Escape cancels."}}
                     if move ||ui.mode.get()=="heatmap" {
                         text(class="muted") {"Conditioning field · mean value per FFT window"}
-                        Select(value=ui.condition) {
-                            SelectTrigger(label="Heatmap conditioning field") {SelectValue(placeholder="Choose input field")}
-                            SelectContent {
-                                for source in move ||ui.sources.get(),key=|source|source.clone() {SelectItem(value=source.clone()) {{workbench.field_name(&source)}}}
+                        column(class="analysis-condition-drop",node_ref=ui.condition_drop,class:analysis-drop-active=move ||ui.condition_hover.get(),a11y:label="Drop heatmap conditioning field") {
+                            text {{move || if ui.condition.get().is_empty() { "Drop throttle, RPM, or another field here".into() } else { workbench.field_name(&ui.condition.get()) }}}
+                            if move || !ui.condition.get().is_empty() {
+                                ActionButton(on:click=move |_|{ui.cancel();ui.condition.set(String::new());}) {"Remove conditioning field"}
                             }
                         }
                         Select(value=ui.heatmap_bins) {
@@ -111,39 +132,20 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                                 SelectItem(value="320") {"320 bins"}
                             }
                         }
-                        text(class="muted") {"X = frequency; Y = conditioning field; color = PSD in dB. Add throttle/RPM as input, then choose it here."}
+                        text(class="muted") {"X = frequency; Y = conditioning field; color = PSD in dB. Drag signal from list onto a plot to create heatmap."}
                     }
                     if move ||ui.mode.get()=="spectrogram" {
                         text(class="muted") {"X = time; Y = frequency; color = PSD in dB. Time bin spacing follows FFT window size and overlap."}
                     }
-                    if move || !matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") {
-                        {{let separate = NodeRef::new();view! {
-                            row(class = "analysis-separate") {
-                                Checkbox(node_ref = separate, checked = Binding::controlled(
-                                    Signal::derive_local(move || if ui.separate.get() { Checked::Yes } else { Checked::No }),
-                                    move |value| ui.separate.set(value == Checked::Yes)))
-                                Label(control = separate) { "One plot per signal" }
-                            }
-                        }}}
-                    }
                     row {
-                        ActionButton(disabled=Signal::derive_local(move ||ui.busy.get() || (matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") && sizes.get().is_empty())),on:click=move |_|workbench.run_analysis()) {{move || if ui.target.get().is_some() { "Update plot" } else { "Run" }}}
+                        if move || ui.target.get().is_some() {
+                            ActionButton(disabled=Signal::derive_local(move ||ui.busy.get() || (matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") && sizes.get().is_empty())),on:click=move |_|workbench.run_analysis()) {"Update plot"}
+                        }
                         ActionButton(disabled=Signal::derive_local(move ||!ui.busy.get()),on:click=move |_|{ui.cancel();ui.message.set("Cancelled".into());}) {"Cancel"}
                         ActionButton(on:click=move |_|ui.reset()) {"Clear"}
                     }
                     text(class="muted") {"Results open as dock tabs. Drag tabs above, below, or beside other plots; use Links to share axes and pointer. Results are snapshots."}
                     text(class="analysis-summary muted",a11y:role=Role::Status) {{move ||ui.message.get()}}
-                    scroll(class="analysis-inputs",a11y:label="Individual analysis signals") {
-                        for source in move ||ui.sources.get(),key=|source|source.clone() {
-                            {{let source=StoredValue::new_local(source);let control=NodeRef::new();view! {
-                                row(class="analysis-input") {
-                                    Checkbox(node_ref=control,checked=Binding::controlled(Signal::derive_local(move ||if ui.disabled.with(|ids|ids.contains(&source.get_value())){Checked::No}else{Checked::Yes}),move |value|{ui.disabled.update(|ids|{if value==Checked::Yes{ids.remove(&source.get_value());}else{ids.insert(source.get_value());}});}))
-                                    Label(control=control) {{move ||workbench.field_name(&source.get_value())}}
-                                    ActionButton(icon=true,a11y:label="Remove analysis input",on:click=move |_|{let id=source.get_value();ui.cancel();ui.sources.update(|all|all.retain(|source|source!=&id));ui.disabled.update(|all|{all.remove(&id);});if ui.condition.get_untracked()==id{ui.condition.set(String::new());}}) {"×"}
-                                }
-                            }}}
-                        }
-                    }
                 }
 
             }
