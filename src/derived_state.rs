@@ -137,7 +137,9 @@ impl Workbench {
                     || {
                         self.profiles
                             .metadata
-                            .with_untracked(|metadata| metadata.get(source).map(|meta| meta.label()))
+                            .with_untracked(|metadata| {
+                                metadata.get(source).map(|meta| meta.label())
+                            })
                             .or_else(|| {
                                 self.log.with_untracked(|log| {
                                     log.as_ref().and_then(|log| log.setting_label(source))

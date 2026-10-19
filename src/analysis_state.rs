@@ -159,8 +159,16 @@ impl Workbench {
                     "rectangular" => spectral::Window::Rectangular,
                     _ => spectral::Window::Hann,
                 },
-                overlap: ui.overlap.get_untracked().parse().map_err(|_| "Invalid window overlap")?,
-                heatmap_bins: ui.heatmap_bins.get_untracked().parse().map_err(|_| "Invalid heatmap bin count")?,
+                overlap: ui
+                    .overlap
+                    .get_untracked()
+                    .parse()
+                    .map_err(|_| "Invalid window overlap")?,
+                heatmap_bins: ui
+                    .heatmap_bins
+                    .get_untracked()
+                    .parse()
+                    .map_err(|_| "Invalid heatmap bin count")?,
                 start: parse_time(ui.start.get_untracked())?,
                 end: parse_time(ui.end.get_untracked())?,
             })
@@ -206,12 +214,16 @@ impl Workbench {
             spectral::Window::Blackman => "Blackman",
             spectral::Window::Rectangular => "Rectangular",
         };
-        let completion = format!("Complete. {window_name} window, {}% overlap, mean removed per window; gaps excluded. {}", options.overlap, match options.mode {
-            Mode::Fft => "FFT shows RMS average of peak-amplitude spectra.",
-            Mode::Psd => "PSD shows Welch mean power density.",
-            Mode::Heatmap => "Heatmap averages PSD within conditioning bins.",
-            Mode::Spectrogram => "Spectrogram shows PSD for each time window.",
-        });
+        let completion = format!(
+            "Complete. {window_name} window, {}% overlap, mean removed per window; gaps excluded. {}",
+            options.overlap,
+            match options.mode {
+                Mode::Fft => "FFT shows RMS average of peak-amplitude spectra.",
+                Mode::Psd => "PSD shows Welch mean power density.",
+                Mode::Heatmap => "Heatmap averages PSD within conditioning bins.",
+                Mode::Spectrogram => "Spectrogram shows PSD for each time window.",
+            }
+        );
         ui.cancel();
         let revision = ui.revision.get_untracked();
         let generation = self.generation.get_untracked();
@@ -221,46 +233,120 @@ impl Workbench {
         ui.message.set("Computing spectra…".into());
         self.task(async move {
             let (results, messages) = blocking(move || {
-                let prepare = |source: &str| -> Result<SeriesData,String> {
+                let prepare = |source: &str| -> Result<SeriesData, String> {
                     if crate::derived::id(source).is_some() {
-                        fields.iter().find(|field|field.key()==source).and_then(|field|field.data.clone()).ok_or_else(||"Derived field unavailable".into())
-                    } else {log.prepare(source)}
+                        fields
+                            .iter()
+                            .find(|field| field.key() == source)
+                            .and_then(|field| field.data.clone())
+                            .ok_or_else(|| "Derived field unavailable".into())
+                    } else {
+                        log.prepare(source)
+                    }
                 };
-                let conditioning = if options.mode == Mode::Heatmap { match prepare(&condition) {
-                    Ok(data)=>Some(data), Err(error)=>return (Vec::new(),vec![format!("Conditioning field: {error}")]),
-                }} else {None};
-                let mut grouped = BTreeMap::<String,AnalysisResult>::new();
+                let conditioning = if options.mode == Mode::Heatmap {
+                    match prepare(&condition) {
+                        Ok(data) => Some(data),
+                        Err(error) => {
+                            return (Vec::new(), vec![format!("Conditioning field: {error}")]);
+                        }
+                    }
+                } else {
+                    None
+                };
+                let mut grouped = BTreeMap::<String, AnalysisResult>::new();
                 let mut messages = Vec::new();
                 for source in sources {
-                    if cancel.load(Ordering::Relaxed) {break;}
+                    if cancel.load(Ordering::Relaxed) {
+                        break;
+                    }
                     let name = &names[&source];
-                    let unit = metadata.get(&source).map_or("unknown unit",|m| if m.unit.is_empty(){"unknown unit"}else{&m.unit});
-                    let spectrum = prepare(&source).and_then(|data|spectral::compute(&data,conditioning.as_ref(),&options,&cancel));
-                    let spectrum = match spectrum {Ok(value)=>value, Err(error)=>{messages.push(format!("{name}: {error}"));continue;}};
-                    let units = if options.mode == Mode::Fft {unit.to_owned()} else {format!("({unit})²/Hz")};
-                    let summary = format!("{name}: {:.2} samples/s · Δf {:.3} Hz · {} windows · {} skipped",spectrum.rate,spectrum.rate/options.size as f64,spectrum.windows,spectrum.skipped);
-                    let series = TimeSeries::new(source.clone(),name.clone(),SeriesData::new(spectrum.points).expect("frequency bins sorted"));
-                    let key = if matches!(options.mode, Mode::Heatmap | Mode::Spectrogram) || unit == "unknown unit" {source} else {units.clone()};
+                    let unit = metadata.get(&source).map_or("unknown unit", |m| {
+                        if m.unit.is_empty() {
+                            "unknown unit"
+                        } else {
+                            &m.unit
+                        }
+                    });
+                    let spectrum = prepare(&source).and_then(|data| {
+                        spectral::compute(&data, conditioning.as_ref(), &options, &cancel)
+                    });
+                    let spectrum = match spectrum {
+                        Ok(value) => value,
+                        Err(error) => {
+                            messages.push(format!("{name}: {error}"));
+                            continue;
+                        }
+                    };
+                    let units = if options.mode == Mode::Fft {
+                        unit.to_owned()
+                    } else {
+                        format!("({unit})²/Hz")
+                    };
+                    let summary = format!(
+                        "{name}: {:.2} samples/s · Δf {:.3} Hz · {} windows · {} skipped",
+                        spectrum.rate,
+                        spectrum.rate / options.size as f64,
+                        spectrum.windows,
+                        spectrum.skipped
+                    );
+                    let series = TimeSeries::new(
+                        source.clone(),
+                        name.clone(),
+                        SeriesData::new(spectrum.points).expect("frequency bins sorted"),
+                    );
+                    let key = if matches!(options.mode, Mode::Heatmap | Mode::Spectrogram)
+                        || unit == "unknown unit"
+                    {
+                        source
+                    } else {
+                        units.clone()
+                    };
                     let id = revision.wrapping_mul(32) + grouped.len() as u64;
                     let entry = grouped.entry(key).or_insert_with(|| AnalysisResult {
                         id,
-                        title: match options.mode {Mode::Fft=>"FFT amplitude".into(),Mode::Psd=>"Welch PSD".into(),Mode::Heatmap=>format!("{name} · FFT vs {condition_name}"),Mode::Spectrogram=>format!("{name} · Spectrogram")},
+                        title: match options.mode {
+                            Mode::Fft => "FFT amplitude".into(),
+                            Mode::Psd => "Welch PSD".into(),
+                            Mode::Heatmap => format!("{name} · FFT vs {condition_name}"),
+                            Mode::Spectrogram => format!("{name} · Spectrogram"),
+                        },
                         units: match options.mode {
-                            Mode::Heatmap => format!("Y: {condition_name} [{condition_unit}] · color: dB re 1 {units}"),
-                            Mode::Spectrogram => format!("Y: Frequency (Hz) · color: dB re 1 {units}"),
+                            Mode::Heatmap => format!(
+                                "Y: {condition_name} [{condition_unit}] · color: dB re 1 {units}"
+                            ),
+                            Mode::Spectrogram => {
+                                format!("Y: Frequency (Hz) · color: dB re 1 {units}")
+                            }
                             _ => units,
                         },
-                        summary: String::new(), series: TimeSeriesSet::new(Vec::new()).expect("empty series valid"),heatmap: spectrum.heatmap.clone(),
+                        summary: String::new(),
+                        series: TimeSeriesSet::new(Vec::new()).expect("empty series valid"),
+                        heatmap: spectrum.heatmap.clone(),
                     });
-                    if !entry.summary.is_empty(){entry.summary.push('\n');} entry.summary.push_str(&summary);
-                    let mut all = entry.series.series().to_vec(); all.push(series);
+                    if !entry.summary.is_empty() {
+                        entry.summary.push('\n');
+                    }
+                    entry.summary.push_str(&summary);
+                    let mut all = entry.series.series().to_vec();
+                    all.push(series);
                     entry.series = TimeSeriesSet::new(all).expect("unique input sources");
                 }
-                (grouped.into_values().collect::<Vec<_>>(),messages)
-            }).await;
-            if self.generation.get_untracked()!=generation || ui.revision.get_untracked()!=revision {return;}
-            ui.busy.set(false); ui.cancel.set_value(None);
-            ui.message.set(if messages.is_empty(){completion}else{messages.join("\n")});
+                (grouped.into_values().collect::<Vec<_>>(), messages)
+            })
+            .await;
+            if self.generation.get_untracked() != generation
+                || ui.revision.get_untracked() != revision
+            {
+                return;
+            }
+            ui.busy.set(false);
+            ui.cancel.set_value(None);
+            ui.message.set(if messages.is_empty() {
+                completion
+            } else {
+                messages.join("\n")
+            });
             ui.results.set(results);
         });
     }

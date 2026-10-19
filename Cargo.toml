@@ -18,7 +18,7 @@ resolver = "3"
 bbl_parser = { version = "1.1.1", default-features = false }
 flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 kurbo = "0.13.1"
-plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "abc99220c129bf6e85e8b370aa0b42d1994295cc", features = ["workspace"] }
+plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "c5acac6b22ec94eb3451379b45b633e8a2a12645", features = ["workspace"] }
 px4-ulog = "0.6.1"
 rfd = "0.17.2"
 rustfft = { version = "6.4.1", default-features = false }
@@ -31,14 +31,14 @@ ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 syn = { version = "3.0.9", features = ["full"] }
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 wasmtime = { version = "49", default-features = false, features = ["cranelift", "runtime", "std"] }
-zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui = { git = "https://github.com/zortax/zgui" }
 zgui-editor = { git = "https://github.com/zortax/zgui-editor", rev = "1f7aaec6e4e2dfaee4d26b049a719d9e88d16f8f", features = ["lang-rust"] }
-zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
-zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
-zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-ui = { git = "https://github.com/zortax/zgui" }
+zgui-ui-primitives = { git = "https://github.com/zortax/zgui" }
+zgui-ui-tokens = { git = "https://github.com/zortax/zgui" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-zgui-platform-winit = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-platform-winit = { git = "https://github.com/zortax/zgui" }
 
 [build-dependencies]
 image = { version = "0.25.10", default-features = false, features = ["png"] }
@@ -50,17 +50,11 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSData"] }
 
 [dev-dependencies]
-zgui-testkit-view = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
-zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
-zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-testkit-view = { git = "https://github.com/zortax/zgui" }
+zgui-platform-headless = { git = "https://github.com/zortax/zgui" }
+zgui-testkit-scene = { git = "https://github.com/zortax/zgui" }
 
 [target.'cfg(windows)'.dependencies]
 zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
-# Keep editor and application on one framework revision until text-selection PR lands.
-[patch."https://github.com/zortax/zgui"]
-zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
-zgui-interned = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
-zgui-css = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
-zgui-text-style = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
