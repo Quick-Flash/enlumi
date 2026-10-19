@@ -20,12 +20,14 @@ fn themes_cover_shared_component_tokens() {
             choice.name()
         );
         assert_eq!(Palette::from_id(choice.id()), Some(choice));
+        assert_eq!(choice.measurement_fill()[3], 56);
         let available: BTreeSet<_> = palette.union(&common).copied().collect();
         for css in [
             include_str!("style.css"),
             include_str!("action_button.css"),
             include_str!("plot_theme.css"),
             include_str!("theme.css"),
+            include_str!("measurement.css"),
         ] {
             for reference in css.split("var(").skip(1) {
                 let name = reference.split(')').next().unwrap();

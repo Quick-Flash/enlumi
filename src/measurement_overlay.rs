@@ -76,6 +76,7 @@ pub fn MeasurementOverlay(
     };
     let frequency_axis = pane.analysis.with_untracked(Option::is_some);
     let mut readout_style = plot::zgui_plot::theme::tick_text();
+    readout_style.color = "var(--app-foreground)".into();
     readout_style.outline = Some("#000000".into());
     view! {
         column(class="measurement-overlay",node_ref=host) {

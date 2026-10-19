@@ -12,6 +12,9 @@ pub fn MeasurementBackground(
     visible: Signal<bool, LocalStorage>,
 ) -> impl IntoView {
     let host = NodeRef::new();
+    let palette =
+        zgui::reactive::use_local_context::<Signal<crate::theme::Palette, LocalStorage>>()
+            .unwrap_or_else(|| Signal::derive_local(crate::theme::Palette::default));
     let bounds = host.observe_border_box();
     let region = Memo::new(move |_| {
         if !visible.get() {
@@ -41,12 +44,13 @@ pub fn MeasurementBackground(
     let drawing = handle.clone();
     plot::zgui_renderer::redraw_on_change(move || {
         let region = region.get();
+        let [r, g, b, a] = palette.get().measurement_fill();
         drawing.draw(|scene| {
             scene.clear();
             if let Some(region) = region {
                 scene.push(
                     ShapeBuilder::new(region.to_path(0.1))
-                        .fill(Brush::Solid(Color::srgb_u8(232, 92, 92, 40)))
+                        .fill(Brush::Solid(Color::srgb_u8(r, g, b, a)))
                         .build(),
                 );
             }

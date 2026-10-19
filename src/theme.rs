@@ -54,6 +54,17 @@ impl Palette {
     fn sheet(self) -> String {
         format!(":root {{ {} }}", self.declarations())
     }
+    pub fn measurement_fill(self) -> [u8; 4] {
+        let hex = self
+            .declarations()
+            .lines()
+            .find_map(|line| line.strip_prefix("--app-measurement-fill: #"))
+            .and_then(|value| value.strip_suffix(';'))
+            .expect("Palette defines measurement fill");
+        u32::from_str_radix(hex, 16)
+            .expect("Measurement fill is eight hex digits")
+            .to_be_bytes()
+    }
 }
 pub fn stylesheet() -> String {
     format!(
@@ -69,6 +80,7 @@ pub fn AppTheme(
     #[prop(into)] palette: Signal<Palette, LocalStorage>,
     children: Children,
 ) -> impl IntoView {
+    zgui::reactive::provide_local_context(palette);
     let sheet = Stylesheet::install("enlumi-palette", &palette.get_untracked().sheet());
     let effect = RenderEffect::new(move |_: Option<()>| {
         let css = palette.get().sheet();

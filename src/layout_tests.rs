@@ -4994,6 +4994,7 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
 
 #[test]
 fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
+    use crate::theme::{AppThemeProps, Palette};
     use crate::{state::Workbench, workspace::PlotWorkspaceProps};
     use plot::time_series::{SeriesData, TimeSeries, TimeSeriesSet};
     use zgui_ui::prelude::*;
@@ -5013,13 +5014,14 @@ fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
             });
             workbench.layout.update(|layout|{assert!(layout.dock_split(fft.id,normal.id,plot::workspace::layout::DropZone::Right));});
             for pane in [normal,fft]{pane.plot.set_view(plot::Ranges::new((0.,1.),(0.,2.))).unwrap();}
-            let input=NodeRef::new();let keys=NodeRef::new();*captured.borrow_mut()=Some((workbench,normal,fft,input,keys));
-            view! {column(class="page workbench",node_ref=keys,tabindex=Focus::Sequential,on:key_down:capture=move |event| {
+            let palette=RwSignal::new_local(Palette::Slate);
+            let input=NodeRef::new();let keys=NodeRef::new();*captured.borrow_mut()=Some((workbench,normal,fft,input,keys,palette));
+            view! {AppTheme(palette=palette) {column(class="page workbench",node_ref=keys,tabindex=Focus::Sequential,on:key_down:capture=move |event| {
                 if workbench.measurement_shortcut(event,event.modifiers){event.prevent_default();event.stop_propagation();}
             }) {
                 Input(node_ref=input,default_value="",a11y:label="Search")
                 row(class="body") {PlotWorkspace(workbench=workbench)}
-            }}
+            }}}
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -5027,7 +5029,7 @@ fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
         DevicePx(700.),
     )));
     harness.settle(128);
-    let (workbench, normal, fft, input, keys) = saved.borrow().unwrap();
+    let (workbench, normal, fft, input, keys, palette) = saved.borrow().unwrap();
     for pane in [normal, fft] {
         keys.focus();
         harness.settle(128);
@@ -5105,6 +5107,17 @@ fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
             text.contains(if pane.id == normal.id { "2 Hz" } else { "2 s" }),
             "{text}"
         );
+        for choice in Palette::ALL {
+            palette.set(choice);
+            harness.settle(128);
+            let [r, g, b, _] = choice.measurement_fill();
+            let svg = workbench.capture_screenshot(Some(pane)).unwrap();
+            assert!(
+                svg.contains(&format!("fill=\"#{r:02x}{g:02x}{b:02x}\"")),
+                "Measurement fill should follow {} theme in rendering and screenshots",
+                choice.name()
+            );
+        }
         harness.deliver_to_first(pointer(PointerAction::Released, end.0, end.1));
         harness.settle(128);
         assert!(!workbench.measurement.active.get_untracked());
