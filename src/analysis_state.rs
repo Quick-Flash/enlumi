@@ -14,12 +14,14 @@ use zgui::prelude::*;
 
 #[derive(Clone)]
 pub struct AnalysisResult {
-    pub id: u64,
     pub title: String,
     pub units: String,
     pub summary: String,
     pub series: TimeSeriesSet,
     pub heatmap: Option<spectral::Heatmap>,
+    pub mode: Mode,
+    pub options: Options,
+    pub condition: String,
 }
 
 #[derive(Clone, Copy)]
@@ -35,6 +37,9 @@ pub struct AnalysisUi {
     pub heatmap_bins: RwSignal<String, LocalStorage>,
     pub start: RwSignal<String, LocalStorage>,
     pub end: RwSignal<String, LocalStorage>,
+    pub separate: RwSignal<bool, LocalStorage>,
+    pub run_selection: RwSignal<bool, LocalStorage>,
+    pub target: RwSignal<Option<u64>, LocalStorage>,
     pub busy: RwSignal<bool, LocalStorage>,
     pub message: RwSignal<String, LocalStorage>,
     pub results: RwSignal<Vec<AnalysisResult>, LocalStorage>,
@@ -57,6 +62,9 @@ impl AnalysisUi {
             heatmap_bins: RwSignal::new_local("40".into()),
             start: RwSignal::new_local(String::new()),
             end: RwSignal::new_local(String::new()),
+            separate: RwSignal::new_local(false),
+            run_selection: RwSignal::new_local(false),
+            target: RwSignal::new_local(None),
             busy: RwSignal::new_local(false),
             message: RwSignal::new_local(String::new()),
             results: RwSignal::new_local(Vec::new()),
@@ -75,6 +83,8 @@ impl AnalysisUi {
     }
     pub fn reset(self) {
         self.cancel();
+        self.run_selection.set(false);
+        self.target.set(None);
         self.sources.set(Vec::new());
         self.disabled.set(Default::default());
         self.results.set(Vec::new());
@@ -85,7 +95,126 @@ impl AnalysisUi {
     }
 }
 impl Workbench {
+    pub fn create_selected_spectra(self, mode: &'static str) {
+        if self.loading.get_untracked()
+            || self.derived_busy.get_untracked()
+            || self.profiles.busy.get_untracked()
+        {
+            self.analysis.open.set(true);
+            self.analysis
+                .message
+                .set("Wait for log, profiles, and filters to finish".into());
+            return;
+        }
+        self.analysis.reset();
+        self.analysis.mode.set(mode.into());
+        self.analysis.separate.set(true);
+        self.analysis.run_selection.set(true);
+        self.analyze_selection();
+        if self.analysis.run_selection.get_untracked() {
+            // Profile selections resume after asynchronous preparation.
+            if !self.profiles.busy.get_untracked()
+                && self.profiles.pending_drop.with_value(Option::is_none)
+            {
+                self.analysis.run_selection.set(false);
+                self.run_analysis();
+            }
+        }
+    }
+    pub fn edit_analysis(self, pane: Pane) {
+        let Some(result) = pane.analysis.get_untracked() else {
+            return;
+        };
+        let ui = self.analysis;
+        ui.reset();
+        ui.open.set(true);
+        self.filters_open.set(false);
+        ui.target.set(Some(pane.id));
+        ui.sources.set(pane.lines.with_untracked(|lines| {
+            lines
+                .iter()
+                .filter_map(|line| line.source.strip_prefix("@spectrum/").map(str::to_owned))
+                .collect()
+        }));
+        if result.heatmap.is_some() {
+            ui.sources.set(
+                result
+                    .series
+                    .series()
+                    .iter()
+                    .map(|series| series.id().to_owned())
+                    .collect(),
+            );
+        }
+        ui.mode.set(
+            match result.mode {
+                Mode::Fft => "fft",
+                Mode::Psd => "psd",
+                Mode::Heatmap => "heatmap",
+                Mode::Spectrogram => "spectrogram",
+            }
+            .into(),
+        );
+        ui.window.set(
+            match result.options.window {
+                spectral::Window::Hann => "hann",
+                spectral::Window::Hamming => "hamming",
+                spectral::Window::Blackman => "blackman",
+                spectral::Window::Rectangular => "rectangular",
+            }
+            .into(),
+        );
+        ui.size.set(result.options.size.to_string());
+        ui.overlap.set(result.options.overlap.to_string());
+        ui.heatmap_bins.set(result.options.heatmap_bins.to_string());
+        ui.start.set(
+            result
+                .options
+                .start
+                .map_or_else(String::new, |value| value.to_string()),
+        );
+        ui.end.set(
+            result
+                .options
+                .end
+                .map_or_else(String::new, |value| value.to_string()),
+        );
+        ui.condition.set(result.condition);
+        ui.separate.set(false);
+    }
+    pub fn analyze_selection(self) {
+        self.analysis.target.set(None);
+        let sources = self
+            .selected_field
+            .get_untracked()
+            .map(|source| self.drag_fields(source))
+            .unwrap_or_default();
+        self.analysis.open.set(true);
+        self.filters_open.set(false);
+        self.analysis.start.set(String::new());
+        self.analysis.end.set(String::new());
+        if sources
+            .first()
+            .is_some_and(|source| source.starts_with("@profile/"))
+        {
+            self.use_profile_items(
+                sources
+                    .iter()
+                    .filter_map(|source| crate::profile::identity::Drag::parse(source))
+                    .collect(),
+                crate::profile_state::Destination::Analysis,
+            );
+        } else {
+            self.add_analysis_sources(
+                sources
+                    .into_iter()
+                    .filter(|source| !source.starts_with("@setting/"))
+                    .collect(),
+            );
+        }
+    }
     pub fn analyze_plot(self, pane: Pane) {
+        self.analysis.target.set(None);
         self.analysis.open.set(true);
         self.filters_open.set(false);
         self.add_analysis_sources(pane.lines.with_untracked(|lines| {
@@ -148,11 +277,14 @@ impl Workbench {
                     "spectrogram" => Mode::Spectrogram,
                     _ => Mode::Fft,
                 },
-                size: ui
-                    .size
-                    .get_untracked()
-                    .parse()
-                    .map_err(|_| "Invalid FFT size")?,
+                size: if matches!(ui.mode.get_untracked().as_str(), "heatmap" | "spectrogram") {
+                    ui.size
+                        .get_untracked()
+                        .parse()
+                        .map_err(|_| "Choose a usable FFT window size")?
+                } else {
+                    0
+                },
                 window: match ui.window.get_untracked().as_str() {
                     "hamming" => spectral::Window::Hamming,
                     "blackman" => spectral::Window::Blackman,
@@ -189,10 +321,12 @@ impl Workbench {
                 .cloned()
                 .collect::<Vec<_>>()
         });
-        if sources.is_empty() || sources.len() > 16 {
-            ui.message.set("Enable between 1 and 16 signals".into());
+        if sources.is_empty() {
+            ui.message.set("Enable at least one signal".into());
             return;
         }
+        let separate = ui.separate.get_untracked();
+        let target = ui.target.get_untracked();
         let condition = ui.condition.get_untracked();
         if options.mode == Mode::Heatmap && condition.is_empty() {
             ui.message.set("Choose heatmap conditioning field".into());
@@ -214,12 +348,16 @@ impl Workbench {
             spectral::Window::Blackman => "Blackman",
             spectral::Window::Rectangular => "Rectangular",
         };
+        let overlap_description = if options.mode.windowed() {
+            format!("{}% overlap", options.overlap)
+        } else {
+            "full selected range".into()
+        };
         let completion = format!(
-            "Complete. {window_name} window, {}% overlap, mean removed per window; gaps excluded. {}",
-            options.overlap,
+            "Complete. {window_name} window · {overlap_description} · mean removed. {}",
             match options.mode {
-                Mode::Fft => "FFT shows RMS average of peak-amplitude spectra.",
-                Mode::Psd => "PSD shows Welch mean power density.",
+                Mode::Fft => "FFT uses all samples in selected contiguous range; no zero padding.",
+                Mode::Psd => "PSD uses full selected contiguous range; no zero padding.",
                 Mode::Heatmap => "Heatmap averages PSD within conditioning bins.",
                 Mode::Spectrogram => "Spectrogram shows PSD for each time window.",
             }
@@ -286,7 +424,7 @@ impl Workbench {
                     let summary = format!(
                         "{name}: {:.2} samples/s · Δf {:.3} Hz · {} windows · {} skipped",
                         spectrum.rate,
-                        spectrum.rate / options.size as f64,
+                        spectrum.rate / spectrum.size as f64,
                         spectrum.windows,
                         spectrum.skipped
                     );
@@ -295,19 +433,21 @@ impl Workbench {
                         name.clone(),
                         SeriesData::new(spectrum.points).expect("frequency bins sorted"),
                     );
-                    let key = if matches!(options.mode, Mode::Heatmap | Mode::Spectrogram)
+                    let key = if separate
+                        || matches!(options.mode, Mode::Heatmap | Mode::Spectrogram)
                         || unit == "unknown unit"
                     {
-                        source
+                        source.clone()
                     } else {
                         units.clone()
                     };
-                    let id = revision.wrapping_mul(32) + grouped.len() as u64;
                     let entry = grouped.entry(key).or_insert_with(|| AnalysisResult {
-                        id,
+                        mode: options.mode,
+                        options: options.clone(),
+                        condition: condition.clone(),
                         title: match options.mode {
                             Mode::Fft => "FFT amplitude".into(),
-                            Mode::Psd => "Welch PSD".into(),
+                            Mode::Psd => "PSD".into(),
                             Mode::Heatmap => format!("{name} · FFT vs {condition_name}"),
                             Mode::Spectrogram => format!("{name} · Spectrogram"),
                         },
@@ -324,6 +464,16 @@ impl Workbench {
                         series: TimeSeriesSet::new(Vec::new()).expect("empty series valid"),
                         heatmap: spectrum.heatmap.clone(),
                     });
+                    if separate && !options.mode.windowed() {
+                        entry.title = format!(
+                            "{name} · {}",
+                            if options.mode == Mode::Psd {
+                                "PSD"
+                            } else {
+                                "FFT"
+                            }
+                        );
+                    }
                     if !entry.summary.is_empty() {
                         entry.summary.push('\n');
                     }
@@ -347,7 +497,117 @@ impl Workbench {
             } else {
                 messages.join("\n")
             });
+            for (index, result) in results.iter().enumerate() {
+                if let Some(pane) = target.filter(|_| index == 0).and_then(|id| self.find(id)) {
+                    self.set_analysis_panel(pane, result.clone());
+                } else {
+                    self.add_analysis_panel(result.clone());
+                }
+            }
             ui.results.set(results);
         });
+    }
+}
+
+impl Workbench {
+    pub fn add_analysis_panel(self, result: AnalysisResult) -> Pane {
+        let pane = self.add_plot(self.active.get_untracked(), false, true);
+        pane.links.set(plot::zgui_link::LinkOptions {
+            x: false,
+            y: false,
+            pointer: false,
+        });
+        self.set_analysis_panel(pane, result);
+        pane
+    }
+    fn set_analysis_panel(self, pane: Pane, result: AnalysisResult) {
+        self.profiles.titles.update(|titles| {
+            titles
+                .entry(pane.id)
+                .or_insert_with(|| result.title.clone());
+        });
+        if result.heatmap.is_none() {
+            pane.lines.set(
+                result
+                    .series
+                    .series()
+                    .iter()
+                    .map(|series| crate::state::Line {
+                        id: pane
+                            .lines
+                            .with_untracked(|lines| {
+                                lines
+                                    .iter()
+                                    .find(|line| {
+                                        line.source.strip_prefix("@spectrum/") == Some(series.id())
+                                    })
+                                    .map(|line| line.id)
+                            })
+                            .unwrap_or_else(|| self.id()),
+                        // Snapshot identity prevents live derived-field updates replacing spectral data.
+                        source: format!("@spectrum/{}", series.id()),
+                        name: series.label().to_owned(),
+                        data: series.data().clone(),
+                        revision: 0,
+                    })
+                    .collect(),
+            );
+        }
+        if result.heatmap.is_none() {
+            let ids = pane
+                .lines
+                .with_untracked(|lines| lines.iter().map(|line| line.id).collect::<Vec<_>>());
+            pane.drawing.update(|drawing| {
+                drawing.retain(|id, _| ids.contains(id));
+                for id in ids {
+                    drawing.entry(id).or_default().connection = plot::line_draw::Connection::Pre;
+                }
+            });
+        }
+        pane.analysis.set(Some(result));
+        pane.fit_axes(plot::interaction::Axes::BOTH);
+    }
+
+    pub fn analysis_size_job(self) -> impl FnOnce() -> Vec<usize> + Send {
+        let ui = self.analysis;
+        let start = ui.start.get().trim().parse::<f64>().ok();
+        let end = ui.end.get().trim().parse::<f64>().ok();
+        let sources = ui.sources.get();
+        let disabled = ui.disabled.get();
+        let derived = self.derived.get();
+        let log = self.log.get();
+        let mode_name = ui.mode.get();
+        let overlap = ui.overlap.get().parse::<usize>().unwrap_or(100);
+        let rows = ui.heatmap_bins.get().parse::<usize>().unwrap_or(0);
+        move || {
+            if !matches!(mode_name.as_str(), "heatmap" | "spectrogram") {
+                return Vec::new();
+            }
+            let mode = if mode_name == "heatmap" {
+                Mode::Heatmap
+            } else {
+                Mode::Spectrogram
+            };
+            let mut choices: Option<Vec<usize>> = None;
+            for source in sources.iter().filter(|source| !disabled.contains(*source)) {
+                let data = if crate::derived::id(source).is_some() {
+                    derived
+                        .iter()
+                        .find(|field| field.key() == *source)
+                        .and_then(|field| field.data.clone())
+                } else {
+                    log.as_ref().and_then(|log| log.prepare(source).ok())
+                };
+                let available = data.map_or_else(Vec::new, |data| {
+                    spectral::window_sizes(&data, start, end, mode, overlap, rows)
+                });
+                if let Some(choices) = &mut choices {
+                    choices.retain(|size| available.contains(size));
+                } else {
+                    choices = Some(available);
+                }
+            }
+            choices.unwrap_or_default()
+        }
     }
 }

@@ -32,8 +32,7 @@ impl UpdateState {
         let (preferences, message) = match Preferences::load() {
             Ok(p) => (
                 p,
-                "Nightly updates check at startup. Stable release updates are not available yet."
-                    .into(),
+                "Enable nightly builds to check for updates when Enlumi starts.".into(),
             ),
             Err(e) => (Preferences::default(), e),
         };

@@ -108,6 +108,13 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                         ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
                     }
                 }
+                if move || workbench.selected_field.get().is_some_and(|source| !source.starts_with("@setting/")) {
+                    row(class = "field-selection-actions") {
+                        ActionButton(on:click = move |_| workbench.create_selected_spectra("fft")) { "Create FFTs" }
+                        ActionButton(on:click = move |_| workbench.create_selected_spectra("psd")) { "Create PSDs" }
+                        ActionButton(class = "analyze-selection", on:click = move |_| workbench.analyze_selection()) { "Configure" }
+                    }
+                }
                 column(class="profile-browser-pane",class:hidden=move ||!workbench.profiles.browsing.get()) {
                     ProfileLibrary(workbench = workbench)
                 }

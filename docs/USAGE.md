@@ -233,4 +233,4 @@ its own collapsed state; line settings remain available while collapsed.
 
 ## Frequency analysis
 
-Open **Analyze**, drag fields or whole profile views into inputs, choose FFT amplitude, Welch PSD, or FFT vs field heatmap, then **Run**. Expand profile views to drag individual members. Plot header **Analyze** seeds visible signals and current time range. See [frequency analysis](FREQUENCY_ANALYSIS.md) for scaling, sampling, units, and limits.
+Open **Analyze**, drag fields or whole profile views into inputs, choose FFT amplitude, PSD, FFT vs field heatmap, or FFT over time, then **Run**. Expand profile views to drag individual members. Plot header **Analyze** seeds visible signals and current time range. See [frequency analysis](FREQUENCY_ANALYSIS.md) for scaling, sampling, units, and limits.

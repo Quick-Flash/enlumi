@@ -19,6 +19,13 @@ pub enum Window {
     Rectangular,
 }
 
+impl Mode {
+    pub fn windowed(self) -> bool {
+        matches!(self, Self::Heatmap | Self::Spectrogram)
+    }
+}
+
+#[derive(Clone)]
 pub struct Options {
     pub mode: Mode,
     pub size: usize,
@@ -31,7 +38,7 @@ pub struct Options {
 
 #[derive(Clone)]
 pub struct Heatmap {
-    pub values: Vec<Option<f64>>,
+    pub values: std::sync::Arc<[Option<f64>]>,
     pub columns: usize,
     pub rows: usize,
     pub x_low: f64,
@@ -47,6 +54,7 @@ pub struct Spectrum {
     pub points: Vec<PlotPoint>,
     pub heatmap: Option<Heatmap>,
     pub rate: f64,
+    pub size: usize,
     pub windows: usize,
     pub skipped: usize,
 }
@@ -111,14 +119,14 @@ pub fn compute(
     options: &Options,
     cancel: &AtomicBool,
 ) -> Result<Spectrum, String> {
-    let n = options.size;
-    if !n.is_power_of_two() || !(128..=65536).contains(&n) {
+    let windowed = options.mode.windowed();
+    if windowed && (!options.size.is_power_of_two() || !(128..=65536).contains(&options.size)) {
         return Err("FFT size must be power of two from 128 to 65536".into());
     }
-    if options.overlap >= 100 {
+    if windowed && options.overlap >= 100 {
         return Err("Window overlap must be below 100%".into());
     }
-    if !(8..=512).contains(&options.heatmap_bins) {
+    if options.mode == Mode::Heatmap && !(8..=512).contains(&options.heatmap_bins) {
         return Err("Heatmap bin count must be from 8 to 512".into());
     }
     if options.start.is_some_and(|v| !v.is_finite())
@@ -131,17 +139,21 @@ pub fn compute(
     let first = all.partition_point(|p| options.start.is_some_and(|start| p.x < start));
     let last = all.partition_point(|p| options.end.is_none_or(|end| p.x <= end));
     let points = all.get(first..last).ok_or("Invalid time range")?;
-    if points.len() < n {
-        return Err(format!("Need {n} samples in selected time range"));
+    if points.len() < 2 {
+        return Err("Need at least two samples in selected time range".into());
     }
     let dt = interval(points)?;
     let rate = 1. / dt;
     let start = points[0].x;
     let count = (((points[points.len() - 1].x - start) / dt) + 1e-6).floor() + 1.;
-    if !rate.is_finite() || !(n as f64..=4_000_000.).contains(&count) {
-        return Err("Analysis needs 128–4,000,000 uniformly sampled points; narrow time range or reduce FFT size".into());
+    if !rate.is_finite() || !(2.0..=4_000_000.).contains(&count) {
+        return Err("Analysis needs 2–4,000,000 uniformly sampled points; narrow time range or reduce FFT size".into());
     }
     let count = count as usize;
+    let n = if windowed { options.size } else { count };
+    if n > count {
+        return Err(format!("Need {n} samples in selected time range"));
+    }
     let mut uniform = Vec::with_capacity(count);
     let mut cursor = 0;
     for i in 0..count {
@@ -149,6 +161,12 @@ pub fn compute(
             cancelled(cancel)?;
         }
         uniform.push(at(points, start + i as f64 * dt, dt * 1.5, &mut cursor));
+    }
+    if !windowed && uniform.iter().any(Option::is_none) {
+        return Err(
+            "Selected range contains gaps; select a contiguous range for full-length FFT/PSD"
+                .into(),
+        );
     }
     let condition = if options.mode == Mode::Heatmap {
         let data = condition.ok_or("Choose conditioning field for heatmap")?;
@@ -177,7 +195,11 @@ pub fn compute(
     let fft = FftPlanner::<f64>::new().plan_fft_forward(n);
     let mut buffer = vec![Complex::new(0., 0.); n];
     let mut scratch = vec![Complex::new(0., 0.); fft.get_inplace_scratch_len()];
-    let step = (n * (100 - options.overlap) / 100).max(1);
+    let step = if windowed {
+        (n * (100 - options.overlap) / 100).max(1)
+    } else {
+        n
+    };
     for offset in (0..=count.saturating_sub(n)).step_by(step) {
         cancelled(cancel)?;
         let samples = &uniform[offset..offset + n];
@@ -215,7 +237,11 @@ pub fn compute(
         fft.process_with_scratch(&mut buffer, &mut scratch);
         let mut power = Vec::with_capacity(bins);
         for k in 0..bins {
-            let factor = if k == 0 || k == n / 2 { 1. } else { 2. };
+            let factor = if k == 0 || (n.is_multiple_of(2) && k == n / 2) {
+                1.
+            } else {
+                2.
+            };
             let value = if options.mode == Mode::Fft {
                 buffer[k].norm_sqr() * factor * factor / (sum_w * sum_w)
             } else {
@@ -351,7 +377,7 @@ pub fn compute(
             return Err("Heatmap has no positive spectral power".into());
         }
         Some(Heatmap {
-            values,
+            values: values.into(),
             columns,
             rows,
             x_low,
@@ -370,7 +396,82 @@ pub fn compute(
         points,
         heatmap,
         rate,
+        size: n,
         windows,
         skipped,
     })
+}
+
+/// Largest gap-free run available after applying time bounds and inferred cadence.
+pub fn available_size(data: &SeriesData, start: Option<f64>, end: Option<f64>) -> usize {
+    let all = data.samples();
+    let first = all.partition_point(|p| start.is_some_and(|start| p.x < start));
+    let last = all.partition_point(|p| end.is_none_or(|end| p.x <= end));
+    let Some(points) = all.get(first..last) else {
+        return 0;
+    };
+    let Ok(dt) = interval(points) else {
+        return 0;
+    };
+    let mut run = 0;
+    let mut longest = 0;
+    let mut previous: Option<f64> = None;
+    for point in points {
+        if !point.y.is_finite() {
+            run = 0;
+            previous = None;
+            continue;
+        }
+        if previous.is_none_or(|time| point.x - time > dt * 1.5) {
+            run = 1;
+        } else if previous.is_some_and(|time| point.x > time) {
+            run += 1;
+        }
+        previous = Some(point.x);
+        longest = longest.max(run);
+    }
+    longest
+}
+
+/// Choices that fit complete signal runs and the frequency-map memory budget.
+pub fn window_sizes(
+    data: &SeriesData,
+    start: Option<f64>,
+    end: Option<f64>,
+    mode: Mode,
+    overlap: usize,
+    rows: usize,
+) -> Vec<usize> {
+    if overlap >= 100 {
+        return Vec::new();
+    }
+    let all = data.samples();
+    let first = all.partition_point(|p| start.is_some_and(|start| p.x < start));
+    let last = all.partition_point(|p| end.is_none_or(|end| p.x <= end));
+    let Some(points) = all.get(first..last) else {
+        return Vec::new();
+    };
+    let Ok(dt) = interval(points) else {
+        return Vec::new();
+    };
+    let count = (((points.last().unwrap().x - points[0].x) / dt) + 1e-6).floor() + 1.0;
+    if !(2.0..=4_000_000.0).contains(&count) {
+        return Vec::new();
+    }
+    let available = available_size(data, start, end);
+    [
+        128_usize, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
+    ]
+    .into_iter()
+    .filter(|&n| {
+        if n > available || n > count as usize {
+            return false;
+        }
+        let bins = n / 2 + 1;
+        let step = (n * (100 - overlap) / 100).max(1);
+        let frames = (count as usize - n) / step + 1;
+        frames.saturating_mul(bins) <= 8_000_000
+            && (mode != Mode::Heatmap || rows.saturating_mul(bins) <= 8_000_000)
+    })
+    .collect()
 }

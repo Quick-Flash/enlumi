@@ -35,7 +35,7 @@
 .profile-output-line > .profile-view-source { flex: 1; width: 0; min-width: 0; padding: 0; }
 .profile-output-line > .app-action.zui-button { flex: none; height: 24px; min-height: 24px; padding: 0 5px; font-size: var(--app-font-xs); }
 .profile-output-more.app-action.zui-button { width: 24px; min-width: 24px; height: 24px; min-height: 24px; }
-.field-selection-actions { align-items: center; gap: 6px; }
+.field-selection-actions { align-items: center; gap: 6px; flex-wrap: wrap; }
 .field-selection-actions .field-selection-count { flex: 1; }
 
 .profile-view-members { padding-left: 18px; gap: 2px; }

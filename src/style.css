@@ -343,3 +343,8 @@
 .geometry-state-colors { padding-left: 12px; gap: 2px 8px; flex-wrap: wrap; max-width: 300px; max-height: 80px; overflow-y: auto; }
 .geometry-state-colors.geometry-legend-hidden { opacity: 0.4; }
 .geometry-state-colors text { font-size: var(--app-font-sm); }
+
+.toolbar-brand { align-items: center; flex: none; gap: 10px; }
+.toolbar-brand .fps-readout { width: 70px; min-width: 70px; }
+
+.page field { overflow-x: auto; }

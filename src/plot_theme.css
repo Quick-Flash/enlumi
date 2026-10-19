@@ -25,3 +25,6 @@
 .page .plot-tabs .plot-tab { border-radius: var(--app-radius) var(--app-radius) 0 0; }
 .plot-links-surface.plot-links-surface, .plot-settings-surface.plot-settings-surface, .workbench-legend.workbench-legend { border-radius: var(--app-radius); }
 .plot-links-surface .zui-menu__item, .plot-links-surface .zui-menu__indicator { border-radius: var(--app-radius-sm); }
+
+.workbench-legend.workbench-legend { max-height: calc(100% - 8px); overflow-y: auto; }
+.workbench-legend .legend-heading, .workbench-legend .geometry-legend, .workbench-legend .legend-entry { flex-shrink: 0; }

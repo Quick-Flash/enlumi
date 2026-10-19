@@ -1,8 +1,11 @@
+// One named output per OUTPUTS entry. Names are set below the editor.
 pub const OUTPUTS: usize = 1;
 
 #[derive(Default)]
 pub struct State {
-    // Store history here. State survives chunks, resets each run.
+    // Optional history, shared across chunks and reset before each run:
+    // pub previous_time: Option<f64>,
+    // pub previous_value: f64,
 }
 
 pub fn filter(
@@ -11,16 +14,28 @@ pub fn filter(
     outputs: &mut [&mut [f64]],
     _state: &mut State,
 ) {
-    // Sum every input field into the first named output.
-    // With one input, this copies its values unchanged.
-    outputs[0].fill(0.0);
-    for input in inputs {
-        // Each input is one field, in the Inputs list order.
-        for (i, &value) in input.iter().enumerate() {
-            let _time_seconds = time[i]; // Timestamp for this sample.
-            outputs[0][i] += value;
-        }
+    // Inputs follow the Inputs list order. Samples are aligned by timestamp.
+    // time[i] is log time in seconds; NaN represents a gap.
+    const GAIN: f64 = 1.0;
+    const OFFSET: f64 = 0.0;
+
+    for i in 0..time.len() {
+        // Default: sum every input. One input passes through unchanged.
+        let value: f64 = inputs.iter().map(|field| field[i]).sum();
+        // Same sum using indices (replace the line above with this block):
+        // let mut value = 0.0;
+        // for input_index in 0..inputs.len() {
+        //     value += inputs[input_index][i];
+        // }
+        outputs[0][i] = value * GAIN + OFFSET;
+
+        // Replace the expression above for your calculation, for example:
+        // let value = inputs[0][i] - inputs[1][i]; // setpoint minus gyro
+        // let value = inputs[0][i] / inputs[1][i]; // signal / parameter
+        // Leave missing/invalid samples as f64::NAN; do not replace with zero.
     }
-    // NaN in any input leaves a gap at that sample.
-    // More outputs: update OUTPUTS and add matching named rows.
+    // For more outputs, increase OUTPUTS, add matching names, and assign
+    // outputs[1][i], outputs[2][i], etc. inside the loop.
+    // For history, rename _state to state and add fields to State above.
+    // Use time[i] differences for dt; reset history on gaps or nonpositive dt.
 }

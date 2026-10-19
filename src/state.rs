@@ -34,6 +34,7 @@ impl Line {
 pub struct Pane {
     pub id: u64,
     pub dock: DockPane,
+    pub analysis: RwSignal<Option<crate::analysis_state::AnalysisResult>, LocalStorage>,
     pub links: RwSignal<LinkOptions, LocalStorage>,
     pub lines: RwSignal<Vec<Line>, LocalStorage>,
     pub geometry: RwSignal<BTreeSet<u64>, LocalStorage>,
@@ -75,6 +76,7 @@ impl Pane {
         Self {
             id,
             dock: DockPane::new(id),
+            analysis: RwSignal::new_local(None),
             links: RwSignal::new_local(LinkOptions {
                 x: false,
                 y: false,
@@ -301,7 +303,13 @@ impl Workbench {
                     self.drag.state.set(None);
                     self.drop_target.set(None);
                     for pane in self.panes.get_untracked() {
+                        if pane.analysis.get_untracked().is_some() {
+                            self.close_plot(pane.id);
+                        }
+                    }
+                    for pane in self.panes.get_untracked() {
                         pane.lines.set(Vec::new());
+                        pane.analysis.set(None);
                         pane.selected.set(None);
                         pane.plot.hidden.set(Default::default());
                         pane.plot.styles.set(Default::default());
@@ -327,7 +335,12 @@ impl Workbench {
         let Some(log) = self.log.get_untracked() else {
             return;
         };
-        let pane = self.pane();
+        let active = self.pane();
+        let pane = if active.analysis.get_untracked().is_some() {
+            self.add_plot(active.id, false, true)
+        } else {
+            active
+        };
         if let Some(id) = pane.lines.with_untracked(|lines| {
             lines
                 .iter()
@@ -471,6 +484,16 @@ impl Workbench {
                 line
             })
             .collect();
+        copy.analysis.set(source.analysis.get_untracked());
+        if let Some(title) = self
+            .profiles
+            .titles
+            .with_untracked(|titles| titles.get(&source.id).cloned())
+        {
+            self.profiles.titles.update(|titles| {
+                titles.insert(copy.id, title);
+            });
+        }
         copy.lines.set(lines);
         copy.plot.hidden.set(copied_hidden);
         copy.plot.styles.set(styles);
@@ -544,7 +567,9 @@ impl Workbench {
         let maximized = self.maximized.get_untracked();
         self.panes.with_untracked(|panes| {
             panes.iter().find_map(|pane| {
-                if !plot_visible(pane.id, maximized, layout.clone()) {
+                if pane.analysis.get_untracked().is_some()
+                    || !plot_visible(pane.id, maximized, layout.clone())
+                {
                     return None;
                 }
                 let bounds = pane.dock.node.window_bounds()?;
