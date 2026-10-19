@@ -45,7 +45,7 @@ jobs:
           pacman -Syu --noconfirm --needed git rustup python pkgconf \
             libx11 libxkbcommon libxkbcommon-x11 wayland libxcb libxcursor \
             libxi libxrandr fontconfig ttf-dejavu
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
       - name: Linux build libraries
@@ -58,7 +58,7 @@ jobs:
             fonts-dejavu-core
       - name: Compiler and WASM target
         run: rustup target add wasm32-unknown-unknown
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           path: |
             ~/.cargo/registry
@@ -88,7 +88,7 @@ jobs:
           else:
               with tarfile.open(f'dist/enlumi-{platform}.tar.gz', 'w:gz') as archive:
                   archive.add(source, arcname=source.name)
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: nightly-${{ matrix.platform }}
           path: dist/*

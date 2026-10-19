@@ -1,4 +1,6 @@
 mod bundle;
+#[path = "../../build/revision.rs"]
+mod revision;
 
 use std::{
     env,

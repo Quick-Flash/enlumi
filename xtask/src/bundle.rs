@@ -3,6 +3,8 @@ use std::{env, fs, path::Path, process::Command};
 
 pub fn build() -> Result<(), String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    // Validate before compiling or copying the bundled toolchain.
+    let commit = super::revision::resolve(root)?;
     let destination = root.join("target/enlumi-portable");
     if destination.exists() {
         return Err(format!(
@@ -114,20 +116,6 @@ pub fn build() -> Result<(), String> {
                 ));
             }
         };
-        let commit = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(root)
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-            .filter(|sha| sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
-            .or_else(|| {
-                env::var("ENLUMI_BUILD_COMMIT")
-                    .ok()
-                    .filter(|sha| sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
-            })
-            .ok_or_else(|| std::io::Error::other("Portable updater needs Git revision metadata"))?;
         fs::write(
             staging.join("enlumi-bundle.json"),
             format!("{{\"format\":1,\"platform\":\"{platform}\",\"commit\":\"{commit}\"}}\n"),

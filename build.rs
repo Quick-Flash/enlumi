@@ -1,7 +1,12 @@
 #[path = "build/icon.rs"]
 mod icon;
+#[path = "build/revision.rs"]
+mod revision;
 
-use std::{path::PathBuf, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn git(args: &[&str]) -> Option<String> {
     let output = Command::new("git").args(args).output().ok()?;
@@ -14,8 +19,10 @@ fn git(args: &[&str]) -> Option<String> {
 fn main() {
     icon::build();
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=build/revision.rs");
     println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_PLATFORM");
     println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     let platform = std::env::var("ENLUMI_BUILD_PLATFORM").unwrap_or_default();
     println!("cargo:rustc-env=ENLUMI_BUILD_PLATFORM={platform}");
     // Watch actual ref files, including worktrees and packed refs.
@@ -31,9 +38,6 @@ fn main() {
             println!("cargo:rerun-if-changed={}", PathBuf::from(path).display());
         }
     }
-    let commit = git(&["rev-parse", "HEAD"])
-        .or_else(|| std::env::var("ENLUMI_BUILD_COMMIT").ok())
-        .filter(|sha| sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
-        .unwrap_or_default();
+    let commit = revision::resolve(Path::new(".")).unwrap_or_default();
     println!("cargo:rustc-env=ENLUMI_BUILD_COMMIT={commit}");
 }
