@@ -5,11 +5,20 @@ pub fn build() -> Result<(), String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     // Validate before compiling or copying the bundled toolchain.
     let commit = super::revision::resolve(root)?;
-    let destination = root.join("target/enlumi-portable");
+    // Cargo caches may retain empty directories after pruning non-build files.
+    // Keep distribution output outside the cached target tree.
+    let destination = root.join("dist/enlumi-portable");
     if destination.exists() {
         return Err(format!(
             "Move or remove {} before bundling again",
             destination.display()
+        ));
+    }
+    let staging = root.join("dist/enlumi-portable-staging");
+    if staging.exists() {
+        return Err(format!(
+            "Move or remove {} before bundling again",
+            staging.display()
         ));
     }
     let compiler = env::var_os("ENLUMI_RUSTC").unwrap_or_else(|| "rustc".into());
@@ -44,13 +53,6 @@ pub fn build() -> Result<(), String> {
         .ok_or("Compiler did not report host")?;
     super::cargo(&["build", "--locked", "--release", "-p", "enlumi"], &[])?;
     // Stage separately: failed copies never produce an apparently complete bundle.
-    let staging = root.join("target/enlumi-portable-staging");
-    if staging.exists() {
-        return Err(format!(
-            "Move or remove {} before bundling again",
-            staging.display()
-        ));
-    }
     let result = (|| -> std::io::Result<()> {
         fs::create_dir_all(&staging)?;
         let toolchain = staging.join("rust-toolchain");

@@ -1,4 +1,5 @@
 /target
+/dist/
 *.log
 *.ulg
 !/tests/fixtures/*.ulg

@@ -45,7 +45,7 @@ rustup target add wasm32-unknown-unknown
 cargo xtask bundle
 ```
 
-Output: `target/enlumi-portable/`. Ship **entire directory**, including profiles
+Output: `dist/enlumi-portable/` (outside Cargo cache). Ship **entire directory**, including profiles
 and compiler licenses. Command builds native release executable and copies real
 compiler from sysroot, not rustup proxy. Compiler libraries include WASM linker. Bundle excludes host standard libraries,
 Rust sources, unrelated targets, and developer tools. Packaging compiles starter

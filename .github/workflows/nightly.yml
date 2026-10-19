@@ -79,8 +79,8 @@ jobs:
         run: |
           import os, pathlib, tarfile, zipfile
           platform = os.environ['PLATFORM']
-          source = pathlib.Path('target/enlumi-portable')
-          pathlib.Path('dist').mkdir()
+          source = pathlib.Path('dist/enlumi-portable')
+          pathlib.Path('dist').mkdir(exist_ok=True)
           if platform.startswith('windows-'):
               with zipfile.ZipFile(f'dist/enlumi-{platform}.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
                   for path in sorted(source.rglob('*')):
@@ -92,7 +92,9 @@ jobs:
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: nightly-${{ matrix.platform }}
-          path: dist/*
+          path: |
+            dist/enlumi-*.zip
+            dist/enlumi-*.tar.gz
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
