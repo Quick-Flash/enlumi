@@ -36,6 +36,9 @@ jobs:
     env:
       ENLUMI_BUILD_PLATFORM: ${{ matrix.platform }}
       ENLUMI_BUILD_COMMIT: ${{ github.sha }}
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     timeout-minutes: 60
     steps:
       - name: Arch build libraries
@@ -58,15 +61,13 @@ jobs:
             fonts-dejavu-core
       - name: Compiler and WASM target
         run: rustup target add wasm32-unknown-unknown
-      - uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      - name: Rust dependency cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/debug
-            target/release
-            target/xtask
-          key: nightly-${{ matrix.platform }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          shared-key: ${{ matrix.os }}-${{ matrix.container }}
+          add-job-id-key: "false"
+          cache-bin: "false"
+          cache-on-failure: "true"
       - name: Tests
         run: cargo test --locked --workspace
       - name: Build portable bundle and check compiler without system Rust
