@@ -46,6 +46,21 @@ impl Workbench {
     }
 
     pub fn can_place_line(self, source: u64, id: u64, target: u64) -> bool {
+        if source != target
+            && self
+                .find(source)
+                .zip(self.find(target))
+                .is_none_or(|(source, target)| {
+                    source
+                        .analysis
+                        .with_untracked(|result| result.as_ref().map(|result| result.mode))
+                        != target
+                            .analysis
+                            .with_untracked(|result| result.as_ref().map(|result| result.mode))
+                })
+        {
+            return false;
+        }
         if id >= (1_u64 << 63) {
             return self
                 .find(source)

@@ -4574,3 +4574,266 @@ fn multi_flight_profile_instances_use_separate_ids_names_settings_and_bands() {
         );
     }
 }
+
+#[test]
+fn native_fields_reveal_long_text_caret_in_both_directions() {
+    use zgui_ui::prelude::*;
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let text = "long field value with variable width WWWiii ".repeat(12);
+    let length = text.len();
+    let handler = app().with_size(500.0,200.0)
+        .with_renderer(Box::new(|_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n.page .long-field {{ width: 180px; height: 32px; }}",crate::theme::stylesheet()))
+        .into_handler(move || {
+            let field = NodeRef::new();
+            *captured.borrow_mut()=Some(field);
+            let value = RwSignal::new_local(text.clone());
+            view! {column(class="page") {Input(node_ref=field,value=value,class="long-field",a11y:label="Long name")}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(500.0),
+        DevicePx(200.0),
+    )));
+    harness.settle(128);
+    let field = saved.borrow().unwrap();
+    field.focus();
+    field.set_selection(length..length);
+    harness.settle(128);
+    assert!(
+        field.scroll_offset().x.0 > 100.0,
+        "End caret must reveal long text: {:?}",
+        field.scroll_position()
+    );
+    field.set_selection(0..0);
+    harness.settle(128);
+    assert!(
+        field.scroll_offset().x.0 < 1.0,
+        "Home caret must return to start: {:?}",
+        field.scroll_position()
+    );
+    let bounds = field.window_bounds().unwrap();
+    let scale = field.scale();
+    let right = (bounds.origin.x.0 + bounds.size.width.0) / scale;
+    let y = (bounds.origin.y.0 + bounds.size.height.0 / 2.0) / scale;
+    harness.deliver_to_first(pointer(PointerAction::Pressed, right - 15.0, y));
+    harness.deliver_to_first(pointer(PointerAction::Moved, right + 100.0, y));
+    for _ in 0..12 {
+        harness.advance(Duration::from_millis(16));
+        harness.pump();
+    }
+    harness.deliver_to_first(pointer(PointerAction::Released, right + 100.0, y));
+    harness.settle(128);
+    assert!(
+        field.scroll_offset().x.0 > 20.0,
+        "Dragging selection past field edge must scroll horizontally"
+    );
+}
+
+#[test]
+fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
+    use crate::{
+        analysis_state::AnalysisResult,
+        spectral::{Heatmap, Mode},
+        workspace::PlotWorkspaceProps,
+    };
+    use plot::{
+        time_series::{SeriesData, TimeSeries, TimeSeriesSet},
+        workspace::layout::DropZone,
+    };
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler=app().with_size(1100.0,700.0)
+        .with_renderer(Box::new(|_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
+        .into_handler(move || {
+            let workbench=crate::state::Workbench::new();
+            let normal=workbench.pane();
+            normal.lines.set(vec![crate::state::Line{id:1,source:"raw".into(),name:"Raw gyro".into(),revision:0,data:SeriesData::new(vec![plot::PlotPoint{x:0.0,y:0.0},plot::PlotPoint{x:10.0,y:1.0}]).unwrap()}]);
+            let result=|mode|AnalysisResult{
+                title:if mode==Mode::Spectrogram {"Gyro over time".into()}else{"Gyro FFT".into()},units:"test".into(),summary:"Snapshot".into(),mode,
+                options:crate::spectral::Options{mode,size:2048,window:crate::spectral::Window::Hann,overlap:50,heatmap_bins:40,start:None,end:None},condition:String::new(),
+                series:TimeSeriesSet::new(vec![TimeSeries::new("fft","Gyro",SeriesData::new(vec![plot::PlotPoint{x:0.0,y:0.0},plot::PlotPoint{x:500.0,y:1.0}]).unwrap())]).unwrap(),
+                heatmap:(mode==Mode::Spectrogram).then(||Heatmap{values:vec![Some(0.0),Some(1.0),Some(2.0),Some(3.0)].into(),columns:2,rows:2,x_low:0.0,x_high:10.0,y_low:0.0,y_high:500.0,x_label:"Time (s)".into(),y_label:"Frequency (Hz)".into(),min_db:0.0,max_db:3.0}),
+            };
+            let time=workbench.add_analysis_panel(result(Mode::Spectrogram));
+            workbench.layout.update(|layout| {assert!(layout.dock_split(time.id,normal.id,DropZone::Right));});
+            let frequency=workbench.add_analysis_panel(result(Mode::Fft));
+            workbench.layout.update(|layout| {assert!(layout.dock_split(frequency.id,normal.id,DropZone::Bottom));});
+            *captured.borrow_mut()=Some((workbench,normal,time,frequency));
+            view! { column(class="page workbench") { row(class="body") { PlotWorkspace(workbench=workbench) } } }
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1100.0),
+        DevicePx(700.0),
+    )));
+    harness.settle(128);
+    let (workbench, normal, time, frequency) = saved.borrow().unwrap();
+    assert!(normal.dock.node.window_bounds().unwrap().size.width.0 > 200.0);
+    assert!(
+        time.dock.node.window_bounds().unwrap().origin.x.0
+            > normal.dock.node.window_bounds().unwrap().origin.x.0
+    );
+    for pane in [normal, time, frequency] {
+        pane.links.update(|links| links.x = true);
+    }
+    harness.settle(128);
+    normal
+        .plot
+        .set_view(plot::Ranges::new((2.0, 4.0), (-1.0, 1.0)))
+        .unwrap();
+    harness.settle(128);
+    assert_eq!(
+        time.plot.ranges.get_untracked().x,
+        normal.plot.ranges.get_untracked().x
+    );
+    frequency
+        .plot
+        .set_view(plot::Ranges::new((100.0, 200.0), (0.0, 1.0)))
+        .unwrap();
+    harness.settle(128);
+    assert_eq!(
+        normal.plot.ranges.get_untracked().x,
+        plot::Range::from((2.0, 4.0))
+    );
+    assert_eq!(
+        time.plot.ranges.get_untracked().x,
+        plot::Range::from((2.0, 4.0))
+    );
+    workbench.duplicate_plot(time);
+    harness.settle(128);
+    let copy = workbench.pane();
+    assert!(copy.analysis.get_untracked().is_some());
+    workbench.maximize(copy.id);
+    assert_eq!(workbench.maximized.get_untracked(), Some(copy.id));
+    workbench.close_plot(copy.id);
+    assert_eq!(workbench.panes.with_untracked(|panes| panes.len()), 3);
+}
+
+#[test]
+fn rust_editor_follows_caret_and_horizontal_scrollbar_is_draggable() {
+    use crate::script_code_editor::ScriptCodeEditorProps;
+    use zgui_editor::{Command, Selection};
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let text = "let value = extremely_long_signal_identifier; ".repeat(20);
+    let length = text.len();
+    let handler=app().with_size(600.0,250.0)
+        .with_renderer(Box::new(|_,target|{let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n.page .script-code-frame {{width:280px;height:190px;flex:none;}} .page {{align-items:flex-start;}}",crate::theme::stylesheet()))
+        .into_handler(move || {
+            let source=RwSignal::new_local(text.clone());
+            let captured=captured.clone();
+            view! {column(class="page") {ScriptCodeEditor(source=source,read_only=Signal::stored_local(false),on_ready=UnsyncCallback::new(move |handle|*captured.borrow_mut()=Some(handle)))}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(600.0),
+        DevicePx(250.0),
+    )));
+    harness.settle(128);
+    let editor = saved.borrow().as_ref().unwrap().clone();
+    editor.command(Command::SetSelections {
+        selections: vec![Selection::caret(length)],
+        primary: 0,
+    });
+    editor.command(Command::Scroll(
+        zgui_editor::command::ScrollCmd::EnsureCursorVisible,
+    ));
+    harness.settle(128);
+    assert!(editor.scroll_state().get_untracked().x_px > 100.0);
+    editor.command(Command::SetSelections {
+        selections: vec![Selection::caret(0)],
+        primary: 0,
+    });
+    editor.command(Command::Scroll(
+        zgui_editor::command::ScrollCmd::EnsureCursorVisible,
+    ));
+    harness.settle(128);
+    assert!(editor.scroll_state().get_untracked().x_px < 1.0);
+    let rect = harness.app().windows()[0]
+        .box_with_class("script-source")
+        .unwrap();
+    let y = rect.origin.y.0 + rect.size.height.0 - 3.0;
+    let x = rect.origin.x.0 + 60.0;
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        rect.origin.x.0 + rect.size.width.0 - 15.0,
+        y,
+    ));
+    harness.deliver_to_first(pointer(
+        PointerAction::Released,
+        rect.origin.x.0 + rect.size.width.0 - 15.0,
+        y,
+    ));
+    harness.settle(128);
+    assert!(
+        editor.scroll_state().get_untracked().x_px > 100.0,
+        "Horizontal scrollbar drag must move text"
+    );
+}
+
+#[test]
+fn updates_open_centered_modal_with_shared_scrim_and_escape_dismissal() {
+    use crate::update_controls::UpdateControlsProps;
+    let handler = app()
+        .with_size(1000.0, 700.0)
+        .with_renderer(Box::new(|_, target| {
+            let mut renderer = CaptureRenderer::new();
+            renderer.configure(target);
+            Ok(Box::new(renderer))
+        }))
+        .with_stylesheet(crate::theme::stylesheet())
+        .into_handler(|| {
+            let state = crate::update_state::UpdateState::new();
+            view! {column(class="page") {row(class="toolbar") {UpdateControls(state=state)}}}
+        })
+        .unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1000.0),
+        DevicePx(700.0),
+    )));
+    harness.settle(128);
+    click_class(&mut harness, "updates-trigger");
+    harness.advance(Duration::from_millis(500));
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    let modal = window.nodes_with_class("updates-menu")[0];
+    assert_eq!(window.dom().semantics(modal).unwrap().role, Role::Dialog);
+    let bounds = window.box_with_class("updates-menu").unwrap();
+    assert!(
+        (bounds.origin.x.0 + bounds.size.width.0 / 2.0 - 500.0).abs() < 2.0,
+        "Dialog should center horizontally: {bounds:?}"
+    );
+    assert!(
+        (bounds.origin.y.0 + bounds.size.height.0 / 2.0 - 350.0).abs() < 2.0,
+        "Dialog should center vertically: {bounds:?}"
+    );
+    assert_eq!(window.nodes_with_class("zui-overlay-scrim").len(), 1);
+    assert_eq!(window.nodes_with_class("updates-done").len(), 1);
+    harness.deliver_to_first(SurfaceEvent::Key {
+        state: zgui::vocab::KeyState::Pressed,
+        event: zgui::vocab::KeyEvent::named(
+            zgui::vocab::NamedKey::Escape,
+            zgui::vocab::PhysicalKey::Unidentified(0),
+        ),
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.advance(Duration::from_millis(500));
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("updates-menu")
+            .is_empty()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("zui-overlay-scrim")
+            .is_empty()
+    );
+}

@@ -1,0 +1,57 @@
+[package]
+name = "zgui-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "The zgui frame pipeline: style, layout, paint and draw in a window"
+repository = "https://github.com/zortax/zgui"
+homepage = "https://zgui.zortax.de"
+rust-version = "1.90"
+keywords = ["gui", "ui", "css", "reactive", "wgpu"]
+categories = ["gui"]
+include = ["/src", "/build", "/build.rs", "/README.md", "/LICENSE", "/NOTICE"]
+
+# L7 — runtime and tooling. Every dependency is inherited: `foo.workspace = true`.
+#
+# The crate that assembles everything else into one program: the frame pipeline, the dirty
+# scheduler, the reactive flush, the timer heap, the observation registry, the listener dispatch
+# table, and the window and surface lifecycle. It names no windowing library and no graphics API —
+# the first arrives as the platform contract and the second as the renderer contract — which is
+# what lets the whole loop be exercised with no display server at all.
+[dependencies]
+rustc-hash = "2.1"
+thiserror = "2.0.19"
+tracing = "0.1.44"
+# The accessibility projection. A frame publishes the tree and routes the actions that come back,
+# and both are frame-loop concerns: only the loop knows when the document and its geometry agree,
+# and an action has to be dispatched where listeners can be called.
+zgui-a11y = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-atlas = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-anim = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-bits = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-color = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+# Read for one value only: the element's own `color`, which is what a caret is drawn in so that it
+# contrasts with whatever background the field has whichever theme is in force.
+zgui-css = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-dom = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-image = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-edit = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-geom = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-input = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-interned = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-layout = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-paint = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-platform = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-profile = { git = "https://github.com/zortax/zgui", version = "0.1.0", features = ["counters"] }
+zgui-reactive = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-render = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-scene = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+# The frame owns scroll offsets and this is where they live: writing one is a fast path over the
+# fragments a frame already has, and the loop is what drives it.
+zgui-scroll = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-style = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-text = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-text-style = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-view = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-view-dom = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-vocab = { git = "https://github.com/zortax/zgui", version = "0.1.0" }

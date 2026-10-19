@@ -153,3 +153,6 @@ mod tests;
 mod derived_tests;
 #[cfg(test)]
 mod layout_tests;
+
+#[cfg(test)]
+mod spectral_tests;

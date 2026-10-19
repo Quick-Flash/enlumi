@@ -7,8 +7,12 @@ use plot::{
 use zgui::prelude::*;
 
 #[component]
-pub fn AnalysisPlot(result: AnalysisResult) -> impl IntoView {
-    let state = PlotState::default();
+pub fn AnalysisPlot(
+    result: AnalysisResult,
+    state: PlotState,
+    visible: Signal<bool, LocalStorage>,
+) -> impl IntoView {
+    install_stylesheet("enlumi-analysis", include_str!("analysis.css"));
     let heatmap = StoredValue::new_local(result.heatmap);
     let is_heatmap = heatmap.with_value(Option::is_some);
     let chart = NodeRef::new();
@@ -61,9 +65,9 @@ pub fn AnalysisPlot(result: AnalysisResult) -> impl IntoView {
                     readout.set(format!("X {:.3} {} · Y {:.3} {} · {}",frequency,map.x_label,value,map.y_label,map.values[row*map.columns+column].map_or_else(||"No windows/power in bin".into(),|db|format!("{db:.2} dB"))));
                 });
             }) {
-            TimeSeriesPlot(series = Signal::stored_local(series), state = state,
+            TimeSeriesPlot(series = Signal::stored_local(series), state = state, visible = visible,
                 draw_series = Signal::stored_local(!is_heatmap), show_legend = !is_heatmap,
-                show_pointer = !is_heatmap, show_cursor_values = !is_heatmap,
+                show_pointer = true, show_cursor_values = !is_heatmap,
                 format = UnsyncCallback::new(move |(axis,value)| {
                     if axis == plot::labels::Axis::X {
                         let is_time = heatmap.with_value(|map| map.as_ref().is_some_and(|map| map.x_label == "Time (s)"));

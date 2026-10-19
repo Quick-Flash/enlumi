@@ -3,14 +3,14 @@
 .analysis-heading { align-items: center; gap: 12px; }
 .analysis-heading .heading { flex: 1; }
 .analysis-body { flex: 1; min-width: 0; min-height: 0; gap: 12px; }
-.analysis-controls { flex: none; width: 300px; min-height: 0; gap: 8px; }
+.analysis-controls { flex: 1; width: 0; min-width: 0; overflow-y: auto; min-height: 0; gap: 8px; }
 .analysis-controls > row { gap: 6px; }
 .analysis-controls .zui-field { min-width: 0; flex: 1; }
 .analysis-inputs { flex: 1; min-height: 80px; overflow-y: auto; }
 .analysis-input { align-items: center; gap: 6px; min-height: 28px; }
 .analysis-input .zui-label { flex: 1; min-width: 0; font-size: var(--app-font-sm); }
 .analysis-results { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; gap: 12px; }
-.analysis-result { flex: none; height: 380px; min-width: 0; gap: 4px; padding: 8px; background: var(--app-surface); border: 1px solid var(--app-border); }
+.analysis-result { flex: 1; height: 0; min-height: 0; min-width: 0; gap: 4px; padding: 8px; background: var(--app-surface); border: 1px solid var(--app-border); }
 .analysis-chart { flex: 1; min-height: 0; position: relative; }
 .analysis-result .time-series-host { flex: 1; min-height: 0; }
 .analysis-summary { white-space: pre-wrap; font-size: var(--app-font-xs); }

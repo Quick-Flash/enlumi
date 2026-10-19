@@ -112,9 +112,14 @@ impl Workbench {
                         .collect()
                 });
                 if sources.is_empty() {
+                    self.analysis.run_selection.set(false);
                     self.analysis.message.set("No sample fields available. Drop fields or a usable profile view; geometry has no samples.".into());
                 } else {
                     self.add_analysis_sources(sources);
+                    if self.analysis.run_selection.get_untracked() {
+                        self.analysis.run_selection.set(false);
+                        self.run_analysis();
+                    }
                 }
             }
             Destination::Plot(_) => {
