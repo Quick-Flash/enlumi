@@ -106,6 +106,10 @@ jobs:
       contents: write
       actions: read
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: nightly-*
@@ -120,9 +124,8 @@ jobs:
           set -euo pipefail
           tag="nightly-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           (cd dist && sha256sum enlumi-* > SHA256SUMS)
-          cat > notes.md <<EOF
-          Automated nightly build from commit ${COMMIT}.
-
+          python3 .github/scripts/nightly_changes.py > notes.md
+          cat >> notes.md <<EOF
           Extract entire archive; keep rust-toolchain beside executable.
           Includes offline Rust filter compiler and example profiles.
           Windows: ZIP. Linux/macOS: tar.gz. Choose matching architecture.

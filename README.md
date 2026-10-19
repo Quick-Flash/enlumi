@@ -12,7 +12,7 @@ fields onto docked plots.
 - JSON profiles for field names/units, filter chains, geometry, flight-mode bands,
   and reusable views, with optional firmware matching.
 - FFT, PSD, spectrograms, and field-conditioned heatmaps in docked plots.
-- SVG and PNG screenshots of individual plots or visible docks together.
+- SVG/PNG export and clipboard screenshots of individual plots or visible docks together.
 
 ## Downloads
 

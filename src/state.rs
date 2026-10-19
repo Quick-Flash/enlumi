@@ -122,6 +122,7 @@ impl Pane {
 
 #[derive(Clone, Copy)]
 pub struct Workbench {
+    pub screenshot_clipboard: StoredValue<plot::clipboard::ScreenshotClipboard, LocalStorage>,
     pub log: RwSignal<Option<Arc<LogStore>>, LocalStorage>,
     pub status: RwSignal<String, LocalStorage>,
     pub loading: RwSignal<bool, LocalStorage>,
@@ -189,6 +190,7 @@ impl Workbench {
         );
         Self {
             geometry: crate::geometry_state::GeometryUi::new(),
+            screenshot_clipboard: StoredValue::new_local(Default::default()),
             bands: crate::band_state::BandUi::new(),
             analysis: crate::analysis_state::AnalysisUi::new(),
             measurement: crate::measurement_state::MeasurementUi::new(),

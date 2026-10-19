@@ -15,9 +15,9 @@ spacing and reciprocal period. Release mouse clears highlight. Escape has no eff
 while measuring.
 M leaves text entry alone.
 
-Use each plot's camera menu for SVG/PNG screenshots. Toolbar camera exports all
+Use each plot's camera menu to save SVG/PNG or **Copy image** to clipboard. Toolbar camera captures all
 visible docks together, preserving layout and current X/Y views. PNG renders
-the same vector content at twice the SVG dimensions.
+the same vector content at twice the SVG dimensions; clipboard images use same resolution.
 
 Expand **Parameters** in field tree, alongside **Derived fields**. Search
 matches names, values, and record types. Recorded Blackbox flight settings and ULog

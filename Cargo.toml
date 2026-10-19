@@ -19,7 +19,7 @@ resolver = "3"
 bbl_parser = { version = "1.1.1", default-features = false }
 flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 kurbo = "0.13.1"
-plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "4bc31c79a20bd1c911f9ec24d0000931c6cc76a3", features = ["workspace", "raster"] }
+plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "fc333445c16fb0e90686390d7e5ef28827f9276c", features = ["workspace", "raster", "clipboard"] }
 px4-ulog = "0.6.1"
 rfd = "0.17.2"
 rustfft = { version = "6.4.1", default-features = false }
