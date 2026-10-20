@@ -127,6 +127,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .filter(|arg| arg != "--enlumi-finish-update")
         .map(std::path::PathBuf::from);
+    if let Some(file) = path.as_ref().filter(|path| path.is_file()).and_then(|path| path.canonicalize().ok()) {
+        let _ = preferences::LastLogDirectory::user().save(&file);
+    }
     startup::reveal_if_first_frame_stalls();
     app_icon::set_dock_icon();
     #[cfg(target_os = "linux")]
