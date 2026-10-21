@@ -5,7 +5,7 @@ use plot::plot_data::SeriesStyle;
 use zgui::prelude::*;
 impl Workbench {
     pub fn next_line_color(self, pane: Pane) -> [u8; 4] {
-        let global = self.panes.with_untracked(|panes| {
+        let global = self.panes().with_untracked(|panes| {
             panes
                 .iter()
                 .flat_map(|pane| pane.display().colors())

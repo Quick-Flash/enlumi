@@ -9,7 +9,7 @@ pub fn AnalysisRange(
     visible: Signal<bool, LocalStorage>,
 ) -> impl IntoView {
     install_stylesheet("enlumi-analysis", include_str!("analysis.css"));
-    let ui = workbench.analysis;
+    let ui = workbench.analysis();
     let host = NodeRef::new();
     let bounds = host.observe_border_box();
     let drag = RwSignal::new_local(None::<(f64, f64)>);

@@ -249,7 +249,7 @@ impl Workbench {
             .hidden_geometry
             .with_untracked(|items| items.contains(&id))
             && self.geometry.selected.get_untracked() == Some(id)
-            && self.active.get_untracked() == pane.id
+            && self.active().get_untracked() == pane.id
         {
             self.finish_geometry_editing();
         }
@@ -259,15 +259,15 @@ impl Workbench {
         let pane = if active.geometry.with_untracked(|ids| ids.contains(&id)) {
             active
         } else {
-            self.panes
+            self.panes()
                 .get_untracked()
                 .into_iter()
                 .find(|pane| {
                     pane.geometry.with_untracked(|ids| ids.contains(&id))
                         && plot::workspace::plot_visible(
                             pane.id,
-                            self.maximized.get_untracked(),
-                            self.layout.get_untracked(),
+                            self.maximized().get_untracked(),
+                            self.layout().get_untracked(),
                         )
                 })
                 .unwrap_or(active)
@@ -289,7 +289,7 @@ impl Workbench {
             self.cancel_geometry_drag();
         }
         self.attach_geometry(id, pane, false);
-        if self.active.get_untracked() == pane.id
+        if self.active().get_untracked() == pane.id
             && self.geometry.selected.get_untracked() == Some(id)
         {
             self.finish_geometry_editing();
@@ -300,7 +300,7 @@ impl Workbench {
         self.geometry
             .items
             .update(|items| items.retain(|item| item.id != id));
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             pane.geometry.update(|items| {
                 items.remove(&id);
             });
@@ -329,7 +329,7 @@ impl Workbench {
                 self.geometry
                     .items
                     .update(|items| items.retain(|item| item.id != drag.original.id));
-                for pane in self.panes.get_untracked() {
+                for pane in self.all_panes() {
                     pane.geometry.update(|items| {
                         items.remove(&drag.original.id);
                     });
@@ -364,14 +364,14 @@ impl Workbench {
         let moving = moving || point.distance(start) > 5.0;
         self.geometry.library_drag.set(Some((id, start, moving)));
         let target = if moving {
-            self.panes
+            self.panes()
                 .get_untracked()
                 .into_iter()
                 .filter(|pane| {
                     plot::workspace::plot_visible(
                         pane.id,
-                        self.maximized.get_untracked(),
-                        self.layout.get_untracked(),
+                        self.maximized().get_untracked(),
+                        self.layout().get_untracked(),
                     )
                 })
                 .find_map(|pane| {

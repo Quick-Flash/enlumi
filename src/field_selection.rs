@@ -4,13 +4,7 @@ use zgui::prelude::*;
 impl Workbench {
     pub fn select_field(self, source: String, ctrl: bool, shift: bool, visible: &[String]) {
         let family = |id: &str| {
-            if id.starts_with("@profile/") {
-                1
-            } else if id.starts_with("@analysis/") {
-                2
-            } else {
-                0
-            }
+            if id.starts_with("@analysis/") { 2 } else { 0 }
         };
         let group = family(&source);
         self.selected_fields
@@ -84,8 +78,8 @@ impl Workbench {
             .with_untracked(|fields| fields.contains(&source))
         {
             let mut fields: Vec<_> = self.selected_fields.get_untracked().into_iter().collect();
-            if source.starts_with("@profile/") {
-                let visible = self.visible_profile_sources();
+            if !source.starts_with("@analysis/") {
+                let visible = self.sidebar_sources();
                 fields.sort_by(|a, b| {
                     visible
                         .iter()
@@ -100,7 +94,7 @@ impl Workbench {
             if source.starts_with("@analysis/") {
                 fields.retain(|id| {
                     id.strip_prefix("@analysis/").is_some_and(|id| {
-                        self.analysis
+                        self.analysis()
                             .sources
                             .with_untracked(|sources| sources.iter().any(|source| source == id))
                     })
@@ -112,17 +106,18 @@ impl Workbench {
         }
     }
     pub fn field_drag_move(self, x: f32, y: f32) {
-        self.analysis.condition_hover.set(
-            self.analysis.open.get_untracked()
-                && self.analysis.mode.get_untracked() == "heatmap"
-                && Self::inside(self.analysis.condition_drop, x, y),
+        self.analysis().condition_hover.set(
+            self.analysis().open.get_untracked()
+                && self.analysis().mode.get_untracked() == "heatmap"
+                && Self::inside(self.analysis().condition_drop, x, y),
         );
-        self.analysis.hover.set(
-            self.analysis.open.get_untracked()
+        self.analysis().hover.set(
+            self.analysis().open.get_untracked()
                 && !self.filters_open.get_untracked()
-                && Self::inside(self.analysis.drop, x, y),
+                && Self::inside(self.analysis().drop, x, y),
         );
-        if self.analysis.hover.get_untracked() || self.analysis.condition_hover.get_untracked() {
+        if self.analysis().hover.get_untracked() || self.analysis().condition_hover.get_untracked()
+        {
             self.drop_target.set(None);
             self.filter_drop_active.set(false);
             self.bands.hover.set(false);
@@ -143,7 +138,17 @@ impl Workbench {
             crate::profile::identity::Drag::parse(&drag.0)
                 .is_some_and(|drag| !matches!(drag.item, crate::profile::identity::Item::Field(_)))
         }) {
-            self.drop_target.set(self.hit_plot(x, y));
+            let workspace = self
+                .drag
+                .state
+                .get_untracked()
+                .and_then(|drag| crate::profile::identity::Drag::parse(&drag.0))
+                .is_some_and(|drag| drag.item.is_workspace_item());
+            self.drop_target.set(if workspace {
+                self.hit_any_plot(x, y)
+            } else {
+                self.hit_plot(x, y)
+            });
             return;
         }
 
@@ -167,8 +172,8 @@ impl Workbench {
         self.drop_target.set(self.hit_plot(x, y));
     }
     pub fn finish_field_drag(self) {
-        self.analysis.condition_hover.set(false);
-        self.analysis.hover.set(false);
+        self.analysis().condition_hover.set(false);
+        self.analysis().hover.set(false);
         self.bands.hover.set(false);
         self.filter_drop_active.set(false);
         self.filter_input_ui.hover.set(None);
@@ -181,9 +186,9 @@ impl Workbench {
                 .into_iter()
                 .filter_map(|source| source.strip_prefix("@analysis/").map(str::to_owned))
                 .collect::<Vec<_>>();
-            if self.analysis.open.get_untracked()
-                && self.analysis.mode.get_untracked() == "heatmap"
-                && Self::inside(self.analysis.condition_drop, x, y)
+            if self.analysis().open.get_untracked()
+                && self.analysis().mode.get_untracked() == "heatmap"
+                && Self::inside(self.analysis().condition_drop, x, y)
             {
                 self.set_analysis_condition(sources);
             } else if let Some(target) = self.hit_any_plot(x, y) {
@@ -192,92 +197,50 @@ impl Workbench {
             self.finish_field_drag();
             return;
         }
-        if self.analysis.open.get_untracked()
+        if self.analysis().open.get_untracked()
             && !self.filters_open.get_untracked()
-            && (Self::inside(self.analysis.drop, x, y)
-                || self.analysis.mode.get_untracked() == "heatmap"
-                    && Self::inside(self.analysis.condition_drop, x, y))
+            && (Self::inside(self.analysis().drop, x, y)
+                || self.analysis().mode.get_untracked() == "heatmap"
+                    && Self::inside(self.analysis().condition_drop, x, y))
         {
             let sources = self.drag_fields(source);
-            let conditioning = self.analysis.mode.get_untracked() == "heatmap"
-                && Self::inside(self.analysis.condition_drop, x, y);
-            if sources
-                .first()
-                .is_some_and(|source| source.starts_with("@profile/"))
-            {
-                self.use_profile_items(
-                    sources
-                        .iter()
-                        .filter_map(|source| crate::profile::identity::Drag::parse(source))
-                        .collect(),
-                    if conditioning {
-                        crate::profile_state::Destination::AnalysisCondition
-                    } else {
-                        crate::profile_state::Destination::Analysis
-                    },
-                );
-            } else {
+            let conditioning = self.analysis().mode.get_untracked() == "heatmap"
+                && Self::inside(self.analysis().condition_drop, x, y);
+            self.queue_field_sources(
+                sources,
                 if conditioning {
-                    self.set_analysis_condition(sources);
+                    crate::profile_state::Destination::AnalysisCondition
                 } else {
-                    self.add_analysis_sources(sources);
-                }
-            }
+                    crate::profile_state::Destination::Analysis
+                },
+                None,
+            );
             self.finish_field_drag();
             return;
         }
-        if let Some(drag) = crate::profile::identity::Drag::parse(&source) {
-            use crate::profile_state::Destination;
-            let field = matches!(drag.item, crate::profile::identity::Item::Field(_));
-            let target = if field
-                && self.bands.open.get_untracked()
-                && Self::inside(self.bands.drop, x, y)
-            {
-                Some(Destination::Bands)
-            } else if field
-                && (Self::inside(self.filter_button, x, y)
-                    || self.filters_open.get_untracked() && Self::inside(self.filter_drop, x, y))
-            {
-                Some(Destination::Filter)
-            } else {
-                self.hit_plot(x, y)
-                    .map(|pane| Destination::Plot(Some(pane)))
-            };
-            if let Some(target) = target {
-                let items = self
-                    .drag_fields(source)
-                    .into_iter()
-                    .filter_map(|source| crate::profile::identity::Drag::parse(&source))
-                    .collect();
-                self.use_profile_items(items, target);
-            }
-            self.finish_field_drag();
-            return;
-        }
-
+        use crate::profile_state::Destination;
         let sources = self.drag_fields(source);
-        if self.bands.open.get_untracked() && Self::inside(self.bands.drop, x, y) {
-            if sources.len() == 1 {
-                self.generate_bands(sources[0].clone(), None);
-            } else {
-                self.bands
-                    .error
-                    .set("Drop one discrete source field".into());
-            }
+        let workspace = sources
+            .iter()
+            .filter_map(|source| crate::profile::identity::Drag::parse(source))
+            .any(|drag| drag.item.is_workspace_item());
+        let slot = self.quaternion_slot_at(x, y);
+        let target = if self.bands.open.get_untracked() && Self::inside(self.bands.drop, x, y) {
+            Some(Destination::Bands)
         } else if Self::inside(self.filter_button, x, y)
             || self.filters_open.get_untracked() && Self::inside(self.filter_drop, x, y)
         {
-            self.filters_open.set(true);
-            if let Err(error) =
-                self.accept_filter_sources_at(sources, self.quaternion_slot_at(x, y))
-            {
-                self.filter_error.set(error);
-            }
-        } else if let Some(id) = self.hit_plot(x, y) {
-            self.activate(id);
-            for source in sources {
-                self.add(source);
-            }
+            Some(Destination::Filter)
+        } else {
+            (if workspace {
+                self.hit_any_plot(x, y)
+            } else {
+                self.hit_plot(x, y)
+            })
+            .map(|id| Destination::Plot(Some(id)))
+        };
+        if let Some(target) = target {
+            self.queue_field_sources(sources, target, slot);
         } else {
             self.status
                 .set("Drop outside plots or filter source area cancelled".into());

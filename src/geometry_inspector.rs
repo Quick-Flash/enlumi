@@ -84,7 +84,7 @@ pub fn GeometryInspector(workbench: Workbench, id: u64) -> impl IntoView {
         if move || !workbench.geometry.error.with(String::is_empty) {text(class="warnings") {{move || workbench.geometry.error.get()}}}
         row(class="geometry-editor-footer") {
             ActionButton(class="duplicate-geometry",on:click=move |_|workbench.duplicate_geometry(id)) {"Duplicate"}
-            text(class="muted") {{move || format!("Shared on {} plots",workbench.panes.with(|panes|panes.iter().filter(|pane|pane.geometry.with(|ids|ids.contains(&id))).count()))}}
+            text(class="muted") {{move || format!("Shared on {} plots",workbench.panes().with(|panes|panes.iter().filter(|pane|pane.geometry.with(|ids|ids.contains(&id))).count()))}}
             ActionButton(class="delete-geometry",a11y:label="Delete saved geometry and all plot copies",on:click=move |_|workbench.delete_geometry(id)) {"Delete saved"}
         }
         }

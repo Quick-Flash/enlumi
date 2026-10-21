@@ -12,6 +12,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use zgui::prelude::*;
 impl Workbench {
     pub fn use_profile_item(self, drag: profile::identity::Drag, target: Destination) {
+        self.bind_view().use_view_profile_item(drag, target);
+    }
+    fn use_view_profile_item(self, drag: profile::identity::Drag, target: Destination) {
         if self.profiles.busy.get_untracked()
             || self.loading.get_untracked()
             || self.derived_busy.get_untracked()
@@ -40,9 +43,38 @@ impl Workbench {
         else {
             return;
         };
+        if let Item::WorkspacePreset(name) = &item {
+            self.use_saved_preset(key, name.clone(), crate::preset_ui::ApplyAction::Workspace);
+            return;
+        }
+        if let Item::Workspace(name) = &item {
+            if matches!(target, Destination::Plot(_)) {
+                self.use_saved_preset(key, name.clone(), crate::preset_ui::ApplyAction::NewView);
+            } else {
+                self.use_profile_items(
+                    vec![profile::identity::Drag { profile: key, item }],
+                    target,
+                );
+            }
+            return;
+        }
+        if let Item::View(name) = &item
+            && let Some(recipe) = crate::preset_lookup::plot(&instance.definition, name)
+            && let Destination::Plot(pane) = target
+        {
+            let pane = if crate::preset_lookup::is_nested_plot(name) {
+                None
+            } else {
+                pane
+            };
+            if let Err(error) = self.apply_plot_preset(&key, recipe, pane) {
+                self.profiles.error.set(error);
+            }
+            return;
+        }
         let pane = match target {
             Destination::Plot(pane) => pane,
-            Destination::Analysis | Destination::AnalysisCondition => {
+            Destination::Analysis | Destination::AnalysisCondition | Destination::SaveSelection => {
                 self.use_profile_items(
                     vec![profile::identity::Drag { profile: key, item }],
                     target,
@@ -63,7 +95,9 @@ impl Workbench {
                     return;
                 };
                 if matches!(target, Destination::Filter) {
-                    self.filters_open.set(true);
+                    if self.is_current_view() {
+                        self.filters_open.set(true);
+                    }
                     if let Err(error) = self.accept_filter_sources(vec![source]) {
                         self.filter_error.set(error);
                     }
@@ -76,6 +110,9 @@ impl Workbench {
         let placed_item = item.clone();
         let view = match item {
             Item::View(name) => instance.views.get(&name).cloned(),
+            Item::Workspace(_) | Item::WorkspacePreset(_) => {
+                unreachable!("Workspace presets are handled before plot placement")
+            }
             Item::Field(name) => instance.resolve(&name).and_then(|source| {
                 let data = if derived::id(&source).is_some() {
                     self.derived.with_untracked(|fields| {
@@ -120,7 +157,7 @@ impl Workbench {
             return;
         };
         let previous_lines = self
-            .panes
+            .panes()
             .get_untracked()
             .iter()
             .flat_map(|pane| {
@@ -216,7 +253,7 @@ impl Workbench {
             inputs.push((source, data));
         }
         let pane = if new_panel {
-            let pane = self.add_plot(self.active.get_untracked(), view.stacked, view.tab);
+            let pane = self.add_plot(self.active().get_untracked(), view.stacked, view.tab);
             self.profiles.titles.update(|titles| {
                 titles.insert(pane.id, view.name.clone());
             });
@@ -264,7 +301,9 @@ impl Workbench {
             }
             let _ = pane.plot.set_view(plot::Ranges::new(x, y));
         }
-        self.filters_open.set(false);
+        if self.is_current_view() {
+            self.filters_open.set(false);
+        }
         self.status.set(format!("Added view: {}", view.name));
         self.profiles.error.set(String::new());
         Ok(())

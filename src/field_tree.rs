@@ -212,7 +212,7 @@ pub(crate) fn natural_cmp(a: &str, b: &str) -> Ordering {
     }
     a.len().cmp(&b.len())
 }
-fn connect(rows: &mut [TreeRow]) {
+pub(crate) fn connect(rows: &mut [TreeRow]) {
     let mut next = Vec::new();
     for row in rows.iter_mut().rev() {
         while next.last().is_some_and(|depth| *depth > row.depth) {

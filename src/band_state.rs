@@ -125,7 +125,11 @@ impl Workbench {
                         self.geometry.items.update(|items| items.push(item));
                         self.attach_geometry(id, pane, true);
                         self.bands.open.set(false);
-                        self.edit_geometry_on(pane, id);
+                        if self.for_plot(pane.id).is_some_and(|owner| {
+                            owner.view().id == self.views.active.get_untracked()
+                        }) {
+                            self.edit_geometry_on(pane, id);
+                        }
                     }
                     Ok(_) => self.bands.error.set("Target plot no longer exists".into()),
                     Err(error) => self.bands.error.set(error),

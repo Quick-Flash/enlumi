@@ -1,4 +1,4 @@
-use crate::{field_tree::TreeRow, state::Workbench};
+use crate::{field_actions::FieldActionsProps, field_tree::TreeRow, state::Workbench};
 use plot::zgui_workspace::{SeriesSourceActions, SeriesSourceProps};
 use zgui::{prelude::*, reactive::UnsyncCallback};
 
@@ -37,12 +37,12 @@ pub fn FieldRow(
                     box(class = "tree-guide", class:tree-guide-last = move || row.get().is_some_and(|row| row.last), style:left = move || Some(format!("{}px", row.get().map_or(0, |row| row.depth.saturating_sub(1)) * 12 + 10))) {}
                     box(class = "tree-elbow", style:left = move || Some(format!("{}px", row.get().map_or(0, |row| row.depth.saturating_sub(1)) * 12 + 10))) {}
                 }
-                if move || row.get().is_some_and(|row| row.open) {
+                if move || row.get().is_some_and(|row| row.open && row.id!="@raw" && row.id!="@derived") {
                     box(class = "tree-stem", style:left = move || Some(format!("{}px", row.get().map_or(0, |row| row.depth) * 12 + 10))) {}
                 }
             }
             if move || row.get().is_some_and(|row| row.field.is_none()) {
-                control(class = "tree-branch", class:tree-open = move || row.get().is_some_and(|row| row.open), class:topic-branch = move || row.get().is_some_and(|row| row.depth == 0 && !row.id.starts_with('@')), class:field-branch = move || row.get().is_some_and(|row| row.depth > 0), tabindex = Focus::Sequential, {..semantics()},
+                control(class = "tree-branch", class:raw-section = move ||row.get().is_some_and(|row|row.id=="@raw"), class:derived-section = move ||row.get().is_some_and(|row|row.id=="@derived"), class:parameters-section = move ||row.get().is_some_and(|row|row.id=="@parameters"), class:tree-open = move || row.get().is_some_and(|row| row.open), class:topic-branch = move || row.get().is_some_and(|row| row.depth == 1 && !row.id.starts_with('@')), class:field-branch = move || row.get().is_some_and(|row| row.depth > 1), tabindex = Focus::Sequential, {..semantics()},
                     on:click = move |_| { if let Some(id) = current_id() { workbench.toggle_branch(id); } },
                     on:key_down = move |event| {
                         let Some(current) = row.get_untracked() else { return; };
@@ -80,7 +80,7 @@ pub fn FieldRow(
                         let shift = event.modifiers.contains(zgui::vocab::Modifiers::SHIFT);
                         plain_click.set(!ctrl && !shift);
                         if let Some(source) = row.get_untracked().and_then(|row| row.field) {
-                            workbench.select_field(source, ctrl, shift, &visible_fields.get_untracked());
+                            let mut visible=visible_fields.get_untracked();visible.extend(workbench.visible_profile_sources());workbench.select_field(source, ctrl, shift, &visible);
                         }
                     },
                     on:pointer_move = move |_| {
@@ -101,11 +101,13 @@ pub fn FieldRow(
                             event.prevent_default(); event.stop_propagation();
                         }
                     }) {
+                    FieldActions(workbench=workbench,source=Signal::derive_local(move ||row.get().and_then(|row|row.field))) {
                     SeriesSource(id = Signal::derive_local(move || row.get().and_then(|row| row.field)),
                         label = Signal::derive_local(move || row.get().map_or_else(String::new, |row| row.label)),
-                        count = Signal::derive_local(move || row.get().map_or_else(String::new, |row| if row.id.starts_with("@setting/") { workbench.log.with(|log| log.as_ref().and_then(|log| log.setting_number(&row.id))).map_or_else(String::new, |value| value.to_string()) } else { format!("{} samples", row.count) })),
+                        count = Signal::derive_local(move || row.get().map_or_else(String::new, |row| if row.id.starts_with("@setting/") { workbench.log.with(|log| log.as_ref().and_then(|log| log.setting_number(&row.id))).map_or_else(String::new, |value| value.to_string()) } else { row.count.to_string() })),
                         selected = Signal::derive_local(move || row.get().and_then(|row| row.field).is_some_and(|field| workbench.selected_fields.with(|fields| fields.contains(&field)))),
                         drag = workbench.drag, actions = actions)
+                    }
                 }
             }
             }

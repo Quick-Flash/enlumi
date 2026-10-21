@@ -122,7 +122,7 @@ pub fn GeometryOverlay(
                 }
             }
         }
-        if move || visible.get() && workbench.active.get()==pane.id && workbench.geometry.editing.get() && workbench.geometry.tool.get().is_none() {
+        if move || visible.get() && workbench.active().get()==pane.id && workbench.geometry.editing.get() && workbench.geometry.tool.get().is_none() {
             for id in move || workbench.geometry.selected.get().filter(|id| pane.geometry.with(|ids|ids.contains(id)) && !pane.hidden_geometry.with(|ids|ids.contains(id))).into_iter().collect::<Vec<_>>(),key=|id| *id {
                 GeometryInspector(workbench=workbench,id=id)
             }

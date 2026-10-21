@@ -3,10 +3,13 @@ use crate::analysis_workspace::AnalysisWorkspaceProps;
 use crate::github_link::GithubLinkProps;
 use crate::preferences::ThemePreference;
 use crate::screenshot::ScreenshotProps;
+use crate::view_picker::ViewPickerProps;
+use crate::workspace_picker::WorkspacePickerProps;
 use crate::{
     browser::BrowserProps, filter_workspace::FilterWorkspaceProps, fps::FpsProps, state::Workbench,
     workspace::PlotWorkspaceProps,
 };
+use crate::{preset_browser::PresetBrowserProps, preset_dialog::PresetDialogProps};
 use crate::{theme::AppThemeProps, theme_picker::ThemePickerProps};
 use crate::{
     update_controls::UpdateControlsProps, update_notice::UpdateNoticeProps,
@@ -35,8 +38,8 @@ pub fn WorkbenchApp(
                     if workbench.measurement_shortcut(event, event.modifiers) {
                         event.prevent_default();event.stop_propagation();return;
                     }
-                    if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && workbench.analysis.picking_range.get_untracked() {
-                        workbench.analysis.picking_range.set(false); event.prevent_default(); event.stop_propagation(); return;
+                    if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && workbench.analysis().picking_range.get_untracked() {
+                        workbench.analysis().picking_range.set(false); event.prevent_default(); event.stop_propagation(); return;
                     }
                     if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape) && (workbench.geometry.editing.get_untracked() || workbench.geometry.library_drag.get_untracked().is_some() || workbench.bands.open.get_untracked()) {
                         workbench.cancel_band_source(); workbench.finish_geometry_editing(); event.prevent_default(); event.stop_propagation(); return;
@@ -75,14 +78,16 @@ pub fn WorkbenchApp(
                         });
                     }) { "Open log" }
                     ActionButton(class = "equalize-panels", a11y:label = "Equalize dock panel sizes",
-                        disabled = Signal::derive_local(move || !matches!(workbench.layout.get(), plot::workspace::layout::Layout::Split { .. })),
+                        disabled = Signal::derive_local(move || !matches!(workbench.layout().get(), plot::workspace::layout::Layout::Split { .. })),
                         on:click = move |_| workbench.equalize_panels()) { "Equalize panels" }
+                    WorkspacePicker(workbench=workbench)
+                    ViewPicker(workbench=workbench)
                     text(class = "file-name") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Enlumi".into(), |log| log.name.clone()))}}
                     text(class = "status", a11y:role = Role::Status) {{move || workbench.status.get()}}
                     UpdateControls(state = updates)
                     Screenshot(workbench=workbench)
-                    ActionButton(class="analyze-toggle",class:setting-active=move ||workbench.analysis.open.get(),on:click=move |_|{
-                        if workbench.analysis.open.get_untracked() {workbench.analysis.open.set(false);workbench.analysis.picking_range.set(false);}
+                    ActionButton(class="analyze-toggle",class:setting-active=move ||workbench.analysis().open.get(),on:click=move |_|{
+                        if workbench.analysis().open.get_untracked() {workbench.analysis().open.set(false);workbench.analysis().picking_range.set(false);}
                         else {workbench.new_analysis();}
                         workbench.filters_open.set(false);
                     }) {"Analyze"}
@@ -92,6 +97,8 @@ pub fn WorkbenchApp(
                         Fps()
                     }
                 }
+                PresetDialog(workbench=workbench)
+                PresetBrowser(workbench=workbench)
                 UpdateNotice(state = updates)
                 row(class = "body") {
                     Browser(workbench = workbench)
@@ -100,7 +107,7 @@ pub fn WorkbenchApp(
                             ResizablePanel(default_size = 75.0, min_size = 35.0, min_pixels = 350.0, label = "Plots", class = "analysis-plots-panel") {
                                 column(class = "plot-page") { PlotWorkspace(workbench = workbench) }
                             }
-                            if move || workbench.analysis.open.get() {
+                            if move || workbench.analysis().open.get() {
                                 ResizableHandle(label = "Resize plot and analysis panels", class = "workspace-divider")
                                 ResizablePanel(default_size = 25.0, min_size = 25.0, min_pixels = 300.0, label = "Frequency analysis", class = "analysis-side-panel") {
                                     AnalysisWorkspace(workbench = workbench)

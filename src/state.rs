@@ -6,7 +6,7 @@ use plot::{
 use plot::{
     workspace::{layout::Layout, plot_visible},
     zgui_link::LinkOptions,
-    zgui_workspace::{DockPane, DockState, SeriesDrag},
+    zgui_workspace::{DockPane, SeriesDrag},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -34,6 +34,8 @@ impl Line {
 pub struct Pane {
     pub id: u64,
     pub dock: DockPane,
+    pub preset: RwSignal<Option<crate::preset::PresetSource>, LocalStorage>,
+    pub menu_area: RwSignal<Option<NodeRef>, LocalStorage>,
     pub analysis: RwSignal<Option<crate::analysis_state::AnalysisResult>, LocalStorage>,
     pub snapshot: plot::zgui_svg::PlotSnapshotSource,
     pub links: RwSignal<LinkOptions, LocalStorage>,
@@ -48,7 +50,7 @@ pub struct Pane {
     pub view_lines: Signal<Vec<plot::zgui_series::SeriesLine>, LocalStorage>,
 }
 impl Pane {
-    fn new(id: u64) -> Self {
+    pub(crate) fn new(id: u64) -> Self {
         let lines = RwSignal::new_local(Vec::<Line>::new());
         let view_lines = Signal::derive_local(move || {
             lines
@@ -77,6 +79,8 @@ impl Pane {
         Self {
             id,
             dock: DockPane::new(id),
+            preset: RwSignal::new_local(None),
+            menu_area: RwSignal::new_local(None),
             analysis: RwSignal::new_local(None),
             snapshot: StoredValue::new_local(None),
             links: RwSignal::new_local(LinkOptions {
@@ -122,17 +126,21 @@ impl Pane {
 
 #[derive(Clone, Copy)]
 pub struct Workbench {
+    pub authoring: crate::preset_ui::Authoring,
+    pub views: crate::view_state::Views,
+    pub workspaces: crate::workspace_state::Workspaces,
+    pub(crate) bound_view: Option<crate::view_state::WorkspaceView>,
     pub screenshot_clipboard: StoredValue<plot::clipboard::ScreenshotClipboard, LocalStorage>,
     pub log: RwSignal<Option<Arc<LogStore>>, LocalStorage>,
     pub status: RwSignal<String, LocalStorage>,
     pub loading: RwSignal<bool, LocalStorage>,
     pub query: RwSignal<String, LocalStorage>,
+    pub browser_fields: RwSignal<Vec<String>, LocalStorage>,
     pub sidebar_width: RwSignal<f32, LocalStorage>,
     pub sidebar_visible: RwSignal<bool, LocalStorage>,
     pub derived: RwSignal<Vec<crate::derived::DerivedField>, LocalStorage>,
     pub geometry: crate::geometry_state::GeometryUi,
     pub bands: crate::band_state::BandUi,
-    pub analysis: crate::analysis_state::AnalysisUi,
     pub measurement: crate::measurement_state::MeasurementUi,
     pub profiles: crate::profile_state::ProfileUi,
     pub derived_busy: RwSignal<bool, LocalStorage>,
@@ -160,11 +168,6 @@ pub struct Workbench {
     pub filter_cancel: RwSignal<Arc<std::sync::atomic::AtomicBool>, LocalStorage>,
     pub filter_error: RwSignal<String, LocalStorage>,
     pub(crate) filter_generation: RwSignal<u64, LocalStorage>,
-    pub active: RwSignal<u64, LocalStorage>,
-    pub panes: RwSignal<Vec<Pane>, LocalStorage>,
-    pub layout: RwSignal<Layout, LocalStorage>,
-    pub dock: DockState,
-    pub maximized: RwSignal<Option<u64>, LocalStorage>,
     pub drag: SeriesDrag,
     pub line_drag: crate::legend_drag::LegendDrag,
     pub drop_target: RwSignal<Option<u64>, LocalStorage>,
@@ -172,33 +175,30 @@ pub struct Workbench {
     pub selection_anchor: RwSignal<Option<String>, LocalStorage>,
     pub selected_fields: RwSignal<BTreeSet<String>, LocalStorage>,
     pub expanded: RwSignal<BTreeSet<String>, LocalStorage>,
-    owner: StoredValue<zgui::reactive::Owner, LocalStorage>,
-    next_plot: RwSignal<u64, LocalStorage>,
+    pub(crate) owner: StoredValue<zgui::reactive::Owner, LocalStorage>,
+    pub(crate) next_plot: RwSignal<u64, LocalStorage>,
     pub(crate) generation: RwSignal<u64, LocalStorage>,
     next_id: RwSignal<u64, LocalStorage>,
     pub(crate) cache: RwSignal<BTreeMap<String, SeriesData>, LocalStorage>,
 }
 impl Workbench {
     pub fn new() -> Self {
-        let panes = RwSignal::new_local(vec![Pane::new(1)]);
-        let layout = RwSignal::new_local(Layout::Plot(1));
-        let dock = DockState::new(
-            layout,
-            Signal::derive_local(move || {
-                panes.with(|panes| panes.iter().map(|pane| pane.dock).collect())
-            }),
-        );
+        let views = crate::view_state::Views::new();
         Self {
+            authoring: crate::preset_ui::Authoring::new(),
+            views,
+            workspaces: crate::workspace_state::Workspaces::new(views),
+            bound_view: None,
             geometry: crate::geometry_state::GeometryUi::new(),
             screenshot_clipboard: StoredValue::new_local(Default::default()),
             bands: crate::band_state::BandUi::new(),
-            analysis: crate::analysis_state::AnalysisUi::new(),
             measurement: crate::measurement_state::MeasurementUi::new(),
             profiles: crate::profile_state::ProfileUi::new(),
             log: RwSignal::new_local(None),
             status: RwSignal::new_local("Open a log file to begin".into()),
             loading: RwSignal::new_local(false),
             query: RwSignal::new_local(String::new()),
+            browser_fields: RwSignal::new_local(Vec::new()),
             sidebar_width: RwSignal::new_local(280.0),
             sidebar_visible: RwSignal::new_local(true),
             derived: RwSignal::new_local(Vec::new()),
@@ -231,11 +231,6 @@ impl Workbench {
             filter_cancel: RwSignal::new_local(Arc::new(std::sync::atomic::AtomicBool::new(false))),
             filter_error: RwSignal::new_local(String::new()),
             filter_generation: RwSignal::new_local(0),
-            active: RwSignal::new_local(1),
-            panes,
-            layout,
-            dock,
-            maximized: RwSignal::new_local(None),
             drag: SeriesDrag::default(),
             line_drag: crate::legend_drag::LegendDrag::new(),
             drop_target: RwSignal::new_local(None),
@@ -257,7 +252,7 @@ impl Workbench {
         self.next_id.get_untracked()
     }
     pub fn pane(self) -> Pane {
-        self.find(self.active.get_untracked())
+        self.find(self.active().get_untracked())
             .expect("active plot exists")
     }
     pub fn select(self, pane: u64, id: u64) {
@@ -269,7 +264,9 @@ impl Workbench {
     }
     pub fn open(self, path: PathBuf) {
         self.profiles.cancel();
-        self.analysis.reset();
+        for view in self.all_views() {
+            view.analysis.reset();
+        }
         self.cancel_band_source();
         self.bands.jobs.update_value(BTreeMap::clear);
         self.generation.update(|id| *id += 1);
@@ -286,6 +283,15 @@ impl Workbench {
                 Ok(log) => {
                     self.measurement.clear();
                     self.profiles.reset();
+                    self.authoring.pending.set_value(None);
+                    self.authoring.saved.set_value(None);
+                    self.authoring.browse.set(None);
+                    self.authoring.restoring.set_value(Default::default());
+                    self.authoring.open.set(false);
+                    for view in self.all_views() {
+                        view.preset.set(None);
+                    }
+
                     self.cancel_filter_run();
                     self.status.set(format!(
                         "{} signals | {:.2}s | {} warnings",
@@ -309,12 +315,13 @@ impl Workbench {
                     self.line_drag.cancel();
                     self.drag.state.set(None);
                     self.drop_target.set(None);
-                    for pane in self.panes.get_untracked() {
+                    for pane in self.all_panes() {
                         if pane.analysis.get_untracked().is_some() {
                             self.close_plot(pane.id);
                         }
                     }
-                    for pane in self.panes.get_untracked() {
+                    for pane in self.all_panes() {
+                        pane.preset.set(None);
                         pane.lines.set(Vec::new());
                         pane.analysis.set(None);
                         pane.selected.set(None);
@@ -329,6 +336,19 @@ impl Workbench {
                         .flight
                         .set(log.settings.keys().next().copied().unwrap_or(1));
                     self.log.set(Some(Arc::new(log)));
+                    if let Some(source) = self.workspace().source.get_untracked() {
+                        self.authoring
+                            .pending
+                            .set_value(Some(crate::preset_ui::ApplyRequest {
+                                key: crate::profile::identity::ProfileKey::new(
+                                    source.path,
+                                    self.profiles.flight.get_untracked(),
+                                ),
+                                name: source.name,
+                                view: self.views.active.get_untracked(),
+                                action: crate::preset_ui::ApplyAction::Workspace,
+                            }));
+                    }
                     self.apply_default_profiles();
                 }
                 Err(error) => self.status.set(error),
@@ -336,8 +356,14 @@ impl Workbench {
         });
     }
     pub fn add(self, source: String) {
+        self.bind_view().add_view_field(source);
+    }
+    fn add_view_field(self, source: String) {
         if let Some(source) = source.strip_prefix("@analysis/") {
-            self.drop_analysis_sources(vec![source.to_owned()], Some(self.active.get_untracked()));
+            self.drop_analysis_sources(
+                vec![source.to_owned()],
+                Some(self.active().get_untracked()),
+            );
             return;
         }
         if self.loading.get_untracked() {
@@ -358,7 +384,7 @@ impl Workbench {
                 .find(|line| line.source == source)
                 .map(|line| line.id)
         }) {
-            self.select(self.active.get_untracked(), id);
+            self.select(self.active().get_untracked(), id);
             return;
         }
         if crate::derived::id(&source).is_some() {
@@ -441,40 +467,51 @@ impl Workbench {
         });
     }
     pub fn find(self, id: u64) -> Option<Pane> {
-        self.panes
-            .with_untracked(|panes| panes.iter().find(|pane| pane.id == id).copied())
+        self.all_views().iter().find_map(|view| {
+            view.panes
+                .with_untracked(|panes| panes.iter().find(|pane| pane.id == id).copied())
+        })
     }
     pub fn activate(self, id: u64) {
-        if self.find(id).is_some() {
-            self.layout.update(|layout| {
+        if let Some(workbench) = self.for_plot(id) {
+            workbench.layout().update(|layout| {
                 layout.activate(id);
             });
-            self.active.set(id);
+            workbench.active().set(id);
         }
     }
     pub fn add_plot(self, target: u64, stacked: bool, tab: bool) -> Pane {
+        self.for_plot(target)
+            .unwrap_or_else(|| self.bind_view())
+            .add_view_plot(target, stacked, tab)
+    }
+    fn add_view_plot(self, target: u64, stacked: bool, tab: bool) -> Pane {
         self.finish_dock();
         let id = self.next_plot.get_untracked();
         self.next_plot.set(id + 1);
         let pane = self.owner.with_value(|owner| owner.with(|| Pane::new(id)));
-        self.layout.update(|layout| {
+        self.layout().update(|layout| {
             if tab {
                 layout.add_plot_tab(target, id);
             } else {
                 layout.split(target, id, stacked);
             }
         });
-        self.panes.update(|panes| panes.push(pane));
-        self.maximized.set(None);
+        self.panes().update(|panes| panes.push(pane));
+        self.maximized().set(None);
         self.activate(id);
         pane
     }
     pub fn duplicate_plot(self, source: Pane) {
         let copy = self.add_plot(source.id, false, false);
+        self.copy_plot(source, copy);
+    }
+    pub(crate) fn copy_plot(self, source: Pane, copy: Pane) {
         let hidden = source.plot.hidden.get_untracked();
         let mut copied_hidden = BTreeSet::new();
         let mut styles = BTreeMap::new();
         let mut drawing = BTreeMap::new();
+        let mut ids = BTreeMap::new();
         let lines = source
             .lines
             .get_untracked()
@@ -484,7 +521,9 @@ impl Workbench {
                 let options = source
                     .drawing
                     .with_untracked(|drawing| drawing.get(&line.id).copied().unwrap_or_default());
+                let old_id = line.id;
                 line.id = self.id();
+                ids.insert(old_id, line.id);
                 drawing.insert(line.id, options);
                 line.revision = 0;
                 let new = line.id.to_string();
@@ -513,11 +552,57 @@ impl Workbench {
         copy.plot.auto_fit.set(source.plot.auto_fit.get_untracked());
         copy.links.set(source.links.get_untracked());
         copy.geometry.set(source.geometry.get_untracked());
-        copy.legend_order.set(source.legend_order.get_untracked());
+        copy.legend_order
+            .set(source.legend_order.with_untracked(|order| {
+                order
+                    .iter()
+                    .map(|id| ids.get(id).copied().unwrap_or(*id))
+                    .collect()
+            }));
+        self.profiles.instances.update(|instances| {
+            for instance in instances.values_mut() {
+                let copied = instance
+                    .placements
+                    .iter()
+                    .filter(|placement| placement.pane == source.id)
+                    .map(|placement| crate::profile_instance::Placement {
+                        pane: copy.id,
+                        item: placement.item.clone(),
+                        lines: placement
+                            .lines
+                            .iter()
+                            .filter_map(|(token, id)| ids.get(id).map(|id| (token.clone(), *id)))
+                            .collect(),
+                    })
+                    .collect::<Vec<_>>();
+                instance.placements.extend(copied);
+            }
+        });
+        copy.selected.set(
+            source
+                .selected
+                .get_untracked()
+                .and_then(|id| ids.get(&id).copied()),
+        );
+        copy.plot.lod.set(source.plot.lod.get_untracked());
+        copy.plot
+            .annotations
+            .set(source.plot.annotations.get_untracked());
+        copy.plot
+            .show_annotations
+            .set(source.plot.show_annotations.get_untracked());
+        copy.plot
+            .histogram
+            .set(source.plot.histogram.get_untracked());
         copy.hidden_geometry
             .set(source.hidden_geometry.get_untracked());
     }
     pub fn close_plot(self, id: u64) {
+        if let Some(workbench) = self.for_plot(id) {
+            workbench.close_view_plot(id);
+        }
+    }
+    fn close_view_plot(self, id: u64) {
         if self
             .measurement
             .selection
@@ -540,30 +625,30 @@ impl Workbench {
             return;
         }
         self.finish_dock();
-        self.dock
+        self.dock()
             .nodes
             .update_value(|nodes| nodes.retain(|(pane, tab), _| *pane != id && *tab != id));
-        self.dock
+        self.dock()
             .strips
             .update_value(|strips| strips.retain(|strip| strip.pane != id));
-        let current = self.active.get_untracked();
-        let tabs = self.layout.get_untracked().tab_ids(id);
+        let current = self.active().get_untracked();
+        let tabs = self.layout().get_untracked().tab_ids(id);
         let neighbor = tabs.iter().position(|tab| *tab == id).and_then(|index| {
             tabs.get(index + 1)
                 .or_else(|| index.checked_sub(1).and_then(|index| tabs.get(index)))
                 .copied()
         });
-        self.layout.update(|layout| layout.remove(id));
-        self.panes
+        self.layout().update(|layout| layout.remove(id));
+        self.panes()
             .update(|panes| panes.retain(|pane| pane.id != id));
-        if self.maximized.get_untracked() == Some(id) {
-            self.maximized.set(None);
+        if self.maximized().get_untracked() == Some(id) {
+            self.maximized().set(None);
         }
-        let panes = self.panes.get_untracked();
+        let panes = self.panes().get_untracked();
         if panes.is_empty() {
             self.add_plot(id, false, false);
         } else if current == id {
-            let layout = self.layout.get_untracked();
+            let layout = self.layout().get_untracked();
             let next = neighbor
                 .and_then(|id| panes.iter().find(|pane| pane.id == id))
                 .or_else(|| panes.iter().find(|pane| layout.is_visible(pane.id)))
@@ -575,7 +660,7 @@ impl Workbench {
     pub fn maximize(self, id: u64) {
         self.finish_dock();
         self.activate(id);
-        self.maximized
+        self.maximized()
             .update(|current| *current = if *current == Some(id) { None } else { Some(id) });
     }
     pub fn hit_plot(self, x: f32, y: f32) -> Option<u64> {
@@ -588,9 +673,9 @@ impl Workbench {
         if self.filters_open.get_untracked() {
             return None;
         }
-        let layout = self.layout.get_untracked();
-        let maximized = self.maximized.get_untracked();
-        self.panes.with_untracked(|panes| {
+        let layout = self.layout().get_untracked();
+        let maximized = self.maximized().get_untracked();
+        self.panes().with_untracked(|panes| {
             panes.iter().find_map(|pane| {
                 if (!analysis && pane.analysis.get_untracked().is_some())
                     || !plot_visible(pane.id, maximized, layout.clone())
@@ -609,19 +694,19 @@ impl Workbench {
             })
         })
     }
-    fn finish_dock(self) {
-        let done = self.dock.settle_done.get_value();
-        self.dock.settle_done.set_value(None);
+    pub(crate) fn finish_dock(self) {
+        let done = self.dock().settle_done.get_value();
+        self.dock().settle_done.set_value(None);
         if let Some(done) = done {
             done();
         }
-        self.dock.settle_frame.set_value(None);
-        self.dock.settling.set(None);
-        self.dock.rebase.set(false);
-        self.dock.drag.set(None);
-        self.dock.target.set(None);
-        self.dock.group_target.set(None);
-        self.dock.preview.set(None);
+        self.dock().settle_frame.set_value(None);
+        self.dock().settling.set(None);
+        self.dock().rebase.set(false);
+        self.dock().drag.set(None);
+        self.dock().target.set(None);
+        self.dock().group_target.set(None);
+        self.dock().preview.set(None);
     }
     pub fn toggle_branch(self, id: String) {
         self.expanded.update(|expanded| {
@@ -638,7 +723,7 @@ impl Workbench {
     }
     pub fn equalize_panels(self) {
         self.finish_dock();
-        self.maximized.set(None);
-        self.layout.update(Layout::equalize);
+        self.maximized().set(None);
+        self.layout().update(Layout::equalize);
     }
 }

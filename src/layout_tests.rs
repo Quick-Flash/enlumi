@@ -142,7 +142,9 @@ fn pointer(action: PointerAction, x: f32, y: f32) -> SurfaceEvent {
     }
 }
 fn click_class(harness: &mut Harness<zgui::runtime::Runtime>, class: &str) {
-    let rect = harness.app().windows()[0].box_with_class(class).unwrap();
+    let rect = harness.app().windows()[0]
+        .box_with_class(class)
+        .unwrap_or_else(|| panic!("Missing visible control: {class}"));
     let (x, y) = (
         rect.origin.x.0 + rect.size.width.0 / 2.0,
         rect.origin.y.0 + rect.size.height.0 / 2.0,
@@ -312,7 +314,7 @@ fn compact_saved_rows_toggle_editing_delete_with_x_and_fill_window_height() {
             .is_empty()
     );
     click_class(&mut harness, "derived-library-item");
-    click_class(&mut harness, "filter-done-editing");
+    click_class(&mut harness, "new-derived-field");
     assert!(workbench.filter_mode.get_untracked().is_new());
     workbench
         .accept_filter_sources(vec![crate::derived::key(first)])
@@ -428,15 +430,20 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
         Some(zgui::platform::CursorStyle::ResizeNorthSouth)
     );
     let window = &harness.app().windows()[0];
-    let actions = window.box_with_class("filter-actions").unwrap();
     let editor_panel = window.box_with_class("filter-editor").unwrap();
-    let kind = window.box_with_class("filter-kind-picker").unwrap();
-    assert!(
-        actions.origin.y.0 < editor_panel.origin.y.0 + 40.0
-            && actions.origin.y.0 + actions.size.height.0 <= kind.origin.y.0,
-        "Actions belong directly below Filter heading, before type picker: {actions:?}, {editor_panel:?}, {kind:?}"
-    );
     let create = window.box_with_class("save-derived-field").unwrap();
+    for class in [
+        "filter-done-editing",
+        "chain-derived-field",
+        "plot-derived-field",
+        "edit-created-fields",
+    ] {
+        assert_eq!(
+            window.nodes_with_class(class).len(),
+            0,
+            "{class} removed; Save handles filter editing"
+        );
+    }
     let footer = window.box_with_class("filter-create-action").unwrap();
     assert!(
         create.size.height.0 >= 40.0 && create.size.width.0 >= 220.0,
@@ -506,10 +513,12 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
     );
     click_class(&mut harness, "custom-rust-filter");
     assert_eq!(workbench.filter_kind.get_untracked(), "rust");
-    assert!(
+    assert_eq!(
         harness.app().windows()[0]
             .nodes_with_class("filter-type")
-            .is_empty()
+            .len(),
+        1,
+        "Built-in filter choices stay available in Rust mode"
     );
     let rust_width = harness.app().windows()[0]
         .box_with_class("filter-editor")
@@ -538,6 +547,8 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
     );
     click_class(&mut harness, "filter-zero-phase");
     assert!(workbench.filter_zero_phase.get_untracked());
+    click_class(&mut harness, "custom-rust-filter");
+    assert_eq!(workbench.filter_kind.get_untracked(), "rust");
     click_class(&mut harness, "filter-type");
     click_class(&mut harness, "filter-type-average");
     assert_eq!(workbench.filter_kind.get_untracked(), "average");
@@ -1277,7 +1288,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     loop {
         harness.settle(128);
         if !harness.app().windows()[0]
-            .nodes_with_class("topic-branch")
+            .nodes_with_class("raw-section")
             .is_empty()
         {
             break;
@@ -1467,6 +1478,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
             .nodes_with_class("link-controls")
             .is_empty()
     );
+    click_class(&mut harness, "raw-section");
     let window = &harness.app().windows()[0];
     let topic = window.box_with_class("topic-branch").unwrap();
     let (x, y) = (
@@ -1504,9 +1516,16 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
             < 1.0,
         "Chevron must center vertically in row: arrow={arrow:?}, topic={topic:?}"
     );
-    let guide = harness.app().windows()[0]
-        .box_with_class("tree-guide")
-        .unwrap();
+    let window = &harness.app().windows()[0];
+    let guide = window
+        .nodes_with_class("tree-guide")
+        .into_iter()
+        .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+        .find(|rect| {
+            rect.origin.x == stem.origin.x
+                && rect.origin.y.0 == stem.origin.y.0 + stem.size.height.0
+        })
+        .expect("Child guide continues expanded topic trunk");
     assert_eq!(
         stem.origin.x, guide.origin.x,
         "Parent and child trunks must align"
@@ -1728,30 +1747,26 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     loop {
         harness.settle(128);
         let window = &harness.app().windows()[0];
-        if window
-            .nodes_with_class("filter-result-status")
-            .iter()
-            .any(|node| window.dom().text_content(*node) == "Created 2 fields")
-        {
+        if window.nodes_with_class("derived-library-item").len() == 2 {
             break;
         }
         assert!(Instant::now() < deadline, "Derived batch never computed");
         std::thread::sleep(Duration::from_millis(2));
     }
-    click_class(&mut harness, "plot-derived-field");
+    click_class(&mut harness, "filters-done");
     assert_eq!(
         harness.app().windows()[0]
             .nodes_with_class("legend-entry")
             .len(),
-        3
+        1
     );
-    assert!(counts.borrow().peak_marks >= 3);
+    assert!(counts.borrow().peak_marks >= 1);
     click_class(&mut harness, "duplicate-plot-button");
     assert_eq!(
         harness.app().windows()[0]
             .nodes_with_class("legend-entry")
             .len(),
-        6
+        2
     );
     let second = harness.app().windows()[0]
         .box_with_class("workbench-plot-active")
@@ -1771,52 +1786,6 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     let first = harness.app().windows()[0]
         .box_with_class("workbench-plot")
         .unwrap();
-    click_class(&mut harness, "open-filters");
-    harness.advance(Duration::from_millis(500));
-    harness.settle(128);
-    click_class(&mut harness, "chain-derived-field");
-    click_class(&mut harness, "save-derived-field");
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        harness.settle(128);
-        let window = &harness.app().windows()[0];
-        if window
-            .nodes_with_class("filter-result-status")
-            .iter()
-            .any(|node| window.dom().text_content(*node) == "Created 2 fields")
-        {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Second filter stage never computed"
-        );
-        std::thread::sleep(Duration::from_millis(2));
-    }
-    assert_eq!(
-        harness.app().windows()[0]
-            .nodes_with_class("derived-library-item")
-            .len(),
-        4
-    );
-    click_class(&mut harness, "clear-filter-sources");
-    let window = &harness.app().windows()[0];
-    assert!(window.nodes_with_class("filter-source-row").is_empty());
-    assert!(!window.nodes_with_class("chain-derived-field").is_empty());
-    assert!(
-        window.box_with_class("filter-mode-edit").is_none(),
-        "Creating fields must leave a new draft"
-    );
-    assert_eq!(window.nodes_with_class("derived-library-item").len(), 4);
-    click_class(&mut harness, "save-derived-field");
-    assert!(
-        harness.app().windows()[0]
-            .nodes_with_class("filter-error")
-            .is_empty()
-    );
-    click_class(&mut harness, "filters-done");
-    harness.advance(Duration::from_millis(500));
-    harness.settle(128);
     for _ in 0..8 {
         let window = &harness.app().windows()[0];
         if window.nodes_with_class("metric-option").len() >= 2 {
@@ -1863,7 +1832,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
         if harness.app().windows()[0]
             .nodes_with_class("legend-entry")
             .len()
-            == 7
+            == 3
         {
             break;
         }
@@ -2246,7 +2215,7 @@ fn splitter_drag_pushes_other_edge_only_at_minimum_and_restores_it_on_reverse() 
         .into_handler(move || {
             let workbench = Workbench::new(); let first = workbench.pane();
             let second = workbench.add_plot(first.id, false, false); let third = workbench.add_plot(second.id, false, false);
-            workbench.layout.set(plot::workspace::layout::Layout::flat(&[(first.id, 1.0), (second.id, 1.0), (third.id, 1.0)], false));
+            workbench.layout().set(plot::workspace::layout::Layout::flat(&[(first.id, 1.0), (second.id, 1.0), (third.id, 1.0)], false));
             view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "page workbench") { row(class = "body") { PlotWorkspace(workbench = workbench) } } } }
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
@@ -2324,7 +2293,7 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
                 && third.links.get_untracked().pointer
         );
         let guide = workbench
-            .dock
+            .dock()
             .group_guides()
             .into_iter()
             .max_by(|a, b| {
@@ -2334,7 +2303,7 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
         let target = guide.button(zone);
         let (x, y) = ((target.x + 11.0) as f32, (target.y + 11.0) as f32);
         let tab = workbench
-            .dock
+            .dock()
             .nodes
             .with_value(|nodes| *nodes.get(&(third.id, third.id)).unwrap());
         let bounds = tab.window_bounds().unwrap();
@@ -2347,7 +2316,7 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock.target.get_untracked(),
+            workbench.dock().target.get_untracked(),
             Some((third.id, zone))
         );
         let window = &harness.app().windows()[0];
@@ -2404,7 +2373,7 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
             .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench=Workbench::new(); let first=workbench.pane(); let second=workbench.add_plot(first.id,false,false); let third=workbench.add_plot(second.id,false,false); let fourth=workbench.add_plot(second.id,true,false); let source=workbench.add_plot(first.id,false,true);
-                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],false); assert!(layout.split(second.id,fourth.id,true)); assert!(layout.add_plot_tab(first.id,source.id)); workbench.layout.set(layout);
+                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],false); assert!(layout.split(second.id,fourth.id,true)); assert!(layout.add_plot_tab(first.id,source.id)); workbench.layout().set(layout);
                 *captured.borrow_mut()=Some((workbench,first,second,third,fourth,source));
                 view! { ThemeProvider(scheme=ColorScheme::Dark) { column(class="page workbench") { row(class="body") { PlotWorkspace(workbench=workbench) } } } }
             }).unwrap();
@@ -2420,7 +2389,7 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
             third.dock.node.window_bounds().unwrap(),
         ];
         let guide = workbench
-            .dock
+            .dock()
             .group_guides()
             .into_iter()
             .find(|guide| guide.members == vec![second.id, fourth.id])
@@ -2428,7 +2397,7 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
         let target = guide.button(zone);
         let (x, y) = ((target.x + 11.0) as f32, (target.y + 11.0) as f32);
         let tab = workbench
-            .dock
+            .dock()
             .nodes
             .with_value(|nodes| *nodes.get(&(source.id, source.id)).unwrap());
         let bounds = tab.window_bounds().unwrap();
@@ -2441,7 +2410,7 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock.group_target.get_untracked(),
+            workbench.dock().group_target.get_untracked(),
             Some((vec![second.id, fourth.id], zone))
         );
         assert!(
@@ -2548,7 +2517,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
             .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench=Workbench::new();let first=workbench.pane();let second=workbench.add_plot(first.id,true,false);let third=workbench.add_plot(second.id,true,false);let outside=if top {third}else{first};let source=workbench.add_plot(outside.id,false,true);
-                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],true);assert!(layout.add_plot_tab(outside.id,source.id));workbench.layout.set(layout);
+                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],true);assert!(layout.add_plot_tab(outside.id,source.id));workbench.layout().set(layout);
                 let members=if top {vec![first.id,second.id]}else{vec![second.id,third.id]};*captured.borrow_mut()=Some((workbench,outside,source,members,first,second,third));
                 view!{ThemeProvider(scheme=ColorScheme::Dark){column(class="page workbench"){row(class="body"){PlotWorkspace(workbench=workbench)}}}}
             }).unwrap();
@@ -2562,7 +2531,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
             saved.borrow().clone().unwrap();
         let original = source.dock.node.window_bounds().unwrap();
         let guide = workbench
-            .dock
+            .dock()
             .group_guides()
             .into_iter()
             .find(|guide| guide.members == members)
@@ -2571,7 +2540,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
         let target = guide.button(DropZone::Right);
         let (x, y) = ((target.x + 11.0) as f32, (target.y + 11.0) as f32);
         let tab = workbench
-            .dock
+            .dock()
             .nodes
             .with_value(|nodes| *nodes.get(&(source.id, source.id)).unwrap());
         let rect = tab.window_bounds().unwrap();
@@ -2584,7 +2553,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock.group_target.get_untracked(),
+            workbench.dock().group_target.get_untracked(),
             Some((members.clone(), DropZone::Right))
         );
         let window = &harness.app().windows()[0];
@@ -2598,7 +2567,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
             .box_with_class("dock-preview-source")
             .unwrap();
         let opposite = workbench
-            .dock
+            .dock()
             .group_guides()
             .into_iter()
             .find(|guide| {
@@ -2609,10 +2578,10 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
             .unwrap();
         let other = opposite.button(DropZone::Right);
         let other_point = ((other.x + 11.0) as f32, (other.y + 11.0) as f32);
-        let generic_target = workbench.dock.target.get_untracked();
+        let generic_target = workbench.dock().target.get_untracked();
         harness.deliver_to_first(pointer(PointerAction::Moved, other_point.0, other_point.1));
         harness.settle(128);
-        assert_eq!(workbench.dock.target.get_untracked(), generic_target);
+        assert_eq!(workbench.dock().target.get_untracked(), generic_target);
         let other_preview = harness.app().windows()[0]
             .box_with_class("dock-preview-source")
             .unwrap();
@@ -2688,7 +2657,7 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
         let (workbench, first, second) = saved.borrow().unwrap();
         let original = second.dock.node.window_bounds().unwrap();
         let source = workbench
-            .dock
+            .dock()
             .nodes
             .with_value(|nodes| *nodes.get(&(first.id, first.id)).unwrap());
         let bounds = source.window_bounds().unwrap();
@@ -2715,10 +2684,10 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock.target.get_untracked(),
+            workbench.dock().target.get_untracked(),
             Some((second.id, zone))
         );
-        assert!(workbench.dock.group_target.get_untracked().is_none());
+        assert!(workbench.dock().group_target.get_untracked().is_none());
         let window = &harness.app().windows()[0];
         for class in [
             "dock-zone-top",
@@ -2751,7 +2720,10 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
         if let Some(neighbor) = neighbor {
             assert_eq!(second.dock.node.window_bounds().unwrap(), neighbor);
         } else {
-            assert_eq!(workbench.layout.get_untracked().tab_ids(first.id).len(), 2);
+            assert_eq!(
+                workbench.layout().get_untracked().tab_ids(first.id).len(),
+                2
+            );
         }
         assert!(
             harness.app().windows()[0]
@@ -3055,7 +3027,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
     )));
     harness.settle(256);
     let (workbench, first, second) = saved.borrow().unwrap();
-    let original = workbench.layout.get_untracked();
+    let original = workbench.layout().get_untracked();
     let bounds = second.dock.node.window_bounds().unwrap();
     let scale = second.dock.node.scale();
     let center = (
@@ -3064,7 +3036,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
     );
     for source in [first, second] {
         let tab = workbench
-            .dock
+            .dock()
             .nodes
             .with_value(|nodes| nodes[&(second.id, source.id)]);
         let bounds = tab.window_bounds().unwrap();
@@ -3076,7 +3048,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
         harness.deliver_to_first(pointer(PointerAction::Moved, center.0, center.1));
         harness.settle(128);
         assert!(
-            workbench.dock.target.get_untracked().is_none(),
+            workbench.dock().target.get_untracked().is_none(),
             "Self-center remains no-op drop"
         );
         let window = &harness.app().windows()[0];
@@ -3113,7 +3085,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
         std::thread::sleep(Duration::from_millis(180));
         harness.advance(Duration::from_millis(500));
         harness.settle(256);
-        assert_eq!(workbench.layout.get_untracked(), original);
+        assert_eq!(workbench.layout().get_untracked(), original);
         assert!(
             harness.app().windows()[0]
                 .nodes_with_class("dock-drop-overlay")
@@ -3268,7 +3240,7 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
     loop {
         harness.settle(128);
         if !harness.app().windows()[0]
-            .nodes_with_class("topic-branch")
+            .nodes_with_class("raw-section")
             .is_empty()
         {
             break;
@@ -3415,9 +3387,795 @@ fn geometry_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workben
     (harness, workbench)
 }
 
+fn preset_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workbench) {
+    use crate::{
+        browser::BrowserProps, preset_browser::PresetBrowserProps,
+        preset_dialog::PresetDialogProps, theme::AppThemeProps, view_picker::ViewPickerProps,
+        workspace::PlotWorkspaceProps,
+    };
+    let model = Rc::new(RefCell::new(None));
+    let built = model.clone();
+    let handler = app()
+        .with_size(1200., 850.)
+        .with_renderer(Box::new(|_, target| {
+            let mut renderer = CaptureRenderer::new();
+            renderer.configure(target);
+            Ok(Box::new(renderer))
+        }))
+        .with_stylesheet(format!(
+            "{}\n{}\n{}\n{}",
+            plot::zgui_surface::stylesheet(),
+            plot::zgui_time_series::stylesheet(),
+            plot::zgui_workspace::stylesheet(),
+            crate::theme::stylesheet()
+        ))
+        .into_handler(move || {
+            let workbench = crate::state::Workbench::new();
+            *built.borrow_mut() = Some(workbench);
+            view! {AppTheme(palette=crate::theme::Palette::Forest){column(class="workbench page") {
+                row(class="toolbar"){ViewPicker(workbench=workbench)}
+                row(class="body"){Browser(workbench=workbench) PlotWorkspace(workbench=workbench)}
+                PresetDialog(workbench=workbench) PresetBrowser(workbench=workbench)
+            }}}
+        })
+        .unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.),
+        DevicePx(850.),
+    )));
+    harness.settle(128);
+    let workbench = model.borrow().unwrap();
+    (harness, workbench)
+}
+
+#[test]
+fn labels_panel_opens_on_first_click() {
+    let (mut harness, workbench) = preset_harness();
+    workbench.selected_field.set(Some("sensor/0/value".into()));
+    harness.settle(128);
+    for attempt in 0..2 {
+        let start = Instant::now();
+        click_class(&mut harness, "field-label-trigger");
+        eprintln!("Labels open {attempt}: {:?}", start.elapsed());
+        assert!(
+            harness.app().windows()[0]
+                .box_with_class("field-label-editor")
+                .is_some()
+        );
+        assert!(
+            harness.app().windows()[0]
+                .nodes_with_class("field-label-provenance")
+                .is_empty()
+        );
+        click_class(&mut harness, "field-label-details");
+        assert!(
+            harness.app().windows()[0]
+                .box_with_class("field-label-provenance")
+                .is_some()
+        );
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::named(
+                zgui::vocab::NamedKey::Escape,
+                zgui::vocab::PhysicalKey::Unidentified(0),
+            ),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.advance(Duration::from_millis(400));
+        harness.settle(128);
+    }
+}
+
+#[test]
+fn view_save_as_previews_plots_without_redundant_view_disclosure() {
+    let (mut harness, workbench) = preset_harness();
+    workbench.save_preset_as(crate::preset_capture::CaptureKind::View);
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    assert!(window.box_with_class("captured-view-plots").is_some());
+    assert!(!window.nodes_with_class("profile-recipe-preview").is_empty());
+    assert!(
+        window.nodes_with_class("profile-builder-toggle").is_empty(),
+        "Single captured view needs no Views dropdown"
+    );
+}
+
+#[test]
+fn preset_dialog_scrolls_long_contents_without_moving_save_button() {
+    let (mut harness, workbench) = preset_harness();
+    workbench.begin_save(crate::preset_capture::CaptureKind::Plot(
+        workbench.pane().id,
+    ));
+    workbench.authoring.session.update(|session| {
+        let document = &mut session.as_mut().unwrap().bundle.document;
+        document["plot_presets"] = serde_json::json!([]);
+        document["signals"] = serde_json::json!(
+            (0..40)
+                .map(|index| serde_json::json!({
+                    "id": format!("field_{index}"), "source": "sensor/0/value",
+                    "metadata": {"name": format!("Field {index}")}
+                }))
+                .collect::<Vec<_>>()
+        );
+    });
+    harness.settle(128);
+    click_class(&mut harness, "profile-builder-toggle");
+    let window = &harness.app().windows()[0];
+    let viewport = window.nodes_with_class("zui-scroll-area__viewport")[0];
+    let position = zgui::view::ViewHost::scroll_position(window.host().as_ref(), viewport);
+    let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), viewport).unwrap();
+    let save = window.box_with_class("preset-save").unwrap();
+    let painted_bars = window
+        .scene()
+        .primitives
+        .quads
+        .iter()
+        .filter(|quad| {
+            let [x, y, width, height] = quad.bounds;
+            width > 0.
+                && width <= 16.
+                && height > 20.
+                && x >= rect.origin.x.0 + rect.size.width.0 - 16.
+                && x + width <= rect.origin.x.0 + rect.size.width.0 + 1.
+                && y >= rect.origin.y.0 - 1.
+                && y + height <= rect.origin.y.0 + rect.size.height.0 + 1.
+        })
+        .count();
+    assert!(
+        painted_bars >= 2,
+        "Viewport needs painted track and thumb; found {painted_bars}; viewport={rect:?}; bar={:?}; narrow quads={:?}",
+        window.box_with_class("zui-scroll-area__bar"),
+        window
+            .scene()
+            .primitives
+            .quads
+            .iter()
+            .filter(|quad| quad.bounds[2] <= 16. && quad.bounds[3] > 20.)
+            .map(|quad| quad.bounds)
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        position.content_size.height.0 > position.scrollport.height.0 + 100.,
+        "Long form must overflow viewport: {position:?}; viewport={rect:?}; form={:?}; body={:?}",
+        window.box_with_class("profile-builder-form"),
+        window.box_with_class("profile-builder-body")
+    );
+    let thumb = window
+        .scene()
+        .primitives
+        .quads
+        .iter()
+        .find(|quad| {
+            let [x, y, width, height] = quad.bounds;
+            width > 0.
+                && width <= 7.
+                && height > 20.
+                && x >= rect.origin.x.0 + rect.size.width.0 - 16.
+                && x + width <= rect.origin.x.0 + rect.size.width.0
+                && y >= rect.origin.y.0
+        })
+        .expect("Visible scrollbar thumb")
+        .bounds;
+    let (x, y) = (thumb[0] + thumb[2] / 2., thumb[1] + thumb[3] / 2.);
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x, y + 30.));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y + 30.));
+    harness.settle(128);
+    let offset =
+        zgui::view::ViewHost::scroll_position(harness.app().windows()[0].host().as_ref(), viewport)
+            .offset
+            .y
+            .0;
+    assert!(offset > 0., "Dragging visible thumb must scroll form");
+    harness.deliver_to_first(SurfaceEvent::Wheel {
+        event: zgui::vocab::WheelEvent {
+            delta: zgui::vocab::ScrollDelta::Pixels(Size::new(CssPx(0.), CssPx(200.))),
+            phase: zgui::vocab::ScrollPhase::Moved,
+            position: Point::new(CssPx(rect.origin.x.0 + 40.), CssPx(rect.origin.y.0 + 40.)),
+            id: zgui::vocab::PointerId::MOUSE,
+            kind: zgui::vocab::PointerKind::Mouse,
+        },
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    assert!(
+        zgui::view::ViewHost::scroll_position(window.host().as_ref(), viewport)
+            .offset
+            .y
+            .0
+            > offset
+    );
+    assert_eq!(window.box_with_class("preset-save").unwrap(), save);
+}
+
+#[test]
+fn preset_plot_context_opens_save_editor_and_writes_reviewed_profile() {
+    let (mut harness, workbench) = preset_harness();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("motor.json");
+    let pane = workbench.pane();
+    click_class(&mut harness, "plot-preset-menu");
+    click_class(&mut harness, "plot-save-preset");
+    assert!(workbench.authoring.open.get_untracked());
+    workbench.authoring.path.set(path.display().to_string());
+    workbench.authoring.name.set("Motor".into());
+    harness.advance(Duration::from_millis(200));
+    harness.settle(128);
+    let dialog = harness.app().windows()[0]
+        .box_with_class("profile-builder")
+        .unwrap();
+    assert!(
+        dialog.size.width.0 > 500. && dialog.size.height.0 <= 850.,
+        "Save editor fits viewport: {dialog:?}"
+    );
+    click_class(&mut harness, "preset-save");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.authoring.busy.get_untracked() {
+        assert!(Instant::now() < deadline);
+        harness.pump();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert!(
+        !workbench.authoring.open.get_untracked(),
+        "{}",
+        workbench.authoring.error.get_untracked()
+    );
+    let saved = crate::profile::load(&path).unwrap();
+    assert_eq!(saved.plot_presets[0].name, "Motor");
+    assert_eq!(
+        pane.preset.get_untracked().unwrap().path,
+        path.canonicalize().unwrap()
+    );
+}
+
+#[test]
+fn field_double_click_renames_and_context_edit_keeps_identity_and_plot_bounds() {
+    let (mut harness, workbench) = preset_harness();
+    let id = workbench.id();
+    let source = crate::derived::key(id);
+    let data = plot::time_series::SeriesData::new(vec![
+        plot::PlotPoint { x: 0., y: 1. },
+        plot::PlotPoint { x: 1., y: 2. },
+    ])
+    .unwrap();
+    workbench.derived.set(vec![crate::derived::DerivedField {
+        id,
+        name: "RPM".into(),
+        sources: vec!["sensor/0/rpm".into()],
+        group: id,
+        filter: crate::derived::FilterSpec::MovingAverage(1),
+        data: Some(data.clone()),
+    }]);
+    workbench.expanded.update(|expanded| {
+        expanded.insert("@derived".into());
+    });
+    let pane = workbench.pane();
+    pane.lines.set(vec![crate::state::Line {
+        id: workbench.id(),
+        source: source.clone(),
+        name: "RPM".into(),
+        data,
+        revision: 0,
+    }]);
+    let ranges = plot::Ranges::new((0.2, 0.4), (-2., 4.));
+    pane.plot.set_view(ranges).unwrap();
+    harness.settle(128);
+    click_class(&mut harness, "metric-option");
+    click_class(&mut harness, "metric-option");
+    harness.advance(Duration::from_millis(20));
+    harness.settle(128);
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("field-inline-rename")
+            .len(),
+        1
+    );
+    harness.deliver_to_first(SurfaceEvent::Key {
+        state: zgui::vocab::KeyState::Pressed,
+        event: zgui::vocab::KeyEvent::character("Motor speed"),
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.deliver_to_first(SurfaceEvent::Key {
+        state: zgui::vocab::KeyState::Pressed,
+        event: zgui::vocab::KeyEvent::named(
+            zgui::vocab::NamedKey::Enter,
+            zgui::vocab::PhysicalKey::Unidentified(0),
+        ),
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.settle(128);
+    assert_eq!(
+        workbench.profiles.metadata.get_untracked()[&source].name,
+        "Motor speed"
+    );
+    assert_eq!(pane.lines.get_untracked()[0].source, source);
+    assert_eq!(pane.lines.get_untracked()[0].name, "Motor speed");
+    assert_eq!(pane.plot.ranges.get_untracked(), ranges);
+    assert_eq!(workbench.panes().with_untracked(Vec::len), 1);
+    assert!(workbench.drag.state.get_untracked().is_none());
+    let field = harness.app().windows()[0]
+        .box_with_class("metric-option")
+        .unwrap();
+    for action in [PointerAction::Pressed, PointerAction::Released] {
+        let mut event = pointer(action, field.origin.x.0 + 20., field.origin.y.0 + 10.);
+        if let SurfaceEvent::Pointer { event, .. } = &mut event {
+            event.button = Some(zgui::vocab::PointerButton::Secondary);
+        }
+        harness.deliver_to_first(event);
+    }
+    harness.settle(128);
+    click_class(&mut harness, "field-edit-labels");
+    harness.advance(Duration::from_millis(200));
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("field-label-editor")
+            .is_some()
+    );
+    assert_eq!(pane.plot.ranges.get_untracked(), ranges);
+}
+
+#[test]
+fn view_picker_creates_renames_duplicates_switches_and_closes_views() {
+    use crate::{
+        theme::AppThemeProps, view_picker::ViewPickerProps, workspace::PlotWorkspaceProps,
+    };
+    let model = Rc::new(RefCell::new(None));
+    let built = Rc::clone(&model);
+    let counts = Rc::new(RefCell::new(Counts::default()));
+    let handler=app().with_size(1000.,650.)
+        .with_renderer(Box::new(move |_,target|{let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(Capture{renderer,counts:Rc::clone(&counts)}))}))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
+        .into_handler(move ||{let workbench=crate::state::Workbench::new();*built.borrow_mut()=Some(workbench);view!{AppTheme(palette=crate::theme::Palette::Forest){column(class="workbench page"){row(class="toolbar"){ViewPicker(workbench=workbench)} column(class="plot-page"){PlotWorkspace(workbench=workbench)}}}}}).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1000.),
+        DevicePx(650.),
+    )));
+    harness.settle(128);
+    let workbench = model.borrow().unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    workbench
+        .profiles
+        .directory
+        .set(Some(directory.path().to_owned()));
+    click_class(&mut harness, "view-menu");
+    click_class(&mut harness, "view-save-preset");
+    harness.advance(Duration::from_millis(200));
+    harness.settle(128);
+    assert!(!workbench.authoring.open.get_untracked());
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("view-menu-content")
+            .is_none()
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.authoring.busy.get_untracked() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+        harness.settle(128);
+    }
+    assert!(workbench.authoring.error.with_untracked(String::is_empty));
+    click_class(&mut harness, "view-menu");
+    click_class(&mut harness, "view-save-as");
+    harness.advance(Duration::from_millis(200));
+    harness.settle(128);
+    assert!(workbench.authoring.open.get_untracked());
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("view-menu-content")
+            .is_none()
+    );
+    workbench.authoring.open.set(false);
+    click_class(&mut harness, "view-select");
+    click_class(&mut harness, "view-new-choice");
+    assert_eq!(workbench.views.items.with_untracked(Vec::len), 2);
+    click_class(&mut harness, "view-menu");
+    click_class(&mut harness, "view-duplicate");
+    assert_eq!(workbench.views.items.with_untracked(Vec::len), 3);
+    let copy = workbench.views.active.get_untracked();
+    click_class(&mut harness, "view-menu");
+    click_class(&mut harness, "view-name");
+    for (text, modifiers) in [("a", Modifiers::PRIMARY), ("Comparison", Modifiers::NONE)] {
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character(text),
+            modifiers,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
+    click_class(&mut harness, "view-rename");
+    assert_eq!(workbench.view().name.get_untracked(), "Comparison");
+    let select = |harness: &mut Harness<zgui::runtime::Runtime>, label: &str| {
+        harness.advance(Duration::from_millis(200));
+        harness.settle(128);
+        click_class(harness, "view-select");
+        harness.advance(Duration::from_millis(200));
+        harness.settle(128);
+        let window = &harness.app().windows()[0];
+        let item = window
+            .nodes_with_class("view-choice-select")
+            .into_iter()
+            .find(|node| {
+                window.dom().text_content(*node) == label
+                    && zgui::view::ViewHost::window_box(window.host().as_ref(), *node)
+                        .is_some_and(|rect| rect.size.width.0 > 0. && rect.size.height.0 > 0.)
+            })
+            .unwrap();
+        let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), item).unwrap();
+        let (x, y) = (
+            rect.origin.x.0 + rect.size.width.0 / 2.,
+            rect.origin.y.0 + rect.size.height.0 / 2.,
+        );
+        harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+        harness.deliver_to_first(pointer(PointerAction::Released, x, y));
+        harness.settle(128);
+    };
+    select(&mut harness, "Untitled");
+    assert_eq!(workbench.views.active.get_untracked(), 1);
+    select(&mut harness, "Comparison");
+    assert_eq!(workbench.views.active.get_untracked(), copy);
+    let window = &harness.app().windows()[0];
+    assert_eq!(
+        window
+            .dom()
+            .text_content(window.nodes_with_class("view-caption")[0]),
+        "View: Comparison"
+    );
+    select(&mut harness, "Untitled");
+    click_class(&mut harness, "view-select");
+    let window = &harness.app().windows()[0];
+    let choice = window
+        .nodes_with_class("view-choice")
+        .into_iter()
+        .find(|node| window.dom().text_content(*node).contains("Comparison"))
+        .unwrap();
+    let remove = window
+        .dom()
+        .children(choice)
+        .into_iter()
+        .find(|node| window.nodes_with_class("view-choice-remove").contains(node))
+        .unwrap();
+    let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), remove).unwrap();
+    let (x, y) = (
+        rect.origin.x.0 + rect.size.width.0 / 2.,
+        rect.origin.y.0 + rect.size.height.0 / 2.,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y));
+    harness.settle(128);
+    assert_eq!(workbench.views.items.with_untracked(Vec::len), 2);
+    assert!(workbench.for_view(copy).is_none());
+}
+
+#[test]
+fn workspace_views_restore_layout_and_isolate_linked_axes() {
+    fn visible_plots(harness: &Harness<zgui::runtime::Runtime>) -> usize {
+        let window = &harness.app().windows()[0];
+        window
+            .nodes_with_class("workbench-plot")
+            .into_iter()
+            .filter(|node| {
+                zgui::view::ViewHost::window_box(window.host().as_ref(), *node)
+                    .is_some_and(|rect| rect.size.width.0 > 0. && rect.size.height.0 > 0.)
+            })
+            .count()
+    }
+    let (mut harness, workbench) = geometry_harness();
+    let original = workbench.bind_view();
+    let first = original.pane();
+    let second = original.add_plot(first.id, true, false);
+    let links = plot::zgui_link::LinkOptions {
+        x: true,
+        y: false,
+        pointer: true,
+    };
+    first.links.set(links);
+    second.links.set(links);
+    first
+        .plot
+        .set_view(plot::Ranges::new((0., 2.), (-1., 1.)))
+        .unwrap();
+    second
+        .plot
+        .set_view(plot::Ranges::new((0., 2.), (-3., 3.)))
+        .unwrap();
+    harness.settle(128);
+    let layout = original.layout().get_untracked();
+    let bounds = first.plot.ranges.get_untracked();
+    let other = workbench.new_view();
+    workbench.pane().links.set(links);
+    workbench
+        .pane()
+        .plot
+        .set_view(plot::Ranges::new((100., 200.), (10., 20.)))
+        .unwrap();
+    harness.settle(128);
+    assert_eq!(
+        visible_plots(&harness),
+        1,
+        "Only current view has visible plots"
+    );
+    assert_eq!(
+        first.plot.ranges.get_untracked(),
+        bounds,
+        "Another view cannot publish linked ranges into hidden plots"
+    );
+    workbench.switch_view(original.view().id);
+    harness.settle(128);
+    assert_eq!(visible_plots(&harness), 2);
+    assert_eq!(workbench.layout().get_untracked(), layout);
+    assert_eq!(first.plot.ranges.get_untracked(), bounds);
+    assert_eq!(
+        second.plot.ranges.get_untracked().y,
+        plot::Ranges::new((0., 2.), (-3., 3.)).y
+    );
+    workbench.switch_view(other);
+    harness.settle(128);
+    assert_eq!(
+        workbench.pane().plot.ranges.get_untracked(),
+        plot::Ranges::new((100., 200.), (10., 20.))
+    );
+}
+
+#[test]
+fn background_fields_profiles_and_ffts_stay_in_originating_view() {
+    use crate::profile::identity::{Drag, Item, ProfileKey};
+    use crate::profile_state::Destination;
+    let (mut harness, workbench) = geometry_harness();
+    let raw = "esc_status/0/esc[5].esc_rpm".to_owned();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    workbench.log.set(Some(log));
+    let origin = workbench.bind_view();
+    let time = origin.pane();
+    origin.add(raw.clone());
+    origin.analysis().sources.set(vec![raw.clone()]);
+    origin.run_analysis();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("background.json");
+    std::fs::write(&path,serde_json::json!({"version":1,"name":"Background","filters":[{"id":"scaled","metadata":{"name":"Scaled RPM"},"inputs":[raw],"operation":{"kind":"affine","gain":2}}]}).to_string()).unwrap();
+    let source = Drag {
+        profile: ProfileKey::new(path.canonicalize().unwrap(), 1),
+        item: Item::Field("$scaled".into()),
+    }
+    .source();
+    workbench.queue_field_sources(vec![source], Destination::Plot(Some(time.id)), None);
+    let other = workbench.new_view();
+    workbench.filters_open.set(true);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        harness.settle(128);
+        if !origin.analysis().busy.get_untracked()
+            && !workbench.profiles.busy.get_untracked()
+            && time.lines.with_untracked(Vec::len) == 2
+            && origin.panes().with_untracked(Vec::len) == 2
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Background view jobs failed: {}; {}",
+            origin.analysis().message.get_untracked(),
+            workbench.profiles.error.get_untracked()
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(workbench.views.active.get_untracked(), other);
+    assert!(
+        workbench.filters_open.get_untracked(),
+        "Hidden profile completion cannot close current configuration panel"
+    );
+    assert_eq!(workbench.panes().with_untracked(Vec::len), 1);
+    assert!(workbench.pane().lines.with_untracked(Vec::is_empty));
+    let fft = origin.panes().with_untracked(|panes| {
+        panes
+            .iter()
+            .find(|pane| pane.analysis.with_untracked(Option::is_some))
+            .copied()
+            .unwrap()
+    });
+    let derived = workbench.derived.get_untracked()[0].key();
+    let revision = time.lines.with_untracked(|lines| {
+        lines
+            .iter()
+            .find(|line| line.source == derived)
+            .unwrap()
+            .revision
+    });
+    let mut fields = workbench.derived.get_untracked();
+    let data = plot::time_series::SeriesData::new(vec![
+        plot::PlotPoint { x: 0., y: 42. },
+        plot::PlotPoint { x: 1., y: 43. },
+    ])
+    .unwrap();
+    fields[0].data = Some(data);
+    workbench.publish_filter_fields(fields);
+    assert!(
+        time.lines.with_untracked(|lines| lines
+            .iter()
+            .find(|line| line.source == derived)
+            .unwrap()
+            .revision)
+            > revision,
+        "Shared filter edits refresh hidden plots"
+    );
+    origin.edit_analysis(fft);
+    origin.run_analysis();
+    origin.close_plot(fft.id);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while origin.analysis().busy.get_untracked() {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert_eq!(
+        origin.panes().with_untracked(Vec::len),
+        1,
+        "Closed FFT target cannot be recreated by pending update"
+    );
+    origin.analysis().target.set(None);
+    origin.run_analysis();
+    workbench.close_view(origin.view().id);
+    harness.settle(128);
+    assert_eq!(workbench.views.active.get_untracked(), other);
+    assert!(workbench.for_view(origin.view().id).is_none());
+    assert_eq!(workbench.all_panes().len(), 1);
+}
+
+#[test]
+fn unified_browser_drops_mixed_sources_and_prepares_profiles_without_losing_fields() {
+    use crate::profile::identity::{Drag, Item, ProfileKey};
+    use crate::profile_state::Destination;
+    let (mut harness, workbench) = geometry_harness();
+    let raw = "esc_status/0/esc[5].esc_rpm".to_owned();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    let data = log.prepare(&raw).unwrap();
+    workbench.log.set(Some(log));
+    let id = workbench.id();
+    let derived = crate::derived::key(id);
+    workbench.derived.set(vec![crate::derived::DerivedField {
+        id,
+        name: "Local RPM".into(),
+        sources: vec![raw.clone()],
+        group: id,
+        filter: crate::derived::FilterSpec::MovingAverage(3),
+        data: Some(data),
+    }]);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("mixed.json");
+    std::fs::write(&path,serde_json::json!({"version":1,"name":"Mixed sources","filters":[{"id":"scaled","metadata":{"name":"Scaled RPM","unit":"rpm"},"inputs":[raw],"operation":{"kind":"affine","gain":3}}]}).to_string()).unwrap();
+    let profile = Drag {
+        profile: ProfileKey::new(path.canonicalize().unwrap(), 1),
+        item: Item::Field("$scaled".into()),
+    }
+    .source();
+    let selected = vec![raw.clone(), derived.clone(), profile.clone()];
+    for (index, source) in selected.iter().enumerate() {
+        workbench.select_field(source.clone(), index > 0, false, &selected);
+    }
+    assert_eq!(
+        workbench
+            .selected_fields
+            .with_untracked(std::collections::BTreeSet::len),
+        3,
+        "Selection spans raw, derived and profile fields"
+    );
+    workbench.select_field(profile.clone(), false, true, &selected);
+    assert_eq!(
+        workbench
+            .selected_fields
+            .with_untracked(std::collections::BTreeSet::len),
+        1
+    );
+    workbench.select_field(raw.clone(), false, false, &selected);
+    workbench.select_field(profile.clone(), false, true, &selected);
+    assert_eq!(
+        workbench
+            .selected_fields
+            .with_untracked(std::collections::BTreeSet::len),
+        3,
+        "Shift ranges cross source kinds"
+    );
+    harness.settle(128);
+    let pane = harness.app().windows()[0]
+        .box_with_class("time-series-plot")
+        .unwrap();
+    let point = (
+        pane.origin.x.0 + pane.size.width.0 / 2.,
+        pane.origin.y.0 + pane.size.height.0 / 2.,
+    );
+    workbench.drop_fields(raw.clone(), point.0, point.1);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        harness.settle(128);
+        if !workbench.profiles.busy.get_untracked()
+            && workbench.pane().lines.with_untracked(Vec::len) == 3
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Mixed drop failed: {}",
+            workbench.profiles.error.get_untracked()
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let plotted = workbench.pane().lines.with_untracked(|lines| {
+        lines
+            .iter()
+            .map(|line| line.source.clone())
+            .collect::<Vec<_>>()
+    });
+    assert!(plotted.contains(&raw) && plotted.contains(&derived));
+    workbench.drop_fields(profile.clone(), point.0, point.1);
+    harness.settle(128);
+    assert_eq!(
+        workbench.pane().lines.with_untracked(Vec::len),
+        3,
+        "Dragging from profile side preserves selection and skips duplicates"
+    );
+    workbench.queue_field_sources(selected.clone(), Destination::Filter, None);
+    assert_eq!(workbench.filter_inputs.with_untracked(Vec::len), 3);
+    workbench.filters_open.set(false);
+    workbench.analysis().sources.set(Vec::new());
+    workbench.selected_field.set(Some(raw));
+    workbench.analyze_selection();
+    assert_eq!(workbench.analysis().sources.with_untracked(Vec::len), 3);
+    assert!(
+        workbench
+            .analysis()
+            .sources
+            .with_untracked(|sources| sources
+                .iter()
+                .all(|source| !source.starts_with("@profile/"))),
+        "Analysis receives resolved signal IDs"
+    );
+}
+
 #[test]
 fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     let (mut harness, workbench) = geometry_harness();
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("field-label-trigger")
+            .is_some(),
+        "Label settings stay visible without a field selection"
+    );
+    for class in [
+        "create-selection-fft",
+        "create-selection-psd",
+        "analyze-selection",
+    ] {
+        assert!(
+            harness.app().windows()[0].box_with_class(class).is_some(),
+            "{class} stays visible without selection"
+        );
+    }
+    click_class(&mut harness, "create-selection-fft");
+    assert!(
+        !workbench.analysis().open.get_untracked(),
+        "FFT requires a log and field selection"
+    );
     let log = std::sync::Arc::new(
         crate::log::LogStore::read(std::path::Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -3439,23 +4197,40 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
             .nodes_with_class("log-settings-trigger")
             .is_empty()
     );
-    click_class(&mut harness, "fields-menu");
-    if harness.app().windows()[0]
-        .nodes_with_class("profiles-trigger")
-        .is_empty()
-    {
-        click_class(&mut harness, "fields-menu");
-    }
     click_class(&mut harness, "profiles-trigger");
     harness.advance(Duration::from_millis(500));
+    harness.settle(128);
+    for class in [
+        "create-selection-fft",
+        "create-selection-psd",
+        "analyze-selection",
+    ] {
+        assert!(
+            harness.app().windows()[0].box_with_class(class).is_some(),
+            "{class} remains after choosing profile directory"
+        );
+    }
+    click_class(&mut harness, "create-selection-psd");
+    assert!(
+        !workbench.analysis().open.get_untracked(),
+        "PSD requires field or view selection"
+    );
+    click_class(&mut harness, "analyze-selection");
+    assert!(
+        workbench.analysis().open.get_untracked(),
+        "Configure opens Analyze without a selection"
+    );
+    workbench.analysis().open.set(false);
+    workbench.profiles.open.set(true);
     harness.settle(128);
     let library = harness.app().windows()[0]
         .box_with_class("profile-library")
         .unwrap();
     assert!(
-        library.size.width.0 > 200.0 && library.size.height.0 > 300.0,
+        library.size.width.0 > 200.0 && library.size.height.0 > 0.0,
         "{library:?}"
     );
+    click_class(&mut harness, "profile-files-toggle");
     let deadline = Instant::now() + Duration::from_secs(10);
     while harness.app().windows()[0]
         .nodes_with_class("profile-file-name")
@@ -3467,25 +4242,38 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     }
     click_class(&mut harness, "profile-file-name");
     harness.settle(128);
-    let fields_before = harness.app().windows()[0]
-        .box_with_class("profiles-trigger")
-        .unwrap();
-    click_class(&mut harness, "fields-menu");
+    workbench.query.set("ESC view".into());
     harness.settle(128);
-    let fields_after = harness.app().windows()[0]
-        .box_with_class("profiles-trigger")
-        .unwrap();
-    assert_eq!(
-        fields_before.origin, fields_after.origin,
-        "Header spacing must stay fixed"
+    click_class(&mut harness, "profile-output-section");
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("profile-view-source")
+            .is_empty(),
+        "Profile sections remain collapsible during search"
+    );
+    workbench.query.set(String::new());
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("profile-view-source")
+            .is_empty(),
+        "Clearing search preserves collapsed state"
+    );
+    click_class(&mut harness, "profile-output-section");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("raw-section")
+            .is_some(),
+        "Raw and Profiles remain available together"
     );
     click_class(&mut harness, "profiles-trigger");
-    harness.settle(128);
+    assert!(!workbench.profiles.open.get_untracked());
+    click_class(&mut harness, "profiles-trigger");
     assert!(
         !harness.app().windows()[0]
             .nodes_with_class("profile-view-source")
             .is_empty(),
-        "Expansion survives mode switch"
+        "Expansion survives collapsing Profiles"
     );
     let profile_output = crate::profile::identity::Drag {
         profile: crate::profile::identity::ProfileKey::new(path.canonicalize().unwrap(), 1),
@@ -3507,12 +4295,28 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     }
     harness.settle(128);
     assert_eq!(
-        workbench.panes.with_untracked(Vec::len),
+        workbench.panes().with_untracked(Vec::len),
         2,
         "{}",
         workbench.profiles.error.get_untracked()
     );
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
+    workbench.selected_field.set(Some(profile_output.source()));
+    harness.settle(128);
+    click_class(&mut harness, "analyze-selection");
+    assert!(workbench.analysis().open.get_untracked());
+    assert_eq!(
+        workbench.analysis().sources.get_untracked(),
+        vec!["esc_status/0/esc[5].esc_rpm".to_owned()]
+    );
+    workbench.analysis().open.set(false);
+    workbench.selected_field.set(None);
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("create-selection-fft")
+            .is_some()
+    );
     workbench.activate(1);
     for _ in 0..2 {
         workbench.use_profile_items(
@@ -3527,7 +4331,7 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
         }
         harness.settle(128);
     }
-    assert_eq!(workbench.panes.with_untracked(Vec::len), 2);
+    assert_eq!(workbench.panes().with_untracked(Vec::len), 2);
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
     assert_eq!(
         workbench
@@ -4417,7 +5221,7 @@ fn plot_tab_pointer_rename_and_keyboard_commit_cancel_blur() {
     harness.advance(Duration::from_millis(20));
     harness.settle(128);
     text(&mut harness, "Pitch PID");
-    click_class(&mut harness, "fields-menu");
+    click_class(&mut harness, "raw-section");
     assert_eq!(
         workbench.profiles.titles.get_untracked()[&1],
         "Pitch PID",
@@ -4673,9 +5477,9 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
                 heatmap:(mode==Mode::Spectrogram).then(||Heatmap{values:vec![Some(0.0),Some(1.0),Some(2.0),Some(3.0)].into(),columns:2,rows:2,x_low:0.0,x_high:10.0,y_low:0.0,y_high:500.0,x_label:"Time (s)".into(),y_label:"Frequency (Hz)".into(),min_db:0.0,max_db:3.0}),
             };
             let time=workbench.add_analysis_panel(result(Mode::Spectrogram));
-            workbench.layout.update(|layout| {assert!(layout.dock_split(time.id,normal.id,DropZone::Right));});
+            workbench.layout().update(|layout| {assert!(layout.dock_split(time.id,normal.id,DropZone::Right));});
             let frequency=workbench.add_analysis_panel(result(Mode::Fft));
-            workbench.layout.update(|layout| {assert!(layout.dock_split(frequency.id,normal.id,DropZone::Bottom));});
+            workbench.layout().update(|layout| {assert!(layout.dock_split(frequency.id,normal.id,DropZone::Bottom));});
             *captured.borrow_mut()=Some((workbench,normal,time,frequency));
             view! { column(class="page workbench") { row(class="body") { PlotWorkspace(workbench=workbench) } } }
         }).unwrap();
@@ -4748,9 +5552,9 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
     let copy = workbench.pane();
     assert!(copy.analysis.get_untracked().is_some());
     workbench.maximize(copy.id);
-    assert_eq!(workbench.maximized.get_untracked(), Some(copy.id));
+    assert_eq!(workbench.maximized().get_untracked(), Some(copy.id));
     workbench.close_plot(copy.id);
-    assert_eq!(workbench.panes.with_untracked(|panes| panes.len()), 3);
+    assert_eq!(workbench.panes().with_untracked(|panes| panes.len()), 3);
 }
 
 #[test]
@@ -4782,8 +5586,8 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
                 sources.push(field.key());
                 workbench.derived.update(|fields| fields.push(field));
             }
-            workbench.analysis.open.set(true);
-            workbench.analysis.sources.set(sources);
+            workbench.analysis().open.set(true);
+            workbench.analysis().sources.set(sources);
             let normal = workbench.pane();
             *captured.borrow_mut() = Some((workbench, normal));
             view! { column(class="page workbench") { row(class="body") {
@@ -4814,7 +5618,7 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
         harness.settle(128);
         harness.deliver_to_first(pointer(PointerAction::Released, target.0, target.1));
         let deadline = Instant::now() + Duration::from_secs(10);
-        while workbench.analysis.busy.get_untracked() {
+        while workbench.analysis().busy.get_untracked() {
             assert!(Instant::now() < deadline);
             harness.pump();
             std::thread::sleep(Duration::from_millis(2));
@@ -4828,10 +5632,10 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
     );
     drag(&mut harness, 0, target);
     assert_eq!(
-        workbench.panes.get_untracked().len(),
+        workbench.panes().get_untracked().len(),
         2,
         "{}",
-        workbench.analysis.message.get_untracked()
+        workbench.analysis().message.get_untracked()
     );
     assert!(normal.lines.get_untracked().is_empty());
     let fft = workbench.pane();
@@ -4840,13 +5644,13 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
             .as_ref()
             .is_some_and(|result| result.mode == crate::spectral::Mode::Fft)
     }));
-    let inputs = workbench.analysis.sources.get_untracked();
+    let inputs = workbench.analysis().sources.get_untracked();
     let zoom = plot::Ranges::new((12., 80.), (0.01, 0.2));
     fft.plot.set_view(zoom).unwrap();
     workbench.edit_analysis(fft);
     workbench.run_analysis();
     let deadline = Instant::now() + Duration::from_secs(10);
-    while workbench.analysis.busy.get_untracked() {
+    while workbench.analysis().busy.get_untracked() {
         assert!(Instant::now() < deadline);
         harness.pump();
         std::thread::sleep(Duration::from_millis(2));
@@ -4864,6 +5668,13 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
         4,
         "All modes remain available while editing"
     );
+    for class in ["analysis-new", "analysis-edit-selected", "analysis-update"] {
+        assert_eq!(
+            harness.app().windows()[0].nodes_with_class(class).len(),
+            1,
+            "{class} remains present while editing"
+        );
+    }
     let window = &harness.app().windows()[0];
     let psd = window
         .nodes_with_class("analysis-mode")
@@ -4878,17 +5689,24 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
     harness.deliver_to_first(pointer(PointerAction::Pressed, point.0, point.1));
     harness.deliver_to_first(pointer(PointerAction::Released, point.0, point.1));
     harness.settle(128);
-    assert_eq!(workbench.analysis.mode.get_untracked(), "psd");
+    assert_eq!(workbench.analysis().mode.get_untracked(), "psd");
     assert!(
-        workbench.analysis.target.get_untracked().is_none(),
+        workbench.analysis().target.get_untracked().is_none(),
         "Choosing a new mode must detach existing FFT edit target"
     );
+    for class in ["analysis-new", "analysis-edit-selected", "analysis-update"] {
+        assert_eq!(
+            harness.app().windows()[0].nodes_with_class(class).len(),
+            1,
+            "{class} remains present when creating new analysis"
+        );
+    }
     assert!(fft.analysis.get_untracked().unwrap().mode == crate::spectral::Mode::Fft);
-    workbench.analysis.target.set(None);
-    workbench.analysis.sources.set(inputs);
-    workbench.analysis.mode.set("heatmap".into());
+    workbench.analysis().target.set(None);
+    workbench.analysis().sources.set(inputs);
+    workbench.analysis().mode.set("heatmap".into());
     harness.settle(128);
-    let condition = workbench.analysis.condition_drop;
+    let condition = workbench.analysis().condition_drop;
     let bounds = condition.window_bounds().unwrap();
     drag(
         &mut harness,
@@ -4899,17 +5717,17 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
         ),
     );
     assert_eq!(
-        workbench.analysis.condition.get_untracked(),
-        workbench.analysis.sources.get_untracked()[1]
+        workbench.analysis().condition.get_untracked(),
+        workbench.analysis().sources.get_untracked()[1]
     );
-    workbench.analysis.size.set("128".into());
+    workbench.analysis().size.set("128".into());
     harness.settle(128);
     drag(&mut harness, 0, target);
     assert_eq!(
-        workbench.panes.get_untracked().len(),
+        workbench.panes().get_untracked().len(),
         3,
         "{}",
-        workbench.analysis.message.get_untracked()
+        workbench.analysis().message.get_untracked()
     );
     assert!(workbench.pane().analysis.with_untracked(|result| {
         result
@@ -4931,8 +5749,8 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
             let workbench = Workbench::new();
             let pane = workbench.pane();
             pane.plot.set_view(plot::Ranges::new((0., 10.), (-1., 1.))).unwrap();
-            workbench.analysis.open.set(true);
-            workbench.analysis.picking_range.set(true);
+            workbench.analysis().open.set(true);
+            workbench.analysis().picking_range.set(true);
             *captured.borrow_mut()=Some((workbench,pane));
             view! { column(class="page") { column(class="range-test") {AnalysisRange(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} } }
         }).unwrap();
@@ -4960,10 +5778,10 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
     );
     harness.deliver_to_first(pointer(PointerAction::Released, left, y));
     harness.settle(128);
-    assert!(!workbench.analysis.picking_range.get_untracked());
+    assert!(!workbench.analysis().picking_range.get_untracked());
     assert!(
         (workbench
-            .analysis
+            .analysis()
             .start
             .get_untracked()
             .parse::<f64>()
@@ -4974,7 +5792,7 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
     );
     assert!(
         (workbench
-            .analysis
+            .analysis()
             .end
             .get_untracked()
             .parse::<f64>()
@@ -4988,8 +5806,8 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
         .set_view(plot::Ranges::new((1., 4.), (-1., 1.)))
         .unwrap();
     workbench.use_visible_analysis_range();
-    assert_eq!(workbench.analysis.start.get_untracked(), "1");
-    assert_eq!(workbench.analysis.end.get_untracked(), "4");
+    assert_eq!(workbench.analysis().start.get_untracked(), "1");
+    assert_eq!(workbench.analysis().end.get_untracked(), "4");
 }
 
 #[test]
@@ -5012,7 +5830,7 @@ fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
                 options:crate::spectral::Options{mode:crate::spectral::Mode::Fft,size:0,window:crate::spectral::Window::Hann,overlap:50,heatmap_bins:40,start:None,end:None,remove_dc:true},
                 series:TimeSeriesSet::new(vec![TimeSeries::new("wave","Wave",data)]).unwrap(),
             });
-            workbench.layout.update(|layout|{assert!(layout.dock_split(fft.id,normal.id,plot::workspace::layout::DropZone::Right));});
+            workbench.layout().update(|layout|{assert!(layout.dock_split(fft.id,normal.id,plot::workspace::layout::DropZone::Right));});
             for pane in [normal,fft]{pane.plot.set_view(plot::Ranges::new((0.,1.),(0.,2.))).unwrap();}
             let palette=RwSignal::new_local(Palette::Slate);
             let input=NodeRef::new();let keys=NodeRef::new();*captured.borrow_mut()=Some((workbench,normal,fft,input,keys,palette));

@@ -34,9 +34,8 @@ pub fn FilterKindPicker(workbench: Workbench) -> impl IntoView {
                 ToggleGroupItem(value = "builtin", label = "Built-in filters", class = "builtin-filter-mode") { "Built-in" }
                 ToggleGroupItem(value = "rust", label = "Custom Rust function", class = "custom-rust-filter") { "Rust function" }
             }
-            if move || workbench.filter_kind.get() != "rust" {
-                Select(value = Binding::controlled(Signal::derive_local(move || workbench.filter_kind.get()), move |kind| workbench.set_filter_kind(kind))) {
-                    SelectTrigger(label = "Filter type", class = "filter-type") { SelectValue(placeholder = "Choose filter") }
+                Select(value = Binding::controlled(Signal::derive_local(move || if workbench.filter_kind.get()=="rust" {String::new()} else {workbench.filter_kind.get()}), move |kind: String| {builtin.set(kind.clone());workbench.set_filter_kind(kind)})) {
+                    SelectTrigger(label = "Filter type", class = "filter-type",disabled=Signal::derive_local(move ||workbench.script_busy.get())) { SelectValue(placeholder = "Choose filter") }
                     SelectContent(class = "filter-type-surface") {
                         SelectItem(value = "low") { "Low-pass (PT1)" }
                         SelectItem(value = "high") { "High-pass (PT1)" }
@@ -48,7 +47,7 @@ pub fn FilterKindPicker(workbench: Workbench) -> impl IntoView {
                         SelectItem(value = "rpy") { "Quaternion \u{2192} RPY" }
                     }
                 }
-            }
+            if move ||workbench.filter_kind.get()=="rust" {text(class="muted") {"Choose a built-in filter above to switch from Rust."}}
         }
     }
 }

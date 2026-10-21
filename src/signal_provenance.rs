@@ -7,73 +7,83 @@ use zgui::prelude::*;
 
 impl Workbench {
     pub fn signal_provenance(self, source: &str) -> String {
-        let fields = self.derived.get();
-        let instances = self.profiles.instances.get();
-        let log = self.log.get();
-        let mut pending = vec![(source.to_owned(), 0)];
-        let mut seen = BTreeSet::new();
-        let mut lines = Vec::new();
-        while let Some((source, depth)) = pending.pop() {
-            if !seen.insert(source.clone()) {
-                continue;
-            }
-            let indent = "  ".repeat(depth.min(16));
-            if let Some(field) = fields.iter().find(|f| f.key() == source) {
-                lines.push(format!(
-                    "{indent}{} · {}\n{indent}ID: {source}",
-                    field.name,
-                    field.filter.label()
-                ));
-                for instance in instances.values() {
-                    if let Some(filter) = instance
-                        .definition
-                        .filters
-                        .iter()
-                        .find(|f| instance.ids.fields.get(&f.id) == Some(&field.id))
-                    {
-                        let mut settings = Vec::new();
-                        operation_settings(&filter.operation, &mut settings);
-                        for reference in settings {
-                            let value = log
-                                .as_ref()
-                                .map(|log| {
-                                    crate::profile::resolve::record(log, reference)
-                                        .map(|(_, s)| {
-                                            format!("{} = {} · {}", s.name, s.value, s.timing())
-                                        })
-                                        .unwrap_or_else(|e| e)
-                                })
-                                .unwrap_or_default();
+        self.derived.with(|fields| {
+            self.profiles.instances.with(|instances| {
+                self.log.with(|log| {
+                    let mut pending = vec![(source.to_owned(), 0)];
+                    let mut seen = BTreeSet::new();
+                    let mut lines = Vec::new();
+                    while let Some((source, depth)) = pending.pop() {
+                        if !seen.insert(source.clone()) {
+                            continue;
+                        }
+                        let indent = "  ".repeat(depth.min(16));
+                        if let Some(field) = fields.iter().find(|f| f.key() == source) {
                             lines.push(format!(
-                                "{indent}Parameter · flight {} · {value}",
-                                reference.flight
+                                "{indent}{} · {}\n{indent}ID: {source}",
+                                field.name,
+                                field.filter.label()
                             ));
+                            for instance in instances.values() {
+                                if let Some(filter) = instance
+                                    .definition
+                                    .filters
+                                    .iter()
+                                    .find(|f| instance.ids.fields.get(&f.id) == Some(&field.id))
+                                {
+                                    let mut settings = Vec::new();
+                                    operation_settings(&filter.operation, &mut settings);
+                                    for reference in settings {
+                                        let value = log
+                                            .as_ref()
+                                            .map(|log| {
+                                                crate::profile::resolve::record(log, reference)
+                                                    .map(|(_, s)| {
+                                                        format!(
+                                                            "{} = {} · {}",
+                                                            s.name,
+                                                            s.value,
+                                                            s.timing()
+                                                        )
+                                                    })
+                                                    .unwrap_or_else(|e| e)
+                                            })
+                                            .unwrap_or_default();
+                                        lines.push(format!(
+                                            "{indent}Parameter · flight {} · {value}",
+                                            reference.flight
+                                        ));
+                                    }
+                                }
+                            }
+                            pending.extend(
+                                field
+                                    .sources
+                                    .iter()
+                                    .rev()
+                                    .map(|source| (source.clone(), depth + 1)),
+                            );
+                        } else if let Some(setting) =
+                            log.as_ref().and_then(|log| log.setting(&source))
+                        {
+                            lines.push(format!(
+                                "{indent}{} = {} · {}\n{indent}ID: {source}",
+                                setting.name,
+                                setting.value,
+                                setting.timing()
+                            ));
+                        } else {
+                            lines.push(format!("{indent}Raw · {source}"));
+                        }
+                        if seen.len() >= 256 {
+                            lines.push("Further inputs omitted (256 shown)".into());
+                            break;
                         }
                     }
-                }
-                pending.extend(
-                    field
-                        .sources
-                        .iter()
-                        .rev()
-                        .map(|source| (source.clone(), depth + 1)),
-                );
-            } else if let Some(setting) = log.as_ref().and_then(|log| log.setting(&source)) {
-                lines.push(format!(
-                    "{indent}{} = {} · {}\n{indent}ID: {source}",
-                    setting.name,
-                    setting.value,
-                    setting.timing()
-                ));
-            } else {
-                lines.push(format!("{indent}Raw · {source}"));
-            }
-            if seen.len() >= 256 {
-                lines.push("Further inputs omitted (256 shown)".into());
-                break;
-            }
-        }
-        lines.join("\n")
+                    lines.join("\n")
+                })
+            })
+        })
     }
 }
 fn scalar_settings<'a>(scalar: &'a Scalar, settings: &mut Vec<&'a Setting>) {

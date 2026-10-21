@@ -11,7 +11,7 @@ pub fn Screenshot(workbench: Workbench, #[prop(optional)] pane: Option<Pane>) ->
 }
 
 impl Workbench {
-    fn copy_screenshot(self, pane: Option<Pane>) {
+    pub(crate) fn copy_screenshot(self, pane: Option<Pane>) {
         let svg = match self.capture_screenshot(pane) {
             Ok(svg) => svg,
             Err(error) => {
@@ -33,7 +33,7 @@ impl Workbench {
         if let Some(pane) = pane {
             capture_plot(pane.snapshot, true)
         } else {
-            let slots = self.panes.with_untracked(|panes| {
+            let slots = self.panes().with_untracked(|panes| {
                 panes
                     .iter()
                     .map(|pane| WorkspaceSnapshot {
@@ -45,14 +45,14 @@ impl Workbench {
             });
             capture_workspace_with_overlay(
                 &slots,
-                self.maximized.get_untracked(),
-                &self.layout.get_untracked(),
+                self.maximized().get_untracked(),
+                &self.layout().get_untracked(),
                 "#12181c",
                 true,
             )
         }
     }
-    fn save_screenshot(self, pane: Option<Pane>, format: ScreenshotFormat) {
+    pub(crate) fn save_screenshot(self, pane: Option<Pane>, format: ScreenshotFormat) {
         let svg = match self.capture_screenshot(pane) {
             Ok(svg) => svg,
             Err(error) => {

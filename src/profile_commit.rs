@@ -20,6 +20,43 @@ impl Workbench {
             .profiles
             .instances
             .with_untracked(|all| all.get(&instance.key).cloned());
+        if let Some(old) = &previous {
+            let removed_fields = old
+                .field_ids()
+                .difference(&instance.field_ids())
+                .copied()
+                .filter(|id| {
+                    self.derived
+                        .with_untracked(|fields| fields.iter().any(|field| field.id == *id))
+                })
+                .collect::<BTreeSet<_>>();
+            let removed_geometry = old
+                .geometry_ids()
+                .difference(&instance.geometry_ids())
+                .copied()
+                .collect::<BTreeSet<_>>();
+            if self.profiles.instances.with_untracked(|instances| {
+                instances
+                    .values()
+                    .filter(|other| other.key != instance.key)
+                    .any(|other| {
+                        other
+                            .ids
+                            .fields
+                            .values()
+                            .any(|id| removed_fields.contains(id))
+                            || other
+                                .ids
+                                .geometry
+                                .values()
+                                .any(|id| removed_geometry.contains(id))
+                    })
+            }) {
+                return Err(
+                    "Reload kept previous setup: another profile uses removed resources".into(),
+                );
+            }
+        }
         let old_geometry = previous
             .as_ref()
             .map(AppliedProfile::geometry_ids)
@@ -31,8 +68,15 @@ impl Workbench {
             .values()
             .filter(|other| other.key != instance.key)
         {
-            for (source, meta) in &instance.metadata {
-                if other.metadata.get(source).is_some_and(|old| old != meta) {
+            for (source, meta) in &mut instance.metadata {
+                if let Some(old) = other.metadata.get(source)
+                    && old != meta
+                {
+                    if instance.definition.version >= 2 {
+                        // Saved plot recipes carry labels, not exclusive ownership of inputs.
+                        meta.clone_from(old);
+                        continue;
+                    }
                     return Err(format!(
                         "Metadata conflict: {source} supplied by {}",
                         other.name
@@ -105,9 +149,9 @@ impl Workbench {
                             }?;
                             Some((source, data))
                         }),
-                        Item::Geometry(_) => None,
+                        Item::Geometry(_) | Item::Workspace(_) | Item::WorkspacePreset(_) => None,
                     };
-                    for pane in self.panes.get_untracked() {
+                    for pane in self.all_panes() {
                         pane.lines.update(|lines| {
                             if let Some((source, data)) = &replacement {
                                 if let Some(line) = lines.iter_mut().find(|line| line.id == *id) {
@@ -140,7 +184,7 @@ impl Workbench {
             all.insert(instance.key.clone(), instance);
         });
         self.rebuild_profile_metadata();
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             pane.geometry.update(|ids| {
                 ids.retain(|id| !old_geometry.contains(id) || self.geometry_item(*id).is_some())
             });
@@ -184,11 +228,9 @@ impl Workbench {
                 for (token, source) in &view.bindings {
                     // Existing tracked lines can move between plots. Never move them back.
                     if placement.lines.get(token).is_some_and(|id| {
-                        self.panes.with_untracked(|panes| {
-                            panes.iter().any(|pane| {
-                                pane.lines
-                                    .with_untracked(|lines| lines.iter().any(|line| line.id == *id))
-                            })
+                        self.all_panes().iter().any(|pane| {
+                            pane.lines
+                                .with_untracked(|lines| lines.iter().any(|line| line.id == *id))
                         })
                     }) {
                         continue;
@@ -289,7 +331,7 @@ impl Workbench {
                 .collect::<Vec<_>>()
         });
         let created = instance.line_ids();
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             blockers.extend(pane.lines.with_untracked(|lines| {
                 lines
                     .iter()
@@ -301,6 +343,17 @@ impl Workbench {
                     .collect::<Vec<_>>()
             }));
         }
+        blockers.extend(self.profiles.instances.with_untracked(|instances| {
+            instances
+                .values()
+                .filter(|other| other.key != *key)
+                .filter(|other| {
+                    other.ids.fields.values().any(|id| owned.contains(id))
+                        || other.ids.geometry.values().any(|id| geometry.contains(id))
+                })
+                .map(|other| format!("Profile: {} uses shared resources", other.name))
+                .collect::<Vec<_>>()
+        }));
         blockers.extend(self.geometry.items.with_untracked(|items| {
             items
                 .iter()
@@ -345,7 +398,7 @@ impl Workbench {
         self.geometry
             .items
             .update(|all| all.retain(|g| !geometry.contains(&g.id)));
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             pane.geometry
                 .update(|all| all.retain(|id| !geometry.contains(id)));
             pane.lines.update(|all| {
@@ -363,7 +416,7 @@ impl Workbench {
             failures.remove(&key);
         });
         self.rebuild_profile_metadata();
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             pane.lines.update(|lines| {
                 for line in lines {
                     line.name = self.field_name(&line.source);

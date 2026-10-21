@@ -1,8 +1,8 @@
+use crate::sidebar_help::SidebarHelpProps;
 use crate::{
-    action_button::ActionButtonProps, profile, profile_outputs::ProfileOutputsProps,
+    action_button::ActionButtonProps, profile, profile_preset_tree::ProfilePresetTreeProps,
     state::Workbench,
 };
-use crate::{sidebar_help::SidebarHelpProps, sidebar_search::SidebarSearchProps};
 use std::{collections::BTreeSet, path::PathBuf};
 use zgui::prelude::*;
 use zgui::reactive::RenderEffect;
@@ -16,14 +16,18 @@ pub(crate) struct ProfileFile {
     pub auto_apply: bool,
     pub matched: String,
     pub views: Vec<(String, usize)>,
+    pub workspaces: Vec<String>,
+    pub workspace_plots: Vec<(String, Vec<(String, usize)>)>,
+    pub collections: Vec<(String, WorkspaceViews)>,
     pub fields: Vec<(String, String)>,
     pub geometry: Vec<(String, String)>,
 }
+pub(crate) type WorkspaceViews = Vec<(String, Vec<(String, usize)>)>;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum LibraryRow {
     Folder(PathBuf, usize),
-    File(ProfileFile, usize),
+    File(Box<ProfileFile>, usize),
 }
 
 fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>) {
@@ -49,6 +53,46 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
                     .map(
                         |path| match profile::load(&path).map(|p| p.for_flight(flight)) {
                             Ok(profile) => ProfileFile {
+                                collections: profile
+                                    .workspace_presets
+                                    .iter()
+                                    .map(|workspace| {
+                                        (
+                                            workspace.name.clone(),
+                                            workspace
+                                                .views
+                                                .iter()
+                                                .map(|view| {
+                                                    (
+                                                        view.name.clone(),
+                                                        view.plots
+                                                            .iter()
+                                                            .map(|plot| {
+                                                                (
+                                                                    plot.name.clone(),
+                                                                    plot.lines.len(),
+                                                                )
+                                                            })
+                                                            .collect(),
+                                                    )
+                                                })
+                                                .collect(),
+                                        )
+                                    })
+                                    .collect(),
+                                workspace_plots: profile
+                                    .view_presets
+                                    .iter()
+                                    .map(|view| {
+                                        (
+                                            view.name.clone(),
+                                            view.plots
+                                                .iter()
+                                                .map(|plot| (plot.name.clone(), plot.lines.len()))
+                                                .collect(),
+                                        )
+                                    })
+                                    .collect(),
                                 compatible: log
                                     .as_ref()
                                     .ok_or("Open a log first".into())
@@ -70,6 +114,11 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
                                         .collect::<Vec<_>>()
                                         .join(" · ")
                                 ),
+                                workspaces: profile
+                                    .view_presets
+                                    .iter()
+                                    .map(|view| view.name.clone())
+                                    .collect(),
                                 name: profile.name,
                                 auto_apply: choices
                                     .get(&path)
@@ -78,12 +127,12 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
                                 fields: profile
                                     .signals
                                     .iter()
-                                    .map(|s| (s.id.clone(), s.metadata.name.clone()))
+                                    .map(|s| (s.id.clone(), s.metadata.label()))
                                     .chain(
                                         profile
                                             .filters
                                             .iter()
-                                            .map(|f| (f.id.clone(), f.metadata.name.clone())),
+                                            .map(|f| (f.id.clone(), f.metadata.label())),
                                     )
                                     .collect(),
                                 geometry: profile
@@ -93,8 +142,14 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
                                     .collect(),
                                 views: profile
                                     .views
-                                    .into_iter()
-                                    .map(|view| (view.name, view.fields.len()))
+                                    .iter()
+                                    .map(|view| (view.name.clone(), view.fields.len()))
+                                    .chain(
+                                        profile
+                                            .plot_presets
+                                            .iter()
+                                            .map(|plot| (plot.name.clone(), plot.lines.len())),
+                                    )
                                     .collect(),
                                 path,
                             },
@@ -109,6 +164,9 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
                                 auto_apply: false,
                                 matched: String::new(),
                                 views: Vec::new(),
+                                workspaces: Vec::new(),
+                                workspace_plots: Vec::new(),
+                                collections: Vec::new(),
                                 fields: Vec::new(),
                                 geometry: Vec::new(),
                             },
@@ -142,12 +200,14 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
 pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
     install_stylesheet("enlumi-profiles", include_str!("profile.css"));
     let files = RwSignal::new_local(Vec::<ProfileFile>::new());
-    let query = RwSignal::new_local(String::new());
+    let query = workbench.query;
 
     let warnings_open = RwSignal::new_local(false);
+    let files_open = RwSignal::new_local(false);
     let expanded = RwSignal::new_local(BTreeSet::<PathBuf>::new());
     let effect = RenderEffect::new(move |_| {
         workbench.log.track();
+        workbench.authoring.revision.track();
         workbench.profiles.directory.track();
         workbench.profiles.flight.track();
         refresh(workbench, files);
@@ -159,12 +219,7 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
             || workbench.profiles.busy.get()
             || workbench.log.get().is_none()
     });
-    let rows = Memo::new(move |_| {
-        let mut rows = Vec::new();
-        let mut folders = BTreeSet::new();
-        let root = workbench.profiles.directory.get().unwrap_or_default();
-        let query = query.get().to_lowercase();
-        let expanded = expanded.get();
+    let catalogue = Memo::new(move |_| {
         let mut listed = files.get();
         for instance in workbench
             .profiles
@@ -173,37 +228,53 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
             .values()
             .filter(|p| p.key.flight == workbench.profiles.flight.get())
         {
-            if let Some(file) = listed.iter_mut().find(|f| f.path == instance.key.path) {
-                file.name = instance.name.clone();
-                file.views = instance
-                    .definition
-                    .views
-                    .iter()
-                    .map(|v| (v.name.clone(), v.fields.len()))
-                    .collect();
-                file.fields = instance
-                    .definition
-                    .signals
-                    .iter()
-                    .map(|s| (s.id.clone(), s.metadata.name.clone()))
-                    .chain(
-                        instance
-                            .definition
-                            .filters
-                            .iter()
-                            .map(|f| (f.id.clone(), f.metadata.name.clone())),
-                    )
-                    .collect();
-                file.geometry = instance
-                    .definition
-                    .geometry
-                    .iter()
-                    .map(|g| (g.id.clone(), g.name.clone()))
-                    .collect();
-            } else {
+            if !listed.iter().any(|file| file.path == instance.key.path) {
                 listed.push(ProfileFile {
+                    collections: instance
+                        .definition
+                        .workspace_presets
+                        .iter()
+                        .map(|workspace| {
+                            (
+                                workspace.name.clone(),
+                                workspace
+                                    .views
+                                    .iter()
+                                    .map(|view| {
+                                        (
+                                            view.name.clone(),
+                                            view.plots
+                                                .iter()
+                                                .map(|plot| (plot.name.clone(), plot.lines.len()))
+                                                .collect(),
+                                        )
+                                    })
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
+                    workspace_plots: instance
+                        .definition
+                        .view_presets
+                        .iter()
+                        .map(|view| {
+                            (
+                                view.name.clone(),
+                                view.plots
+                                    .iter()
+                                    .map(|plot| (plot.name.clone(), plot.lines.len()))
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
                     path: instance.key.path.clone(),
                     name: instance.name.clone(),
+                    workspaces: instance
+                        .definition
+                        .view_presets
+                        .iter()
+                        .map(|view| view.name.clone())
+                        .collect(),
                     compatible: Ok(()),
                     auto_apply: false,
                     matched: format!("Flight {}", instance.key.flight),
@@ -212,18 +283,25 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                         .views
                         .iter()
                         .map(|v| (v.name.clone(), v.fields.len()))
+                        .chain(
+                            instance
+                                .definition
+                                .plot_presets
+                                .iter()
+                                .map(|plot| (plot.name.clone(), plot.lines.len())),
+                        )
                         .collect(),
                     fields: instance
                         .definition
                         .signals
                         .iter()
-                        .map(|s| (s.id.clone(), s.metadata.name.clone()))
+                        .map(|s| (s.id.clone(), s.metadata.label()))
                         .chain(
                             instance
                                 .definition
                                 .filters
                                 .iter()
-                                .map(|f| (f.id.clone(), f.metadata.name.clone())),
+                                .map(|f| (f.id.clone(), f.metadata.label())),
                         )
                         .collect(),
                     geometry: instance
@@ -235,22 +313,42 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 });
             }
         }
-        for file in listed {
+        listed
+    });
+    let rows = Memo::new(move |_| {
+        let mut rows = Vec::new();
+        let mut folders = BTreeSet::new();
+        let root = workbench.profiles.directory.get().unwrap_or_default();
+        let query = query.get().to_lowercase();
+        let expanded = expanded.get();
+        for file in catalogue.get() {
             if !query.is_empty()
+                && !file
+                    .workspaces
+                    .iter()
+                    .any(|name| name.to_lowercase().contains(&query))
                 && !file.name.to_lowercase().contains(&query)
                 && !file.path.to_string_lossy().to_lowercase().contains(&query)
                 && !file
                     .views
                     .iter()
                     .any(|(name, _)| name.to_lowercase().contains(&query))
-                && !file
-                    .fields
-                    .iter()
-                    .any(|(_, name)| name.to_lowercase().contains(&query))
-                && !file
-                    .geometry
-                    .iter()
-                    .any(|(_, name)| name.to_lowercase().contains(&query))
+                && !file.fields.iter().any(|(id, name)| {
+                    id.to_lowercase().contains(&query) || name.to_lowercase().contains(&query)
+                })
+                && !file.fields.iter().any(|(id, _)| {
+                    workbench.profile_field_matches(
+                        &profile::identity::ProfileKey::new(
+                            file.path.clone(),
+                            workbench.profiles.flight.get(),
+                        ),
+                        &format!("${id}"),
+                        &query,
+                    )
+                })
+                && !file.geometry.iter().any(|(id, name)| {
+                    id.to_lowercase().contains(&query) || name.to_lowercase().contains(&query)
+                })
             {
                 continue;
             }
@@ -267,7 +365,7 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 if folders.insert(imported.clone()) {
                     rows.push(LibraryRow::Folder(imported.clone(), 0));
                 }
-                visible = !query.is_empty() || expanded.contains(&imported);
+                visible = expanded.contains(&imported);
                 depth = 1;
             } else if let Some(parent) = relative.parent() {
                 for part in parent.components() {
@@ -275,12 +373,12 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                     if visible && folders.insert(folder.clone()) {
                         rows.push(LibraryRow::Folder(folder.clone(), depth));
                     }
-                    visible &= !query.is_empty() || expanded.contains(&folder);
+                    visible &= expanded.contains(&folder);
                     depth += 1;
                 }
             }
             if visible {
-                rows.push(LibraryRow::File(file, depth));
+                rows.push(LibraryRow::File(Box::new(file), depth));
             }
         }
         rows
@@ -309,8 +407,15 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                         let path = blocking(|| rfd::FileDialog::new().add_filter("Enlumi profile", &["json", "JSON"]).pick_file()).await;
                         if let Some(path) = path {  workbench.apply_profile(path); }
                     });
-                }) { "Load file…" }
+                }) { "Import file…" }
                 ActionButton(class = "profile-refresh", on:click = move |_| refresh(workbench, files)) { "Refresh" }
+                SidebarHelp(label = "Profile library details and help") {
+                    text(class = "heading") { "Profile library" }
+            text(class = "muted") { "Ctrl-click toggles selection; Shift-click selects range. Drag selected outputs onto plots. Auto uses local preferences." }
+            text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(String::new, |log| log.blackbox_headers.values().map(|header| header.firmware_revision.clone()).collect::<Vec<_>>().join(" · ")))}}
+            text(class = "muted") {{move || workbench.profiles.directory.get().map_or_else(|| "Locating profile directory…".into(), |path| path.display().to_string())}}
+                }
+
             }
             if move ||workbench.log.with(|log|log.as_ref().is_some_and(|log|log.settings.len()>1)) {
             row(class = "profile-actions") {
@@ -320,15 +425,13 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 }
             }
             }
-            SidebarSearch(value = query, placeholder = "Search profiles, views and fields", label = "Search profiles") {
-                SidebarHelp(label = "Profile library details and help") {
-                    text(class = "heading") { "Profile library" }
-            text(class = "muted") { "Ctrl-click toggles selection; Shift-click selects range. Drag selected outputs onto plots. Auto uses local preferences." }
-            text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(String::new, |log| log.blackbox_headers.values().map(|header| header.firmware_revision.clone()).collect::<Vec<_>>().join(" · ")))}}
-            text(class = "muted") {{move || workbench.profiles.directory.get().map_or_else(|| "Locating profile directory…".into(), |path| path.display().to_string())}}
-                }
+            ProfilePresetTree(workbench=workbench,files=catalogue.into(),query=query.into())
+            ActionButton(class="profile-files-toggle profile-output-section",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).expanded(move ||files_open.get()))},on:click=move |_|files_open.update(|open|*open = !*open)) {
+                vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if files_open.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)
+                text {{move ||format!("Profile files ({})",catalogue.with(Vec::len))}}
             }
-            scroll(class = "profile-files", a11y:label = "Profile directory tree") {
+            if move ||files_open.get() {
+            column(class = "profile-files", a11y:label = "Profile files and folders") {
                 for row in move || rows.get(), key = |row| row.clone() {
                     {match row {
                         LibraryRow::Folder(path, depth) => {
@@ -342,13 +445,13 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                                     if matches!(event.key, zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter | zgui::vocab::NamedKey::Space)) {
                                         expanded.update(|expanded| { if !expanded.remove(&path) { expanded.insert(path.clone()); } }); event.prevent_default();
                                     }
-                                }) { text { {move || format!("{} {label}/", if expanded.with(|expanded| expanded.contains(&arrow_path)) { "▾" } else { "▸" })} } } })
+                                }) { vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.with(|expanded|expanded.contains(&arrow_path)){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true) text { {label} } } })
                         },
                         LibraryRow::File(file, depth) => {
+                            let file = *file;
                             let toggle = file.path.clone();
                             let arrow_path = file.path.clone();
-                            let title = file.name.clone();
-                            let loaded = file.path.clone();
+                            let title = file.path.file_name().map(|name|name.to_string_lossy().into_owned()).unwrap_or_else(||file.name.clone());
                             let auto = file.auto_apply;
                             let record=StoredValue::new_local(file.clone());
                             let actions_open=RwSignal::new_local(false);
@@ -358,10 +461,9 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                             let path = file.path.clone();
                             AnyView::new(view! { column(class = "profile-tree-file", style:padding-left = Some(format!("{}px", depth * 10))) {
                                 row(class = "profile-file") {
-                                    ActionButton(class = "profile-file-name", on:click = move |_| expanded.update(|expanded| { if !expanded.remove(&toggle) { expanded.insert(toggle.clone()); } })) { {move || format!("{} {title}", if expanded.with(|expanded| expanded.contains(&arrow_path)) { "▾" } else { "▸" })} }
-                                    ActionButton(disabled = Signal::derive_local(move || unavailable.get() || !compatible), on:click = move |_| { expanded.update(|paths| { paths.insert(loaded.clone()); }); workbench.apply_profile(loaded.clone()); }) { "Load" }
+                                    ActionButton(class = "profile-file-name", on:click = move |_| expanded.update(|expanded| { if !expanded.remove(&toggle) { expanded.insert(toggle.clone()); } })) { vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.with(|expanded|expanded.contains(&arrow_path)){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true) text { {title} } }
                                     Popover(open=actions_open) {
-                                    PopoverTrigger(class="app-action profile-menu",size=ButtonSize::Xs,variant=ButtonVariant::Ghost,a11y:label="Profile actions") { "⋯" }
+                                    PopoverTrigger(class="app-action profile-menu",size=ButtonSize::Xs,variant=ButtonVariant::Ghost,a11y:label="Profile actions") { vector(class="profile-more-icon",prop:viewBox="0 0 12 12",prop:d="M2 6 L2.1 6 M6 6 L6.1 6 M10 6 L10.1 6",a11y:hidden=true) }
                                     PopoverContent(class="profile-menu-content") {
                                     if move ||!record.with_value(|file|workbench.profiles.directory.with(|root|root.as_ref().is_some_and(|root|file.path.starts_with(root)))) {
                                         text(class="muted") { "Move profile into library folder to enable Auto." }
@@ -377,14 +479,17 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                                             workbench.profiles.auto_saving.set(false);
                                         });
                                     }) { {if auto { "Auto ✓" } else { "Auto" }} }
+                                    ActionButton(class="profile-edit",on:click=move |_|{actions_open.set(false);workbench.edit_profile_document(record.with_value(|file|file.path.clone()));}) {"Edit profile\u{2026}"}
                                     ActionButton(class="profile-reload",disabled=Signal::derive_local(move ||unavailable.get()||!workbench.profiles.instances.with(|all|all.contains_key(&profile_key.get()))),on:click=move |_|{actions_open.set(false);workbench.reload_profile(profile_key.get_untracked());}) { "Reload" }
-                                    ActionButton(class="profile-remove-open",disabled=Signal::derive_local(move ||unavailable.get()||!workbench.profiles.instances.with(|all|all.contains_key(&profile_key.get()))),on:click=move |_|{actions_open.set(false);workbench.profiles.removal.set(Some(profile_key.get_untracked()));}) { "Remove…" }
+                                    ActionButton(class="profile-remove-open",disabled=Signal::derive_local(move ||unavailable.get()||!workbench.profiles.instances.with(|all|all.contains_key(&profile_key.get()))),on:click=move |_|{actions_open.set(false);workbench.profiles.removal.set(Some(profile_key.get_untracked()));}) { "Unload outputs…" }
+                                    ActionButton(class="profile-delete",disabled=Signal::derive_local(move ||workbench.authoring.busy.get()||workbench.profiles.busy.get()||workbench.loading.get()||workbench.derived_busy.get()),on:click=move |_|{actions_open.set(false);workbench.delete_profile_file(record.with_value(|file|file.path.clone()));}) {"Delete profile file…"}
                                     }
                                     }
                                 }
-                                if move || !query.with(String::is_empty) || expanded.with(|expanded| expanded.contains(&path)) {
+                                if move || expanded.with(|expanded| expanded.contains(&path)) {
                                 if move || !compatible { text(class = "profile-compatibility muted") { {reason.get_value()} } }
-                                    ProfileOutputs(workbench=workbench, file=record,query=query.into())
+                                    text(class="profile-diagnostics muted") {{record.with_value(|file|file.path.display().to_string())}}
+                                    text(class="profile-diagnostics muted") {{record.with_value(|file|file.matched.clone())}}
 
                                 }
                             } })
@@ -393,13 +498,14 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 }
                 if move || files.with(Vec::is_empty) { text(class = "muted") { "Add JSON profiles in this directory or its subdirectories, or load a file." } }
             }
+            }
             if move || workbench.profiles.removal.get().is_some() {
                 column(class="profile-remove-preview") {
-                    text(class="heading") { "Remove profile?" }
+                    text(class="heading") { "Unload profile outputs?" }
                     text(class="muted") {{move || workbench.profiles.removal.get().and_then(|key|workbench.profiles.instances.with(|all|all.get(&key).map(|p|format!("{}: {} fields, {} geometry, {} placed lines. Plots remain.",p.name,p.fields.len(),p.geometry.len(),p.line_ids().len())))).unwrap_or_default()}}
                     text(class="warnings") {{move ||workbench.profiles.removal.get().map(|key|workbench.profile_remove_blockers(&key).join("\n")).unwrap_or_default()}}
                     row {
-                        ActionButton(disabled=Signal::derive_local(move ||unavailable.get()||workbench.profiles.removal.get().is_none_or(|key|!workbench.profile_remove_blockers(&key).is_empty())),on:click=move |_|{if let Some(key)=workbench.profiles.removal.get_untracked(){workbench.remove_profile(key);}}) { "Remove outputs" }
+                        ActionButton(disabled=Signal::derive_local(move ||unavailable.get()||workbench.profiles.removal.get().is_none_or(|key|!workbench.profile_remove_blockers(&key).is_empty())),on:click=move |_|{if let Some(key)=workbench.profiles.removal.get_untracked(){workbench.remove_profile(key);}}) { "Unload outputs" }
                         ActionButton(class="profile-remove-cancel",on:click=move |_|workbench.profiles.removal.set(None)) { "Cancel" }
                     }
                 }
@@ -408,7 +514,8 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
             text(class = "warnings", a11y:role = Role::Status) {{move || workbench.profiles.error.get()}}
             if move || !workbench.profiles.warnings.with(Vec::is_empty) {
                 ActionButton(class = "profile-warnings-toggle", on:click = move |_| warnings_open.update(|open| *open = !*open)) {
-                    {move || format!("{} Skipped items ({})", if warnings_open.get() { "▾" } else { "▸" }, workbench.profiles.warnings.with(Vec::len))}
+                    vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if warnings_open.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)
+                    text { {move || format!("Skipped items ({})",workbench.profiles.warnings.with(Vec::len))} }
                 }
                 if move || warnings_open.get() {
                 scroll(class = "profile-warnings", a11y:label = "Skipped profile resources") {

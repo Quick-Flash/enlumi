@@ -91,7 +91,11 @@ fn new_mode_can_use_saved_outputs_and_edit_mode_only_checks_its_own_targets() {
     assert!(workbench.filter_error.get_untracked().is_empty());
     let second = workbench.filter_outputs.get_untracked()[0];
     assert_ne!(first, second);
-    workbench.next_filters();
+    workbench.edit_filter(None, None);
+    workbench.set_filter_kind("magnitude".into());
+    workbench
+        .accept_filter_sources(vec![derived::key(second)])
+        .unwrap();
     assert_eq!(workbench.filter_kind.get_untracked(), "magnitude");
     workbench.save_filter();
     settle(&window, || !workbench.derived_busy.get_untracked());
@@ -306,7 +310,7 @@ fn quaternion_creates_named_group_edits_in_place_and_chains_all_outputs() {
             .y;
         assert!((value - expected).abs() < 1e-12);
     }
-    workbench.edit_created_filters();
+    workbench.edit_filter(Some(ids[0]), None);
     workbench.filter_angle_unit.set("deg".into());
     workbench.save_filter();
     settle(&window, || !workbench.derived_busy.get_untracked());
@@ -366,7 +370,10 @@ fn quaternion_creates_named_group_edits_in_place_and_chains_all_outputs() {
             )
             .is_err()
     );
-    workbench.next_filters();
+    workbench.edit_filter(None, None);
+    workbench
+        .accept_filter_sources(ids.iter().map(|id| derived::key(*id)).collect())
+        .unwrap();
     assert_eq!(workbench.filter_kind.get_untracked(), "low");
     assert_eq!(workbench.filter_inputs.get_untracked().len(), 3);
     workbench.save_filter();
@@ -751,11 +758,13 @@ fn batches_share_settings_keep_names_and_ids_and_chain_all_outputs() {
             .unwrap(),
         );
     }
-    workbench.edit_created_filters();
-    workbench.filter_gain.set("4".into());
-    workbench.save_filter();
-    settle(&window, || !workbench.derived_busy.get_untracked());
-    assert_eq!(workbench.filter_outputs.get_untracked(), ids);
+    for id in &ids {
+        workbench.edit_filter(Some(*id), None);
+        workbench.filter_gain.set("4".into());
+        workbench.save_filter();
+        settle(&window, || !workbench.derived_busy.get_untracked());
+        assert_eq!(workbench.filter_outputs.get_untracked(), [*id]);
+    }
     assert_eq!(workbench.derived.get_untracked().len(), 2);
     assert!(
         workbench
@@ -768,7 +777,10 @@ fn batches_share_settings_keep_names_and_ids_and_chain_all_outputs() {
                     offset: 3.0
                 })
     );
-    workbench.next_filters();
+    workbench.edit_filter(None, None);
+    workbench
+        .accept_filter_sources(ids.iter().map(|id| derived::key(*id)).collect())
+        .unwrap();
     assert_eq!(
         workbench
             .filter_inputs

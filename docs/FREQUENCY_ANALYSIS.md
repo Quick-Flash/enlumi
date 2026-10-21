@@ -4,6 +4,11 @@ Select fields or profile views in sidebar, then click **Create FFTs** or
 **Create PSDs**. Each selected signal opens its own spectral plot; profile groups
 expand into their member signals. No time plot or extra Run click needed.
 Choose **Configure** to adjust settings before dragging signals onto plots.
+These actions stay visible in Fields and Profiles, including after changing
+library folders. FFT/PSD enable when a field or profile view is selected;
+Configure opens Analyze without requiring a selection. Hover the help icon
+beside these actions for descriptions. FFT shows frequency amplitude; PSD shows
+power per Hz.
 
 Open **Analyze** from toolbar. Existing time plots
 remain intact. Toolbar Analyze starts with full signal range unless bounds were

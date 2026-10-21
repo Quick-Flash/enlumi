@@ -34,7 +34,7 @@ impl Workbench {
         if self.selected_field.get_untracked().as_deref() == Some(&key) {
             self.selected_field.set(None);
         }
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             let ids: Vec<_> = pane.lines.with_untracked(|lines| {
                 lines
                     .iter()
