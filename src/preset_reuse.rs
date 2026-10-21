@@ -109,22 +109,7 @@ impl Workbench {
                 remap(&mut Arc::make_mut(states).source, &sources);
             }
             let shared = existing.iter().find(|shared| {
-                !owned_geometry.contains(&shared.id)
-                    && shared.name == item.name
-                    && shared.kind == item.kind
-                    && shared.coordinates == item.coordinates
-                    && shared.color == item.color
-                    && shared.opacity == item.opacity
-                    && match (&shared.states, &item.states) {
-                        (None, None) => true,
-                        (Some(a), Some(b)) => {
-                            a.source == b.source
-                                && a.intervals == b.intervals
-                                && a.rules == b.rules
-                                && a.flag_rules == b.flag_rules
-                        }
-                        _ => false,
-                    }
+                !owned_geometry.contains(&shared.id) && shared.same_definition(item)
             });
             if let Some(shared) = shared {
                 geometry.insert(item.id, shared.id);

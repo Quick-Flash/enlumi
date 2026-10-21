@@ -268,12 +268,22 @@ fn reuse_dependencies(
     for collection in ["signals", "filters", "geometry"] {
         let additions = incoming[collection].as_array().cloned().unwrap_or_default();
         for addition in additions {
+            // Earlier dependencies may have remapped this entry's inputs.
+            let Some(addition) = incoming[collection]
+                .as_array()
+                .and_then(|entries| entries.iter().find(|entry| entry["id"] == addition["id"]))
+                .cloned()
+            else {
+                continue;
+            };
             let found = existing[collection].as_array().and_then(|entries| {
                 entries.iter().position(|entry| match collection {
                     "signals" => entry["source"] == addition["source"],
                     "filters" => {
-                        entry["inputs"] == addition["inputs"]
-                            && entry["operation"] == addition["operation"]
+                        resolved_inputs(&entry["inputs"], existing, incoming)
+                            == resolved_inputs(&addition["inputs"], incoming, existing)
+                            && normalized_operation(&entry["operation"])
+                                == normalized_operation(&addition["operation"])
                             && entry["metadata"] == addition["metadata"]
                     }
                     _ => entry["name"] == addition["name"],
@@ -289,6 +299,10 @@ fn reuse_dependencies(
                 .to_owned();
             let mut normalized = addition.clone();
             normalized["id"] = serde_json::json!(canonical);
+            if collection == "filters" {
+                normalized["inputs"] = existing[collection][index]["inputs"].clone();
+                normalized["operation"] = existing[collection][index]["operation"].clone();
+            }
             if normalized != existing[collection][index] {
                 if !replace {
                     return Err(format!(
@@ -318,6 +332,41 @@ fn reuse_dependencies(
         }
     }
     Ok(())
+}
+fn normalized_operation(value: &serde_json::Value) -> Option<serde_json::Value> {
+    serde_json::from_value::<crate::profile::Operation>(value.clone())
+        .ok()
+        .and_then(|operation| serde_json::to_value(operation).ok())
+}
+fn resolved_inputs(
+    value: &serde_json::Value,
+    primary: &serde_json::Value,
+    fallback: &serde_json::Value,
+) -> serde_json::Value {
+    let resolve = |value: &serde_json::Value| {
+        let mut value = value.clone();
+        for _ in 0..64 {
+            let Some(token) = value.as_str().and_then(|v| v.strip_prefix('$')) else {
+                break;
+            };
+            let source = [primary, fallback].into_iter().find_map(|document| {
+                document["signals"]
+                    .as_array()?
+                    .iter()
+                    .find(|signal| signal["id"] == token)
+                    .map(|signal| signal["source"].clone())
+            });
+            let Some(source) = source else {
+                break;
+            };
+            value = source;
+        }
+        value
+    };
+    value.as_array().map_or_else(
+        || value.clone(),
+        |inputs| serde_json::Value::Array(inputs.iter().map(resolve).collect()),
+    )
 }
 fn remap(value: &mut serde_json::Value, from: &str, to: &str) {
     match value {

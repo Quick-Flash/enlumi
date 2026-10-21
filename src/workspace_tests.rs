@@ -17,6 +17,108 @@ fn fixture() -> PathBuf {
         "/tests/fixtures/esc_status_log.ulg"
     ))
 }
+
+#[test]
+fn workspace_geometry_conflicts_and_invalid_resources_do_not_block_load_or_reload() {
+    use crate::{
+        geometry::{Geometry, GeometryKind},
+        preset_ui::ApplyAction,
+        profile::identity::ProfileKey,
+    };
+    use serde_json::json;
+    let window = Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    workbench.log.set(Some(Arc::new(
+        crate::log::LogStore::read(&fixture()).unwrap(),
+    )));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("resilient.json");
+    let line = json!({"source":"esc_status/0/esc[5].esc_rpm","color":[255,0,0,255],"width":1.5,"radius":2,"marker":"circle","connection":"linear","pattern":"solid","markers":false,"hidden":false});
+    let mut recipe = json!({"version":2,"name":"Resilient","geometry":[
+        {"id":"a","name":"Cutoff","shape":{"kind":"line","coordinates":[0,1,1,1]}},
+        {"id":"b","name":"Cutoff","shape":{"kind":"line","coordinates":[0,1,1,1]}},
+        {"id":"c","name":"Cutoff","shape":{"kind":"line","coordinates":[0,2,1,2]}},
+        {"id":"unnamed","name":"","shape":{"kind":"line","coordinates":[0,3,1,3]}},
+        {"id":"invalid","name":"Broken","shape":{"kind":"line","coordinates":[0,0,0,0]}}
+    ],"workspace_presets":[{"name":"Resilient","views":[{"name":"View","plots":[
+        {"name":"First","lines":[line.clone()],"geometry":["a"],"analysis":null},
+        {"name":"Second","lines":[line],"geometry":["b","c","unnamed","invalid"],"analysis":null}
+    ],"layout":{"kind":"split","stacked":true,"ratio":0.5,"first":{"kind":"plot","plot":0},"second":{"kind":"plot","plot":1}}}]}]});
+    std::fs::write(&path, recipe.to_string()).unwrap();
+    let key = ProfileKey::new(path.canonicalize().unwrap(), 1);
+    let mut manual = Geometry::new(workbench.id(), GeometryKind::Line, kurbo::Point::ZERO);
+    manual.name = "Cutoff".into();
+    manual.coordinates = [0., 99., 1., 99.];
+    let manual_id = manual.id;
+    workbench.geometry.items.update(|items| items.push(manual));
+    workbench.use_saved_preset(key.clone(), "Resilient".into(), ApplyAction::Workspace);
+    settle(&window, workbench, || {
+        !workbench.profiles.busy.get_untracked()
+            && workbench.workspace().name.get_untracked() == "Resilient"
+            && workbench.panes().with_untracked(|panes| {
+                panes.len() == 2 && panes.iter().all(|p| p.lines.with_untracked(Vec::len) == 1)
+            })
+    });
+    assert!(workbench.profiles.error.with_untracked(String::is_empty));
+    let ids = workbench
+        .profiles
+        .instances
+        .with_untracked(|instances| instances[&key].ids.geometry.clone());
+    assert_eq!(ids["a"], ids["b"]);
+    assert_ne!(ids["a"], ids["c"]);
+    assert!(!ids.contains_key("unnamed") && !ids.contains_key("invalid"));
+    assert!(workbench.profiles.warnings.with_untracked(|warnings| {
+        warnings
+            .iter()
+            .any(|w| w.contains("unnamed") && w.contains("needs a name"))
+    }));
+    assert!(workbench.profiles.warnings.with_untracked(|warnings| {
+        warnings
+            .iter()
+            .any(|w| w.contains("Invalid geometry Broken"))
+    }));
+    let panes = workbench.panes().get_untracked();
+    assert_eq!(panes[1].geometry.with_untracked(|ids| ids.len()), 2);
+    recipe["geometry"][1]["shape"]["coordinates"] = json!([0, 3, 1, 3]);
+    std::fs::write(&path, recipe.to_string()).unwrap();
+    workbench.reload_profile(key.clone());
+    settle(&window, workbench, || {
+        !workbench.profiles.busy.get_untracked()
+    });
+    assert!(workbench.profiles.error.with_untracked(String::is_empty));
+    let split = workbench
+        .profiles
+        .instances
+        .with_untracked(|instances| instances[&key].ids.geometry.clone());
+    assert_eq!(split["a"], ids["a"]);
+    assert_ne!(split["a"], split["b"]);
+    assert_eq!(
+        panes[1].geometry.get_untracked(),
+        std::collections::BTreeSet::from([split["b"], split["c"]])
+    );
+    recipe["geometry"][0]["shape"]["coordinates"] = json!([0, 0, 0, 0]);
+    recipe["geometry"][3]["name"] = json!("Repaired");
+    std::fs::write(&path, recipe.to_string()).unwrap();
+    workbench.reload_profile(key.clone());
+    settle(&window, workbench, || {
+        !workbench.profiles.busy.get_untracked()
+    });
+    assert!(workbench.profiles.error.with_untracked(String::is_empty));
+    assert!(panes[0].geometry.with_untracked(|ids| ids.is_empty()));
+    assert_eq!(panes[0].lines.with_untracked(Vec::len), 1);
+    let repaired = workbench
+        .profiles
+        .instances
+        .with_untracked(|instances| instances[&key].ids.geometry["unnamed"]);
+    assert!(
+        panes[1]
+            .geometry
+            .with_untracked(|ids| ids.contains(&repaired))
+    );
+    assert!(workbench.geometry_item(manual_id).is_some());
+    assert!(workbench.status.get_untracked().contains("warnings"));
+}
+
 fn settle(window: &Window, workbench: Workbench, ready: impl Fn() -> bool) {
     let end = Instant::now() + Duration::from_secs(15);
     loop {

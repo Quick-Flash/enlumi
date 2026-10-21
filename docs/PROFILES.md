@@ -82,6 +82,17 @@ not reactivate deleted outputs retained for other presets.
 Saved presets can share inputs with different captured labels. Existing input
 labels stay active; label differences do not block loading or dragging plots.
 
+Equivalent filter copies with the same name, operation and resolved inputs share
+one output during preparation, including copies that use raw aliases. Saving
+recognizes raw aliases and numeric operation defaults to avoid adding those copies
+again. Raw decoding and multi-output Rust results are cached for the preparation;
+matching Rust functions and inputs run once even across separately saved groups.
+Independent filter branches and raw input decoding run on a shared Rayon pool,
+capped at four workers (leaving one CPU available when possible). Dependent filters
+wait for their inputs. Results and diagnostics retain deterministic ordering;
+failed branches do not stop unrelated outputs. Completed filters are validated
+once per preparation, rather than again for every subsequent branch.
+
 Workspace recipes use `workspace_presets`: each entry contains `name`, `views`
 (view preset objects), and `active` (zero-based initial view index).
 
@@ -334,6 +345,16 @@ in the filter guide before applying profiles containing Rust filters.
 
 Geometry entries contain `id`, `name`, optional RGB `color`, optional `opacity`,
 and `shape`:
+
+Geometry IDs identify resources; names are labels and may repeat. Identical
+definitions with matching plot styles share one runtime resource. Different
+definitions or plot styles stay separate even when names match. Reload can split
+previously shared aliases and updates their plot attachments.
+
+Invalid geometry is skipped with its attachments, leaving usable plot fields
+available. This also applies during reload. Valid geometry borrowed by another
+profile remains available to that profile. Loading status shows preparation stages;
+successful partial loads report warnings under **Profiles > Skipped items**.
 
 | Shape kind | Additional keys |
 | --- | --- |

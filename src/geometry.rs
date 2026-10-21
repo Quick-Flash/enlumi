@@ -47,6 +47,28 @@ pub struct Geometry {
     pub labels: bool,
 }
 impl Geometry {
+    pub(crate) fn same_definition(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.kind == other.kind
+            && self.coordinates == other.coordinates
+            && self.color == other.color
+            && self.opacity == other.opacity
+            && self.width == other.width
+            && self.shade == other.shade
+            && self.extend == other.extend
+            && self.orientation == other.orientation
+            && self.labels == other.labels
+            && match (&self.states, &other.states) {
+                (None, None) => true,
+                (Some(a), Some(b)) => {
+                    a.source == b.source
+                        && a.intervals == b.intervals
+                        && a.rules == b.rules
+                        && a.flag_rules == b.flag_rules
+                }
+                _ => false,
+            }
+    }
     pub fn new(id: u64, kind: GeometryKind, point: Point) -> Self {
         Self {
             id,

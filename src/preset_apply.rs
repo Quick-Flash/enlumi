@@ -589,6 +589,26 @@ impl Workbench {
                 }
             }
         }
+        self.profiles.instances.update(|instances| {
+            if let Some(instance) = instances.get_mut(&instance.key) {
+                for token in &recipe.geometry {
+                    let item = profile::identity::Item::Geometry(token.clone());
+                    if !instance
+                        .placements
+                        .iter()
+                        .any(|placement| placement.pane == pane.id && placement.item == item)
+                    {
+                        instance
+                            .placements
+                            .push(crate::profile_instance::Placement {
+                                pane: pane.id,
+                                item,
+                                lines: BTreeMap::new(),
+                            });
+                    }
+                }
+            }
+        });
         pane.legend_order.set(
             recipe
                 .legend_order

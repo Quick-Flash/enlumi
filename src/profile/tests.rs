@@ -38,6 +38,176 @@ fn prepare_json(value: serde_json::Value, log: &LogStore) -> Result<prepare::Pre
 }
 
 #[test]
+fn captured_filter_aliases_reuse_identical_outputs_and_keep_dependents_available() {
+    let mut value = recipe();
+    value["filters"] = json!([
+        {"id":"original","metadata":{"name":"Scaled"},"inputs":["esc_status/0/esc[5].esc_rpm"],"operation":{"kind":"affine","gain":2}},
+        {"id":"copy","metadata":{"name":"Scaled"},"inputs":["$rpm"],"operation":{"kind":"affine","gain":2.0,"offset":0.0}},
+        {"id":"child","metadata":{"name":"Child"},"inputs":["$copy"],"operation":{"kind":"affine","gain":3}}
+    ]);
+    value["views"][0]["fields"] = json!(["$copy", "$child"]);
+    let prepared = prepare_json(value, &fixture()).unwrap();
+    assert_eq!(prepared.fields.len(), 2);
+    assert_eq!(prepared.ids.fields["original"], prepared.ids.fields["copy"]);
+    assert!(prepared.diagnostics.is_empty());
+    assert_eq!(prepared.views[0].fields.len(), 2);
+}
+
+fn prepare_on_threads(
+    value: serde_json::Value,
+    log: &LogStore,
+    base: &Path,
+    threads: usize,
+) -> prepare::Prepared {
+    let profile: Profile = serde_json::from_value(value).unwrap();
+    let ids = identity::ResourceIds {
+        fields: profile
+            .filters
+            .iter()
+            .enumerate()
+            .map(|(index, field)| (field.id.clone(), index as u64 + 100))
+            .collect(),
+        geometry: profile
+            .geometry
+            .iter()
+            .enumerate()
+            .map(|(index, item)| (item.id.clone(), index as u64 + 1000))
+            .collect(),
+    };
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .unwrap()
+        .install(|| {
+            prepare::prepare_inner(profile, log, base, ids, Arc::new(AtomicBool::new(false)))
+                .unwrap()
+        })
+}
+
+#[test]
+fn parallel_profile_branches_preserve_dependencies_aliases_and_diagnostics() {
+    let log = fixture();
+    let mut value = recipe();
+    value["filters"] = json!([
+        {"id":"joined","metadata":{"name":"Joined"},"inputs":["$left","$right"],"operation":{"kind":"magnitude"}},
+        {"id":"copy_child","metadata":{"name":"Copy child"},"inputs":["$copy"],"operation":{"kind":"affine","gain":7}},
+        {"id":"left","metadata":{"name":"Left"},"inputs":["$rpm"],"operation":{"kind":"affine","gain":2}},
+        {"id":"right","metadata":{"name":"Right"},"inputs":["$rpm"],"operation":{"kind":"affine","gain":3}},
+        {"id":"copy","metadata":{"name":"Left"},"inputs":["$rpm"],"operation":{"kind":"affine","gain":2}},
+        {"id":"conflict","metadata":{"name":"Right"},"inputs":["$rpm"],"operation":{"kind":"affine","gain":9}},
+        {"id":"broken","metadata":{"name":"Broken"},"inputs":["missing/0/field"],"operation":{"kind":"affine","gain":1}},
+        {"id":"dependent","metadata":{"name":"Unavailable child"},"inputs":["$broken"],"operation":{"kind":"affine","gain":2}},
+        {"id":"cyclic","metadata":{"name":"Cycle"},"inputs":["$cyclic"],"operation":{"kind":"affine","gain":2}}
+    ]);
+    value["views"][0]["fields"] = json!(["$joined", "$copy_child", "$dependent"]);
+    let serial = prepare_on_threads(value.clone(), &log, Path::new("."), 1);
+    let parallel = prepare_on_threads(value, &log, Path::new("."), 4);
+    assert_eq!(serial.fields.len(), 4);
+    assert_eq!(parallel.fields.len(), serial.fields.len());
+    assert_eq!(parallel.ids.fields, serial.ids.fields);
+    assert_eq!(parallel.warnings, serial.warnings);
+    assert_eq!(parallel.views[0].fields.len(), 2);
+    for (actual, expected) in parallel.fields.iter().zip(&serial.fields) {
+        assert_eq!(actual.id, expected.id);
+        assert_eq!(
+            actual.data.as_ref().unwrap().samples(),
+            expected.data.as_ref().unwrap().samples()
+        );
+    }
+    let joined = parallel
+        .fields
+        .iter()
+        .find(|field| field.name == "Joined")
+        .unwrap();
+    let raw = log.prepare("esc_status/0/esc[5].esc_rpm").unwrap();
+    for (actual, source) in joined
+        .data
+        .as_ref()
+        .unwrap()
+        .samples()
+        .iter()
+        .zip(raw.samples())
+    {
+        assert!((actual.y - (source.y * 2.).hypot(source.y * 3.)).abs() < 1e-6);
+    }
+}
+
+#[test]
+#[ignore = "set ENLUMI_BENCH_LOG and ENLUMI_BENCH_PROFILE; requires Rust WASM toolchain for Rust filters"]
+fn profile_parallel_loading_benchmark() {
+    use std::time::Instant;
+    let path = std::path::PathBuf::from(
+        std::env::var_os("ENLUMI_BENCH_PROFILE").expect("ENLUMI_BENCH_PROFILE"),
+    );
+    let log_path =
+        std::path::PathBuf::from(std::env::var_os("ENLUMI_BENCH_LOG").expect("ENLUMI_BENCH_LOG"));
+    let profile: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let log = LogStore::read(&log_path).unwrap();
+    let base = path.parent().unwrap();
+    // Warm compiler cache before comparing worker counts; each run decodes raw inputs anew.
+    let started = Instant::now();
+    let cold = prepare_on_threads(profile.clone(), &log, base, 4);
+    eprintln!(
+        "Cold four-worker preparation: {:?}; {} outputs, {} diagnostics",
+        started.elapsed(),
+        cold.fields.len(),
+        cold.diagnostics.len()
+    );
+    drop(cold);
+    let mut reference = None;
+    for threads in [1, 4, 1, 4] {
+        let started = Instant::now();
+        let prepared = prepare_on_threads(profile.clone(), &log, base, threads);
+        eprintln!(
+            "Warm {threads}-worker preparation: {:?}; {} outputs, {} diagnostics",
+            started.elapsed(),
+            prepared.fields.len(),
+            prepared.diagnostics.len()
+        );
+        let snapshot = prepared
+            .fields
+            .iter()
+            .map(|field| {
+                let samples = field.data.as_ref().unwrap().samples();
+                let points: Vec<_> = [0, samples.len() / 2, samples.len().saturating_sub(1)]
+                    .into_iter()
+                    .filter_map(|index| samples.get(index))
+                    .map(|point| (point.x.to_bits(), point.y.to_bits()))
+                    .collect();
+                (field.id, samples.len(), points)
+            })
+            .collect::<Vec<_>>();
+        let actual = (snapshot, prepared.warnings);
+        if let Some(expected) = &reference {
+            assert_eq!(&actual, expected);
+        } else {
+            reference = Some(actual);
+        }
+    }
+}
+
+#[test]
+fn identical_geometry_with_distinct_plot_styles_keeps_separate_identities() {
+    let mut value = recipe();
+    value["version"] = json!(2);
+    value["views"] = json!([]);
+    value["geometry"] = json!([
+        {"id":"a","name":"Limit","shape":{"kind":"line","coordinates":[0,1,1,1]}},
+        {"id":"b","name":"Limit","shape":{"kind":"line","coordinates":[0,1,1,1]}},
+        {"id":"c","name":"Limit","shape":{"kind":"line","coordinates":[0,1,1,1]}}
+    ]);
+    value["plot_presets"] = json!([
+        {"name":"Default","lines":[],"geometry":["a","c"],"analysis":null},
+        {"name":"Styled","lines":[],"geometry":["b"],"geometry_style":{"b":{"width":3,"shade":"None","extend":true,"orientation":"Horizontal","labels":false,"hidden":false}},"analysis":null}
+    ]);
+    let prepared = prepare_json(value, &fixture()).unwrap();
+    assert_eq!(prepared.geometry.len(), 2);
+    assert_eq!(prepared.ids.geometry["a"], prepared.ids.geometry["c"]);
+    assert_ne!(prepared.ids.geometry["a"], prepared.ids.geometry["b"]);
+}
+
+#[test]
 fn profiles_resolve_settings_forward_dependencies_metadata_and_views() {
     let log = fixture();
     let prepared = prepare_json(recipe(), &log).unwrap();

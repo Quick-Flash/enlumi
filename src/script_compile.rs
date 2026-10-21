@@ -113,7 +113,7 @@ pub fn compile(source: &str, cancel: &AtomicBool) -> Result<Module, String> {
     let module = Module::new(engine()?, wasm).map_err(|e| format!("WASM compilation: {e}"))?;
     check_cancel(cancel)?;
     let mut cache = CACHE.lock().map_err(|e| e.to_string())?;
-    if cache.len() == 8 {
+    if cache.len() == 32 {
         cache.pop_front();
     }
     cache.push_back((source.into(), module.clone()));

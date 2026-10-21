@@ -15,11 +15,13 @@ struct Label {
     left: f64,
     width: f64,
     row: usize,
+    color: [u8; 3],
 }
 #[derive(Clone, Default, PartialEq)]
 struct Backdrop {
     paints: Vec<(u64, BezPath, [u8; 3], f64)>,
     labels: Vec<Label>,
+    ribbons: Vec<(f64, f64, [u8; 3], f64)>,
 }
 #[component]
 pub fn BandBackground(
@@ -62,6 +64,9 @@ pub fn BandBackground(
                     return;
                 }
                 let path = kurbo::Rect::new(left, 0., right, height).to_path(0.1);
+                if item.states.is_some() && item.opacity > 0.0 {
+                    out.ribbons.push((left, right, color, height));
+                }
                 if let Some((_, existing, _, _)) =
                     out.paints.iter_mut().find(|(owner, _, rgb, alpha)| {
                         *owner == item.id && *rgb == color && *alpha == item.opacity
@@ -78,6 +83,7 @@ pub fn BandBackground(
                         left,
                         width: right - left,
                         row,
+                        color,
                     });
                 }
             };
@@ -123,10 +129,10 @@ pub fn BandBackground(
                     color: "#ffffff".into(),
                     opacity: 1.,
                     font_size: 11.,
-                    font_weight: 400,
+                    font_weight: 600,
                     anchor: plot::TextAnchor::Start,
-                    stroke: None,
-                    stroke_width: 0.,
+                    stroke: Some("#000000".into()),
+                    stroke_width: 1.5,
                 });
             }
         },
@@ -149,6 +155,22 @@ pub fn BandBackground(
                             .build(),
                     );
                 }
+                for (left, right, [r, g, b], height) in &scene.ribbons {
+                    let color = Color::srgb_u8(*r, *g, *b, 255);
+                    canvas_scene.push(
+                        ShapeBuilder::new(kurbo::Rect::new(*left, 0., *right, 3.).to_path(0.1))
+                            .fill(Brush::Solid(color.with_alpha(0.85)))
+                            .build(),
+                    );
+                    let mut edge = BezPath::new();
+                    edge.move_to((*left, 0.));
+                    edge.line_to((*left, *height));
+                    canvas_scene.push(
+                        ShapeBuilder::new(edge)
+                            .stroke(Brush::Solid(color.with_alpha(0.35)), 1.)
+                            .build(),
+                    );
+                }
             })
         })
     });
@@ -158,7 +180,7 @@ pub fn BandBackground(
     view! {column(class="band-background",node_ref=host) {
         {canvas.into_view()}
         for key in move ||scene.with(|scene|scene.labels.iter().map(|label|label.key).collect::<Vec<_>>()),key=|key|*key {
-            text(class="band-label",style:left=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",label.left+3.))),style:top=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",8+label.row*20))),style:max-width=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",label.width-6.)))) {{move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map_or_else(String::new,|label|label.name.clone()))}}
+            text(class="band-label",style:border-left-color=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("rgb({}, {}, {})",label.color[0],label.color[1],label.color[2]))),style:left=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",label.left+3.))),style:top=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",8+label.row*20))),style:max-width=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",label.width-6.)))) {{move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map_or_else(String::new,|label|label.name.clone()))}}
         }
 
     }}

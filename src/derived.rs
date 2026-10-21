@@ -8,6 +8,9 @@ use std::{
     },
 };
 
+mod parallel;
+pub(crate) use parallel::{compute_independent, pool};
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum FilterSpec {
     LowPass(f64),
@@ -201,40 +204,97 @@ pub fn validate(fields: &[DerivedField], log: &LogStore) -> Result<(), String> {
         if !names.insert(field.name.to_lowercase()) {
             return Err("Derived field names must be unique".into());
         }
-        field.filter.validate()?;
-        field.filter.validate_inputs(field.sources.len())?;
-        for source in &field.sources {
-            if depends_on(fields, source, field.id) {
-                return Err("Filter source would create a cycle".into());
+        validate_field(field, fields, log)?;
+    }
+    Ok(())
+}
+
+/// Existing fields already passed validation in this immutable preparation run.
+pub(crate) fn validate_addition(
+    field: &DerivedField,
+    fields: &[DerivedField],
+    log: &LogStore,
+) -> Result<(), String> {
+    if field.name.trim().is_empty() {
+        return Err("Give output field a name".into());
+    }
+    let name = field.name.to_lowercase();
+    if fields.iter().any(|other| other.name.to_lowercase() == name) {
+        return Err("Derived field names must be unique".into());
+    }
+    validate_field(field, fields, log)
+}
+
+fn validate_field(
+    field: &DerivedField,
+    fields: &[DerivedField],
+    log: &LogStore,
+) -> Result<(), String> {
+    field.filter.validate()?;
+    field.filter.validate_inputs(field.sources.len())?;
+    for source in &field.sources {
+        if depends_on(fields, source, field.id) {
+            return Err("Filter source would create a cycle".into());
+        }
+        if let Some(parent) = id(source) {
+            if !fields.iter().any(|node| node.id == parent) {
+                return Err("Source field no longer exists".into());
             }
-            if let Some(parent) = id(source) {
-                if !fields.iter().any(|node| node.id == parent) {
-                    return Err("Source field no longer exists".into());
-                }
-            } else if !log.catalogue.iter().any(|raw| &raw.id == source) {
-                return Err("Choose an existing source field".into());
-            }
+        } else if !log.catalogue.iter().any(|raw| &raw.id == source) {
+            return Err("Choose an existing source field".into());
         }
     }
     Ok(())
 }
 
 pub fn compute_cancelled(
+    fields: Vec<DerivedField>,
+    log: &LogStore,
+    cache: BTreeMap<String, SeriesData>,
+    cancel: Arc<AtomicBool>,
+) -> Result<Vec<DerivedField>, String> {
+    compute_cached(
+        fields,
+        log,
+        &mut EvaluationCache {
+            series: cache,
+            ..Default::default()
+        },
+        cancel,
+    )
+}
+
+#[derive(Default)]
+pub(crate) struct EvaluationCache {
+    series: BTreeMap<String, SeriesData>,
+    scripts: Vec<CachedScript>,
+}
+impl EvaluationCache {
+    pub(crate) fn into_series(self) -> BTreeMap<String, SeriesData> {
+        self.series
+    }
+}
+#[derive(Clone)]
+struct CachedScript {
+    script: Arc<crate::script::Script>,
+    sources: Vec<String>,
+    outputs: Vec<SeriesData>,
+}
+pub(crate) fn compute_cached(
     mut fields: Vec<DerivedField>,
     log: &LogStore,
-    mut cache: BTreeMap<String, SeriesData>,
+    evaluation: &mut EvaluationCache,
     cancel: Arc<AtomicBool>,
 ) -> Result<Vec<DerivedField>, String> {
     validate(&fields, log)?;
     let mut pending = BTreeSet::new();
     for field in &fields {
         if let Some(data) = &field.data {
-            cache.insert(field.key(), data.clone());
+            evaluation.series.insert(field.key(), data.clone());
         } else {
             pending.insert(field.id);
         }
     }
-    let mut scripts = BTreeMap::<u64, Vec<SeriesData>>::new();
     while !pending.is_empty() {
         if cancel.load(Ordering::Relaxed) {
             return Err("Filter run cancelled".into());
@@ -253,34 +313,13 @@ pub fn compute_cancelled(
                 continue;
             }
             for source in &field.sources {
-                if id(source).is_none() && !cache.contains_key(source) {
-                    cache.insert(source.clone(), log.prepare(source)?);
+                if id(source).is_none() && !evaluation.series.contains_key(source) {
+                    evaluation
+                        .series
+                        .insert(source.clone(), log.prepare(source)?);
                 }
             }
-            let inputs = field
-                .sources
-                .iter()
-                .map(|source| {
-                    cache
-                        .get(source)
-                        .ok_or("Source field unavailable".to_owned())
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let data = if let FilterSpec::Rust(script, output) = &field.filter {
-                if let std::collections::btree_map::Entry::Vacant(entry) =
-                    scripts.entry(field.group)
-                {
-                    entry.insert(script.apply(&inputs, cancel.clone())?);
-                }
-                scripts[&field.group]
-                    .get(*output)
-                    .cloned()
-                    .ok_or("Rust output index out of range")?
-            } else {
-                field.filter.apply_inputs(&inputs)?
-            };
-            cache.insert(field.key(), data.clone());
-            field.data = Some(data);
+            evaluate_field(field, evaluation, cancel.clone())?;
             pending.remove(&field.id);
             progress = true;
         }
@@ -289,4 +328,47 @@ pub fn compute_cancelled(
         }
     }
     Ok(fields)
+}
+
+fn evaluate_field(
+    field: &mut DerivedField,
+    evaluation: &mut EvaluationCache,
+    cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let cache = &mut evaluation.series;
+    let scripts = &mut evaluation.scripts;
+    let inputs = field
+        .sources
+        .iter()
+        .map(|source| {
+            cache
+                .get(source)
+                .ok_or("Source field unavailable".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let data = if let FilterSpec::Rust(script, output) = &field.filter {
+        let index = if let Some(index) = scripts
+            .iter()
+            .position(|cached| cached.script == *script && cached.sources == field.sources)
+        {
+            index
+        } else {
+            scripts.push(CachedScript {
+                script: script.clone(),
+                sources: field.sources.clone(),
+                outputs: script.apply(&inputs, cancel.clone())?,
+            });
+            scripts.len() - 1
+        };
+        scripts[index]
+            .outputs
+            .get(*output)
+            .cloned()
+            .ok_or("Rust output index out of range")?
+    } else {
+        field.filter.apply_inputs(&inputs)?
+    };
+    cache.insert(field.key(), data.clone());
+    field.data = Some(data);
+    Ok(())
 }

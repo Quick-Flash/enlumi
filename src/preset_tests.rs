@@ -72,6 +72,41 @@ fn prepare(workbench: Workbench, definition: profile::Profile, path: &Path) -> P
     key
 }
 #[test]
+fn saving_captured_filters_reuses_raw_inputs_and_numeric_defaults() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("literal.json");
+    let window = zgui_testkit_view::Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    let data = log().prepare(SOURCE).unwrap();
+    workbench.derived.set(vec![crate::derived::DerivedField {
+        id: 70,
+        name: "Scaled".into(),
+        sources: vec![SOURCE.into()],
+        group: 70,
+        filter: crate::derived::FilterSpec::Affine {
+            gain: 2.,
+            offset: 0.,
+        },
+        data: Some(data.clone()),
+    }]);
+    add_line(workbench, "@derived/70", data);
+    std::fs::write(&path,serde_json::json!({"version":2,"name":"Literal","filters":[{"id":"original","metadata":{"name":"Scaled","unit":"","axis":""},"inputs":[SOURCE],"operation":{"kind":"affine","gain":2}}]}).to_string()).unwrap();
+    for name in ["First", "Second"] {
+        crate::preset_store::save(
+            capture(workbench, &CaptureKind::Plot(workbench.pane().id), name).unwrap(),
+            &path,
+            false,
+            None,
+        )
+        .unwrap();
+    }
+    let saved = profile::load(&path).unwrap();
+    assert_eq!(saved.filters.len(), 1);
+    assert_eq!(saved.plot_presets[0].lines[0].source, "$original");
+    assert_eq!(saved.plot_presets[1].lines[0].source, "$original");
+}
+
+#[test]
 fn view_save_overwrites_without_dialog_and_save_as_preserves_original() {
     let window = zgui_testkit_view::Window::open();
     let workbench = window.scope.with(Workbench::new);

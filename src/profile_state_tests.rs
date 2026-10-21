@@ -66,6 +66,55 @@ fn missing_geometry_does_not_create_panel() {
 }
 
 #[test]
+fn reload_skips_invalid_geometry_without_removing_other_profiles_shared_resource() {
+    let window = zgui_testkit_view::Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    let mut first = prepared(workbench_with_fixture(workbench));
+    let id = first.geometry[0].id;
+    first.ids.geometry.insert("limit".into(), id);
+    let owner = ProfileKey::new(PathBuf::from("owner.json"), 1);
+    let borrower = ProfileKey::new(PathBuf::from("borrower.json"), 1);
+    let definition: profile::Profile =
+        serde_json::from_value(serde_json::json!({"version":2,"name":"Owner"})).unwrap();
+    let original = AppliedProfile::from_prepared(owner.clone(), definition.clone(), first);
+    workbench
+        .commit_instance(original.clone(), Vec::new(), Vec::new())
+        .unwrap();
+    let mut shared = original.clone();
+    shared.key = borrower.clone();
+    shared.geometry.clear();
+    workbench
+        .commit_instance(shared, Vec::new(), Vec::new())
+        .unwrap();
+    let mut reloaded = original;
+    reloaded.ids.geometry.clear();
+    reloaded.geometry.clear();
+    reloaded.views.clear();
+    workbench
+        .commit_instance(reloaded, Vec::new(), Vec::new())
+        .unwrap();
+    assert!(workbench.geometry_item(id).is_some());
+    assert_eq!(
+        workbench
+            .profiles
+            .instances
+            .with_untracked(|instances| instances[&borrower].ids.geometry["limit"]),
+        id
+    );
+}
+
+fn workbench_with_fixture(workbench: Workbench) -> Workbench {
+    workbench.log.set(Some(Arc::new(
+        LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    )));
+    workbench
+}
+
+#[test]
 fn ownership_reload_preserves_ids_and_manual_work_and_remove_blocks_dependents() {
     let window = zgui_testkit_view::Window::open();
     let workbench = window.scope.with(Workbench::new);

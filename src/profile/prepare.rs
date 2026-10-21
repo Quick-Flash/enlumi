@@ -69,10 +69,20 @@ pub fn prepare(
 }
 
 pub fn prepare_with_ids(
-    mut profile: Profile,
+    profile: Profile,
     log: &LogStore,
     base: &Path,
     ids: super::identity::ResourceIds,
+    cancel: Arc<AtomicBool>,
+) -> Result<Prepared, String> {
+    derived::pool()?.install(|| prepare_inner(profile, log, base, ids, cancel))
+}
+
+pub(super) fn prepare_inner(
+    mut profile: Profile,
+    log: &LogStore,
+    base: &Path,
+    mut ids: super::identity::ResourceIds,
     cancel: Arc<AtomicBool>,
 ) -> Result<Prepared, String> {
     let mut diagnostics = Vec::new();
@@ -196,17 +206,22 @@ pub fn prepare_with_ids(
         }
     }
     let mut fields: Vec<DerivedField> = Vec::new();
+    let mut evaluation = derived::EvaluationCache::default();
     while !pending.is_empty() {
         if cancel.load(Ordering::Relaxed) {
             return Err("Profile cancelled".into());
         }
         let pending_ids: BTreeSet<_> = pending.iter().map(|f| f.id).collect();
-        let Some(index) = pending.iter().position(|f| {
+        let mut names = BTreeSet::new();
+        let (ready, waiting): (Vec<_>, Vec<_>) = pending.into_iter().partition(|f| {
             f.sources
                 .iter()
                 .filter_map(|s| derived::id(s))
                 .all(|id| !pending_ids.contains(&id))
-        }) else {
+                && names.insert(f.name.to_lowercase())
+        });
+        pending = waiting;
+        if ready.is_empty() {
             for field in &pending {
                 if let Some((local, _)) = ids.fields.iter().find(|(_, id)| **id == field.id) {
                     unavailable.insert(
@@ -222,39 +237,74 @@ pub fn prepare_with_ids(
                 );
             }
             break;
-        };
-        let candidate = pending.remove(index);
-        let name = candidate.name.clone();
-        let local = ids
-            .fields
-            .iter()
-            .find(|(_, id)| **id == candidate.id)
-            .unwrap()
-            .0
-            .clone();
-        let root_cause = candidate
-            .sources
-            .iter()
-            .filter_map(|s| derived::id(s))
-            .find_map(|id| {
-                ids.fields
-                    .iter()
-                    .find(|(_, value)| **value == id)
-                    .and_then(|(local, _)| unavailable.get(local))
-                    .cloned()
-            });
-        if let Some(error) = root_cause {
-            unavailable.insert(local, error.clone());
-            report(&mut diagnostics, &name, None, error);
-            continue;
         }
-        let mut branch = fields.clone();
-        branch.push(candidate);
-        match derived::compute_cancelled(branch, log, BTreeMap::new(), cancel.clone()) {
-            Ok(computed) => fields = computed,
-            Err(error) => {
+        let mut runnable = Vec::new();
+        let mut resources = Vec::new();
+        for candidate in ready {
+            let name = candidate.name.clone();
+            let local = ids
+                .fields
+                .iter()
+                .find(|(_, id)| **id == candidate.id)
+                .unwrap()
+                .0
+                .clone();
+            let root_cause = candidate
+                .sources
+                .iter()
+                .filter_map(|s| derived::id(s))
+                .find_map(|id| {
+                    ids.fields
+                        .iter()
+                        .find(|(_, value)| **value == id)
+                        .and_then(|(local, _)| unavailable.get(local))
+                        .cloned()
+                });
+            if let Some(error) = root_cause {
                 unavailable.insert(local, error.clone());
                 report(&mut diagnostics, &name, None, error);
+                continue;
+            }
+            if let Some(shared) = fields.iter().find(|field| {
+                field.name == candidate.name
+                    && field.sources == candidate.sources
+                    && field.filter == candidate.filter
+            }) {
+                let original = candidate.key();
+                let replacement = shared.key();
+                ids.fields.insert(local.clone(), shared.id);
+                symbols.insert(local, replacement.clone());
+                for field in &mut pending {
+                    for source in &mut field.sources {
+                        if source == &original {
+                            source.clone_from(&replacement);
+                        }
+                    }
+                }
+                continue;
+            }
+            match derived::validate_addition(&candidate, &fields, log) {
+                Ok(()) => {
+                    runnable.push(candidate);
+                    resources.push((local, name));
+                }
+                Err(error) => {
+                    unavailable.insert(local, error.clone());
+                    report(&mut diagnostics, &name, None, error);
+                }
+            }
+        }
+        let computed = derived::compute_independent(runnable, log, &mut evaluation, cancel.clone());
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Profile cancelled".into());
+        }
+        for ((local, name), result) in resources.into_iter().zip(computed) {
+            match result {
+                Ok(field) => fields.push(field),
+                Err(error) => {
+                    unavailable.insert(local, error.clone());
+                    report(&mut diagnostics, &name, None, error);
+                }
             }
         }
     }
@@ -266,20 +316,18 @@ pub fn prepare_with_ids(
             metadata.insert(key.clone(), filter.metadata.clone());
         }
     }
-    let mut data: BTreeMap<_, _> = fields
-        .iter()
-        .filter_map(|f| f.data.clone().map(|data| (f.key(), data)))
-        .collect();
-    let mut geometry = Vec::new();
+    let mut data = evaluation.into_series();
+    let mut geometry: Vec<Geometry> = Vec::new();
+    let styles = geometry_styles(&profile, &ids);
     let mut geometry_ids = BTreeMap::new();
     for definition in &profile.geometry {
         if cancel.load(Ordering::Relaxed) {
             return Err("Profile cancelled".into());
         }
-        if definition.name.trim().is_empty() {
-            return Err("Geometry needs a name".into());
-        }
         let result = (|| -> Result<Geometry, String> {
+            if definition.name.trim().is_empty() {
+                return Err(format!("Geometry {} needs a name", definition.id));
+            }
             let id = ids.geometry[&definition.id];
             let kind = match definition.shape {
                 Shape::Line { .. } => GeometryKind::Line,
@@ -368,15 +416,32 @@ pub fn prepare_with_ids(
         })();
         match result {
             Ok(item) => {
-                geometry_ids.insert(definition.id.clone(), item.id);
-                geometry.push(item);
+                let shared = geometry.iter().find(|other| {
+                    other.same_definition(&item) && styles.get(&other.id) == styles.get(&item.id)
+                });
+                let id = shared.map_or(item.id, |other| other.id);
+                geometry_ids.insert(definition.id.clone(), id);
+                ids.geometry.insert(definition.id.clone(), id);
+                if shared.is_none() {
+                    geometry.push(item);
+                }
             }
             Err(error) => {
                 unavailable.insert(definition.id.clone(), error.clone());
-                report(&mut diagnostics, &definition.name, None, error);
+                report(
+                    &mut diagnostics,
+                    if definition.name.trim().is_empty() {
+                        &definition.id
+                    } else {
+                        &definition.name
+                    },
+                    None,
+                    error,
+                );
             }
         }
     }
+    ids.geometry.clone_from(&geometry_ids);
     let mut views = Vec::new();
     let mut view_names = BTreeSet::new();
     for plot in &profile.plot_presets {
@@ -500,6 +565,41 @@ pub fn prepare_with_ids(
         geometry,
         views,
     })
+}
+
+fn geometry_styles(
+    profile: &Profile,
+    ids: &super::identity::ResourceIds,
+) -> BTreeMap<u64, BTreeSet<String>> {
+    let mut styles = BTreeMap::<u64, BTreeSet<String>>::new();
+    let plots = profile
+        .plot_presets
+        .iter()
+        .chain(profile.view_presets.iter().flat_map(|view| &view.plots))
+        .chain(
+            profile
+                .workspace_presets
+                .iter()
+                .flat_map(|workspace| workspace.views.iter().flat_map(|view| &view.plots)),
+        );
+    for plot in plots {
+        for token in &plot.geometry {
+            if let Some(id) = ids.geometry.get(token.trim_start_matches('$')) {
+                styles
+                    .entry(*id)
+                    .or_default()
+                    .insert(format!("{:?}", plot.geometry_style.get(token)));
+            }
+        }
+    }
+    for view in &profile.views {
+        for token in &view.geometry {
+            if let Some(id) = ids.geometry.get(token.trim_start_matches('$')) {
+                styles.entry(*id).or_default().insert("None".into());
+            }
+        }
+    }
+    styles
 }
 
 fn validate_metadata(metadata: &super::Metadata) -> Result<(), String> {

@@ -21,6 +21,22 @@ impl Workbench {
             .instances
             .with_untracked(|all| all.get(&instance.key).cloned());
         if let Some(old) = &previous {
+            // Keep valid resources borrowed by other profiles even if this recipe now skips them.
+            for item in &old.geometry {
+                if !instance
+                    .geometry
+                    .iter()
+                    .any(|geometry| geometry.id == item.id)
+                    && self.profiles.instances.with_untracked(|instances| {
+                        instances.values().any(|other| {
+                            other.key != instance.key
+                                && other.ids.geometry.values().any(|id| *id == item.id)
+                        })
+                    })
+                {
+                    instance.geometry.push(item.clone());
+                }
+            }
             let removed_fields = old
                 .field_ids()
                 .difference(&instance.field_ids())
@@ -109,15 +125,6 @@ impl Workbench {
             *current = updated;
         }
         geometry.retain(|g| !old_geometry.contains(&g.id));
-        let mut names = geometry
-            .iter()
-            .map(|g| g.name.to_lowercase())
-            .collect::<BTreeSet<_>>();
-        for item in &instance.geometry {
-            if !names.insert(item.name.to_lowercase()) {
-                return Err(format!("Geometry name already exists: {}", item.name));
-            }
-        }
         geometry.extend(instance.geometry.clone());
         if let Some(old) = &previous {
             instance.placements = old.placements.clone();
@@ -180,6 +187,9 @@ impl Workbench {
             .unwrap_or_default();
         self.derived.set(fields);
         self.geometry.items.set(geometry);
+        if let Some(old) = &previous {
+            self.refresh_profile_geometry(old, &instance);
+        }
         self.profiles.instances.update(|all| {
             all.insert(instance.key.clone(), instance);
         });

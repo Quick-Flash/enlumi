@@ -118,6 +118,7 @@ impl Workbench {
         let cancel = Arc::new(AtomicBool::new(false));
         self.profiles.cancel.set_value(Some(cancel.clone()));
         self.profiles.busy.set(true);
+        self.status.set("Discovering profiles…".into());
         self.task(async move {
             let result = blocking(move || {
                 let choices = crate::profile_preferences::load()?;
@@ -215,6 +216,8 @@ impl Workbench {
         let cancel = Arc::new(AtomicBool::new(false));
         self.profiles.cancel.set_value(Some(cancel.clone()));
         self.profiles.busy.set(true);
+        self.status
+            .set(format!("Loading profile: {}", path.display()));
         self.profiles.error.set(String::new());
         self.profiles
             .loading_profile
@@ -282,16 +285,22 @@ impl Workbench {
                 .retain(|id, _| profile.filters.iter().any(|field| &field.id == id));
             ids.geometry
                 .retain(|id, _| profile.geometry.iter().any(|geometry| &geometry.id == id));
+            let mut field_ids = std::collections::BTreeSet::new();
             for field in &profile.filters {
-                ids.fields
+                let id = ids.fields
                     .entry(field.id.clone())
                     .or_insert_with(|| self.id());
+                if !field_ids.insert(*id) { *id = self.id(); field_ids.insert(*id); }
             }
+            let mut geometry_ids = std::collections::BTreeSet::new();
             for geometry in &profile.geometry {
-                ids.geometry
+                let id = ids.geometry
                     .entry(geometry.id.clone())
                     .or_insert_with(|| self.id());
+                // Previously identical aliases can diverge on reload.
+                if !geometry_ids.insert(*id) { *id = self.id(); geometry_ids.insert(*id); }
             }
+            self.status.set(format!("Preparing profile: {}", profile.name));
             let definition = profile.clone();
             let base = path
                 .parent()
@@ -354,21 +363,6 @@ impl Workbench {
                         self.profile_failed(format!(
                             "Reload kept previous setup: {} failed",
                             field.name
-                        ));
-                        return;
-                    }
-                }
-                for geometry in &old.geometry {
-                    if instance
-                        .definition
-                        .geometry
-                        .iter()
-                        .any(|g| instance.ids.geometry.get(&g.id) == Some(&geometry.id))
-                        && !instance.geometry.iter().any(|g| g.id == geometry.id)
-                    {
-                        self.profile_failed(format!(
-                            "Reload kept previous setup: {} failed",
-                            geometry.name
                         ));
                         return;
                     }
@@ -471,6 +465,7 @@ impl Workbench {
                 );
                 return;
             }
+            let warnings = instance.diagnostics.len();
             match self.commit_instance(instance, computed.0, computed.1) {
                 Ok(name) => {
                     self.profiles.busy.set(false);
@@ -478,7 +473,7 @@ impl Workbench {
                     self.profiles.failures.update(|failures| {
                         failures.remove(&key);
                     });
-                    self.status.set(format!("Applied profile: {name}"));
+                    self.status.set(if warnings == 0 { format!("Applied profile: {name}") } else { format!("Applied profile: {name} ({warnings} warnings; see Profiles > Skipped items)") });
                     self.refresh_saved_capture(&key);
                     if let Some((item, target)) = destination {
                         self.place_prepared_item(key, item, target);

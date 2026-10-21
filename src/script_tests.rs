@@ -9,6 +9,78 @@ use std::time::{Duration, Instant};
 fn cancelled() -> Arc<AtomicBool> {
     Arc::new(AtomicBool::new(false))
 }
+
+#[test]
+#[ignore = "requires wasm32-unknown-unknown target"]
+fn profile_evaluation_reuses_script_outputs_across_branches_and_groups() {
+    use crate::derived::{DerivedField, EvaluationCache, compute_cached};
+    let log = crate::log::LogStore::read(std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/esc_status_log.ulg"
+    )))
+    .unwrap();
+    let source = "esc_status/0/esc[5].esc_rpm";
+    let script = Arc::new(script(
+        "for i in 0..time.len() { outputs[0][i]=inputs[0][i]; outputs[1][i]=2.0*inputs[0][i]; }",
+        2,
+    ));
+    let mut cache = EvaluationCache::default();
+    let make = |id, output| DerivedField {
+        id,
+        name: format!("Output {id}"),
+        sources: vec![source.into()],
+        group: id,
+        filter: FilterSpec::Rust(script.clone(), output),
+        data: None,
+    };
+    let mut fields = compute_cached(vec![make(1, 0)], &log, &mut cache, cancelled()).unwrap();
+    fields.push(make(2, 0));
+    fields.push(make(3, 1));
+    let fields = compute_cached(fields, &log, &mut cache, cancelled()).unwrap();
+    assert!(std::ptr::eq(
+        fields[0].data.as_ref().unwrap().samples(),
+        fields[1].data.as_ref().unwrap().samples()
+    ));
+    assert_eq!(
+        fields[2].data.as_ref().unwrap().samples()[0].y,
+        2.0 * fields[0].data.as_ref().unwrap().samples()[0].y
+    );
+    let mut parallel_cache = EvaluationCache::default();
+    let fields = crate::derived::pool().unwrap().install(|| {
+        crate::derived::compute_independent(
+            vec![make(10, 0), make(11, 0), make(12, 1)],
+            &log,
+            &mut parallel_cache,
+            cancelled(),
+        )
+    });
+    let fields: Vec<_> = fields.into_iter().map(Result::unwrap).collect();
+    assert!(std::ptr::eq(
+        fields[0].data.as_ref().unwrap().samples(),
+        fields[1].data.as_ref().unwrap().samples()
+    ));
+    assert_eq!(
+        fields[2].data.as_ref().unwrap().samples()[0].y,
+        fields[0].data.as_ref().unwrap().samples()[0].y * 2.
+    );
+    let repeated = crate::derived::pool()
+        .unwrap()
+        .install(|| {
+            crate::derived::compute_independent(
+                vec![make(13, 1)],
+                &log,
+                &mut parallel_cache,
+                cancelled(),
+            )
+        })
+        .pop()
+        .unwrap()
+        .unwrap();
+    assert!(std::ptr::eq(
+        fields[2].data.as_ref().unwrap().samples(),
+        repeated.data.as_ref().unwrap().samples()
+    ));
+}
 fn data(len: usize) -> SeriesData {
     SeriesData::new(
         (0..len)

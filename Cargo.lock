@@ -1293,6 +1293,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "proc-macro2",
  "px4-ulog",
+ "rayon",
  "rfd",
  "rustfft",
  "serde",

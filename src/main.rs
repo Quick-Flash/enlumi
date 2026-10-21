@@ -91,6 +91,7 @@ mod preset_ui;
 mod profile;
 mod profile_commit;
 mod profile_delete;
+mod profile_geometry;
 mod profile_instance;
 mod profile_library;
 mod profile_output_row;
