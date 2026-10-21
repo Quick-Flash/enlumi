@@ -14,6 +14,12 @@ pub fn MeasurementOverlay(
     install_stylesheet("enlumi-measurement", include_str!("measurement.css"));
     let ui = workbench.measurement;
     let host = NodeRef::new();
+    pane.menu_area.set(Some(host));
+    on_cleanup_local(move || {
+        if pane.menu_area.get_untracked() == Some(host) {
+            pane.menu_area.set(None);
+        }
+    });
     let bounds = host.observe_border_box();
     let dragging = RwSignal::new_local(false);
     let cancel = zgui::reactive::RenderEffect::new(move |_| {

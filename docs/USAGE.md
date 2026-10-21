@@ -8,6 +8,40 @@ shown. File filters include lowercase and uppercase suffixes (such as `.BBL`).
 Use **All files** for renamed or mixed-case files; their contents must still be
 a supported log format. Decoder failures and frame limits appear as load warnings.
 
+**Workspace** dropdown beside **View** switches collections of views. Saved
+workspaces appear automatically, including before opening a log. Selecting one
+restores its views and layouts; opening a log populates its plots. Workspace menu
+offers **Rename**, **Save**, **Save as...**, and **Duplicate**. Close workspaces
+with X in workspace selector. Saved recipes omit axis bounds.
+
+**View** dropdown beside **Equalize panels** switches views in current workspace.
+Choose **+ New blank view**, or use adjacent menu to rename, save, or duplicate.
+Each view retains its plots, docking layout, zoom, links,
+active/maximized plot, and analysis settings/results. Log, derived fields, and
+profile resources remain shared. Links stay within their view; background
+work finishes in its originating view without switching visible workspace.
+Closing final view leaves one blank Untitled view. Open views last for current
+application session. View menu offers **Rename**, **Save**, **Save as...**, and **Duplicate**.
+Drag presets from Profiles to open views or plots. **Save** overwrites the linked
+preset directly; a first save asks for a destination. **Save as...** opens the
+editor to create another preset. A captured view previews its plots directly.
+Right-click plot background or open plot header
+menu to save individual plots. Presets store recipes and layout; zoom, visible
+X/Y ranges, and analysis time selections stay in current session.
+
+Sidebar **Save** captures selected raw, derived, and prepared profile fields.
+Field right-click **Add to profile** uses same save editor. Choose new file or
+loaded destination profile; preview includes required filter dependencies and Rust
+source files. Enable **Replace existing entries** explicitly to update conflicting
+saved entries. Source preset menu shows **Modified** for recipe changes; zoom and
+measurement changes do not mark recipes modified.
+
+Double-click field row to rename inline; Enter or blur saves current-log label,
+Escape cancels. Right-click **Edit labels** edits display name, component, and unit;
+choose **Current log** or owning profile as save scope. **Edit filter** opens
+existing filter editor. Source identity, samples, and plot bounds stay unchanged.
+See [profiles](PROFILES.md) for profile editing, saved layouts, and portability.
+
 Press **M**, then click and drag across a plot to measure between data points.
 Initial click picks nearest sample. Drag endpoint follows horizontal position on chosen line.
 Time plots show elapsed time and reciprocal frequency; FFT/PSD plots show frequency
@@ -19,7 +53,8 @@ Use each plot's camera menu to save SVG/PNG or **Copy image** to clipboard. Tool
 visible docks together, preserving layout and current X/Y views. PNG renders
 the same vector content at twice the SVG dimensions; clipboard images use same resolution.
 
-Expand **Parameters** in field tree, alongside **Derived fields**. Search
+Expand **Parameters** directly in field tree. **Raw**, **Derived**, and **Profiles**
+are independent sections in same browser. Shared search never forces trees open. Search
 matches names, values, and record types. Recorded Blackbox flight settings and ULog
 parameter/info records appear here; repeated records stay separate. Decoder schema
 headers (`Field I/P/S/...` definitions, encoding/predictor tables, Product/Data
@@ -32,8 +67,9 @@ plot** / **Use in filter**. Text records remain readable without plot actions. S
 absent from log cannot be reconstructed.
 
 **Profiles → Folder…** chooses saved library directory. Nested folders and
-auto firmware matching use same location. **Profiles** in sidebar heading opens folder tree of JSON setups for named fields, filters,
-geometry and time bands. Expand a profile and drag a view onto any plot; profile loads on demand. Missing
+auto firmware matching use same location. **Profiles** groups saved **Views** and **Plots** directly.
+Views contain plots, and plots contain fields. **Profile files** holds file edit/delete actions.
+Drag a view or plot to use it; profile loads on demand. Missing
 fields skip affected outputs while remaining view works. Views, fields and geometry offer **Add** / **New panel**; fields also offer
 **Filter**. **Reload** updates owned outputs without resetting log; **Remove…**
 previews affected outputs and dependencies. **Auto** saves local firmware-matching
@@ -119,7 +155,7 @@ Timestamps and gaps are preserved.
 
 One log file at a time; dynamic docked plots and tabs. Plot area fills available workspace, with a green theme and docked panels. ULog timestamps use elapsed seconds from file header. Blackbox flights use elapsed seconds from each flight’s first main frame. Incomplete logs show recovered samples with load warning. Missing/unsupported timestamps, decreasing timestamps, and mismatched field lengths also produce load warnings. Numeric and boolean fields are plottable; character and padding fields are omitted. Raw typed values remain in memory; plot values use f64. Linear and step rendering use column LOD. Visible samples are reduced before step corners are generated, retaining extrema and gaps. Sparse pre/post steps retain exact corners. Markers use bounded visible samples; cursor snapping uses full original samples. Preparation runs off UI thread with one worker per pane, coalesces viewport changes, publishes compatible completed buffers during continuous pans, and reuses unchanged lines. Preparation includes one extra viewport on either side so nearby pans reveal cached samples immediately. Exact rendering falls back to columns above 65,536 visible samples to limit GPU geometry. Filtering always uses full samples. Large logs retain all decoded fields, plus buffers for selected signals.
 
-Session persistence, exports, and multi-log comparison are not implemented yet.
+Automatic session recovery and multi-log comparison are not implemented yet.
 
 **Rust function** beside **Built-in** adds programmable filters with loops, persistent per-run
 state, multiple inputs, and named outputs. Requires a Rust compiler with WASM

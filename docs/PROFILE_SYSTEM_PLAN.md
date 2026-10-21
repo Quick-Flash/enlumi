@@ -1,5 +1,9 @@
 # Profile system review and next steps
 
+New browser, workspace view, and preset design:
+[Workspace usability plan](WORKSPACE_USABILITY_PLAN.md). That plan supersedes UI
+and authoring proposals below; this document retains historical implementation review.
+
 Status: ownership/browser, Auto/Reload/Remove, and metadata changes implemented locally.
 Automated validation passed; see implementation notes for remaining release checks.
 Historical review follows.

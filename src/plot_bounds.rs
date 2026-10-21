@@ -4,6 +4,26 @@ use zgui::prelude::*;
 
 impl Pane {
     pub fn fit_axes(self, axes: Axes) {
+        if let Some(map) = self
+            .analysis
+            .with_untracked(|result| result.as_ref().and_then(|result| result.heatmap.clone()))
+        {
+            let current = self.plot.ranges.get_untracked();
+            let _ = self.plot.set_view(plot::Ranges {
+                x: if axes.x {
+                    (map.x_low, map.x_high).into()
+                } else {
+                    current.x
+                },
+                y: if axes.y {
+                    (map.y_low, map.y_high).into()
+                } else {
+                    current.y
+                },
+            });
+            return;
+        }
+
         self.plot.fit_axes(
             &plot::plot_data::PlotData::Time(self.series.get_untracked()),
             axes,

@@ -7,13 +7,13 @@ pub mod resolve;
 #[cfg(test)]
 mod tests;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
     pub version: u32,
@@ -34,9 +34,15 @@ pub struct Profile {
     pub geometry: Vec<Geometry>,
     #[serde(default)]
     pub views: Vec<View>,
+    #[serde(default)]
+    pub plot_presets: Vec<crate::preset::PlotPreset>,
+    #[serde(default)]
+    pub view_presets: Vec<crate::preset::ViewPreset>,
+    #[serde(default)]
+    pub workspace_presets: Vec<crate::preset::WorkspacePreset>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FieldGroup {
     pub source: String,
@@ -47,7 +53,7 @@ pub struct FieldGroup {
     pub components: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Metadata {
     pub name: String,
@@ -76,7 +82,7 @@ impl Metadata {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Signal {
     pub id: String,
@@ -84,14 +90,14 @@ pub struct Signal {
     pub metadata: Metadata,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Source {
     Field(String),
     Setting { setting: Setting },
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Setting {
     pub name: String,
@@ -102,7 +108,7 @@ pub struct Setting {
     /// Zero-based numeric array element. Omit for scalar parameters.
     pub element: Option<usize>,
 }
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SettingCondition {
     pub setting: Setting,
@@ -113,7 +119,7 @@ fn one() -> usize {
     1
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Scalar {
     Number(f64),
@@ -126,7 +132,7 @@ impl Default for Scalar {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Filter {
     pub id: String,
@@ -135,7 +141,7 @@ pub struct Filter {
     pub operation: Operation,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
     Affine {
@@ -178,7 +184,7 @@ pub enum Operation {
     },
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Geometry {
     pub id: String,
@@ -196,7 +202,7 @@ fn opacity() -> f64 {
     0.18
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Shape {
     Rectangle {
@@ -219,7 +225,7 @@ pub enum Shape {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FlagRule {
     pub mask: u64,
@@ -227,7 +233,7 @@ pub struct FlagRule {
     pub color: [u8; 3],
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct View {
     pub name: String,
@@ -336,7 +342,7 @@ pub fn load(path: &Path) -> Result<Profile, String> {
         return Err("Profile exceeds 4 MiB".into());
     }
     let profile: Profile = serde_json::from_str(&text).map_err(|error| error.to_string())?;
-    if profile.version != 1 {
+    if !matches!(profile.version, 1 | 2) {
         return Err(format!("Unsupported profile version {}", profile.version));
     }
     if profile.name.trim().is_empty() {
@@ -355,6 +361,7 @@ pub fn load(path: &Path) -> Result<Profile, String> {
     {
         return Err("Profile exceeds 2048 resources or 32 views".into());
     }
+    crate::preset::validate(&profile)?;
     Ok(profile)
 }
 

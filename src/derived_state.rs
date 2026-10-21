@@ -25,38 +25,6 @@ impl Workbench {
             self.edit_filter(Some(id), None);
         }
     }
-    pub fn edit_created_filters(self) {
-        let ids = self.filter_outputs.get_untracked();
-        let fields: Vec<_> = self.derived.with_untracked(|fields| {
-            ids.iter()
-                .filter_map(|id| fields.iter().find(|field| field.id == *id).cloned())
-                .collect()
-        });
-        let Some(first) = fields.first() else {
-            return;
-        };
-        self.edit_filter(Some(first.id), None);
-        if fields.len() > 1
-            && fields
-                .iter()
-                .all(|field| field.sources.len() == 1 && field.filter == first.filter)
-        {
-            self.filter_inputs.set(
-                fields
-                    .iter()
-                    .map(|field| crate::derived::FilterInput {
-                        source: field.sources[0].clone(),
-                        name: field.name.clone(),
-                    })
-                    .collect(),
-            );
-            self.filter_mode.set(FilterMode::Edit {
-                ids: ids.clone(),
-                selected: first.id,
-            });
-            self.filter_outputs.set(ids);
-        }
-    }
     pub fn remove_saved_filter(self, id: u64) {
         let mode = self.filter_mode.get_untracked();
         match self.delete_filter(id) {
@@ -304,26 +272,6 @@ impl Workbench {
         self.filter_error.set(String::new());
         self.filters_open.set(true);
     }
-    pub fn next_filters(self) {
-        let sources = self
-            .filter_outputs
-            .get_untracked()
-            .into_iter()
-            .map(derived::key)
-            .collect();
-        self.filter_mode.set(FilterMode::New);
-        self.script_output_ids.set(Vec::new());
-        self.filter_outputs.set(Vec::new());
-        self.filter_inputs.set(Vec::new());
-        self.cancel_filter_input_drag();
-        self.reset_filter_names();
-        if self.filter_kind.get_untracked() == "rpy" {
-            self.filter_kind.set("low".into());
-        }
-        if let Err(error) = self.accept_filter_sources(sources) {
-            self.filter_error.set(error);
-        }
-    }
     pub fn combined_filter(self) -> bool {
         self.filter_kind
             .with(|kind| matches!(kind.as_str(), "magnitude" | "rpy" | "rust"))
@@ -509,7 +457,7 @@ impl Workbench {
         });
     }
     pub(crate) fn publish_filter_fields(self, fields: Vec<DerivedField>) {
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             pane.lines.update(|lines| {
                 for line in lines {
                     if let Some(field) = fields.iter().find(|field| field.key() == line.source) {
@@ -563,7 +511,7 @@ impl Workbench {
         });
         self.filter_outputs
             .update(|outputs| outputs.retain(|output| *output != id));
-        for pane in self.panes.get_untracked() {
+        for pane in self.all_panes() {
             let ids: Vec<_> = pane.lines.with_untracked(|lines| {
                 lines
                     .iter()

@@ -9,7 +9,7 @@ impl Workbench {
         position: zgui::geom::Point<zgui::geom::CssPx, zgui::geom::Css>,
     ) {
         self.geometry.editor_drag.set(Some(EditorDrag {
-            pane: self.active.get_untracked(),
+            pane: self.active().get_untracked(),
             editor,
             offset,
             start: Point::new(f64::from(position.x.0), f64::from(position.y.0)),

@@ -72,7 +72,7 @@ impl Workbench {
         if matches!(&event.key_without_modifiers,zgui::vocab::Key::Character(key) if key.as_str().eq_ignore_ascii_case("m"))
         {
             self.finish_geometry_editing();
-            self.analysis.picking_range.set(false);
+            self.analysis().picking_range.set(false);
             self.measurement.active.update(|active| *active = !*active);
             self.measurement.selection.set(None);
             true

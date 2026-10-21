@@ -16,12 +16,14 @@ mod band_mapping_file;
 mod band_rule_row;
 mod band_state;
 mod browser;
+mod browser_fields;
 mod derived;
 mod derived_state;
 #[cfg(target_os = "linux")]
 mod desktop_icon;
 #[cfg(test)]
 mod editor;
+mod field_actions;
 mod field_label;
 mod field_row;
 mod field_selection;
@@ -74,15 +76,28 @@ mod parameter_rows;
 mod plot_actions;
 mod plot_bounds;
 mod plot_cursor;
+mod plot_menu;
 mod preferences;
+mod preset;
+mod preset_apply;
+mod preset_browser;
+mod preset_capture;
+mod preset_delete;
+mod preset_dialog;
+mod preset_lookup;
+mod preset_reuse;
+mod preset_store;
+mod preset_ui;
 mod profile;
 mod profile_commit;
+mod profile_delete;
 mod profile_instance;
 mod profile_library;
 mod profile_output_row;
 mod profile_outputs;
 mod profile_placement;
 mod profile_preferences;
+mod profile_preset_tree;
 mod profile_selection;
 mod profile_state;
 mod profile_view_source;
@@ -114,7 +129,18 @@ mod update_notice;
 mod update_release;
 mod update_state;
 mod updates;
+mod view_picker;
+mod view_state;
+#[cfg(test)]
+mod view_tests;
 mod workspace;
+mod workspace_catalogue;
+mod workspace_collection;
+mod workspace_picker;
+mod workspace_preset;
+mod workspace_state;
+#[cfg(test)]
+mod workspace_tests;
 
 use app::WorkbenchAppProps;
 use zgui::prelude::*;
@@ -162,3 +188,6 @@ mod layout_tests;
 
 #[cfg(test)]
 mod spectral_tests;
+
+#[cfg(test)]
+mod preset_tests;

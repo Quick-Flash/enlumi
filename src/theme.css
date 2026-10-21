@@ -8,6 +8,9 @@
 --zui-color-muted-foreground: var(--app-muted);
 --zui-color-popover: var(--app-surface);
 --zui-color-popover-foreground: var(--app-foreground);
+--zui-color-tooltip: var(--app-surface);
+--zui-color-tooltip-foreground: var(--app-foreground);
+--zui-color-tooltip-border: var(--app-border-strong);
 --zui-color-primary: var(--app-selected);
 --zui-color-primary-foreground: var(--app-foreground);
 --zui-color-secondary: var(--app-control);

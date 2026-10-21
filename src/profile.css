@@ -1,8 +1,8 @@
-.profile-library { flex: 1; min-height: 0; min-width: 0; gap: 6px; }
-.profile-browser-pane > .profile-library { height: 0; }
+.profile-library { flex: none; min-height: 0; min-width: 0; gap: 6px; }
+.profile-browser-pane > .profile-library { height: auto; }
 .profile-actions { flex: none; gap: 4px; flex-wrap: wrap; }
 .profile-directory.zui-input { flex: none; height: 24px; min-height: 24px; font-size: var(--app-font-xs); }
-.profile-files { flex: 1; height: 0; min-height: 0; overflow: auto; }
+.profile-files { flex: none; min-height: 0; }
 .profile-folder { flex: none; min-height: 26px; cursor: pointer; }
 .profile-tree-file { flex: none; min-width: 0; }
 .profile-file { align-items: center; gap: 3px; padding: 3px 0; border-bottom: 1px solid var(--app-border); }
@@ -14,7 +14,7 @@
 .profile-warnings { flex: none; max-height: 100px; overflow: auto; }
 .profile-warnings text { white-space: pre-wrap; }
 
-.profile-browser-pane, .field-browser-pane { flex: 1; height: 0; min-height: 0; min-width: 0; gap: 6px; }
+.profile-browser-pane { flex: none; height: auto; min-height: 0; min-width: 0; gap: 6px; }
 .profile-output { flex: none; min-width: 0; padding: 2px 0 4px 8px; }
 .profile-remove-preview { flex: none; gap: 4px; padding: 6px; border: 1px solid var(--app-border); }
 
@@ -41,3 +41,41 @@
 .profile-view-members { padding-left: 18px; gap: 2px; }
 .profile-view-members .profile-view-source { padding-left: 0; }
 .profile-members-toggle.app-action { flex: none; padding: 0; width: 20px; min-width: 20px; border: none; background: transparent; }
+.profile-outputs { flex: none; min-width: 0; padding: 4px 0 6px 6px; gap: 4px; border-left: 1px solid var(--app-border-strong); }
+.profile-file { padding: 5px 0; }
+.profile-section > .profile-output-section.app-action.zui-button[data-variant="ghost"] { justify-content: flex-start; gap: 4px; background: var(--app-inset); border-color: transparent; font-size: var(--app-font-xs); }
+.workspace-preset { flex: none; min-width: 0; padding: 3px 0 3px 6px; }
+.workspace-preset-heading { flex: none; min-width: 0; align-items: center; gap: 3px; }
+.workspace-preset-heading > .profile-view-source { flex: 1; width: 0; min-width: 0; padding: 0; }
+.preset-kind { flex: none; font-size: var(--app-font-xs); color: var(--app-muted); }
+.workspace-preset-plots { flex: none; min-width: 0; margin-left: 10px; padding-left: 8px; gap: 6px; border-left: 1px solid var(--app-border-strong); }
+.workspace-preset-plot { flex: none; min-width: 0; padding: 4px 0; border-top: 1px solid var(--app-border); }
+.preset-drag-hint { font-size: var(--app-font-xs); white-space: normal; }
+.profile-delete.app-action.zui-button[data-variant="ghost"] { color: var(--app-danger-text); }
+.profile-delete.app-action.zui-button[data-variant="ghost"]:hover { background: var(--app-danger); border-color: var(--app-danger-border); }
+
+/* Keep sidebar commands compact despite shared button defaults. */
+.profile-library .app-action.zui-button[data-variant], .profile-menu-content .app-action.zui-button[data-variant] { box-sizing: border-box; height: 22px; min-height: 22px; padding: 0 5px; font-size: var(--app-font-xs); line-height: 16px; }
+.profile-library .app-action.zui-button[data-variant][data-size="icon-xs"] { width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 0; }
+.profile-library .profile-members-toggle.app-action.zui-button[data-variant] { border-color: transparent; background: transparent; }
+.page .profile-library .metric-option { box-sizing: border-box; height: 22px; min-height: 22px; padding: 0 4px; gap: 3px; }
+.profile-library .profile-folder { min-height: 22px; height: 22px; padding-top: 0; padding-bottom: 0; }
+.profile-library .profile-file { padding: 2px 0; }
+.profile-library, .profile-library .profile-outputs { gap: 3px; }
+.profile-library .profile-summary { padding: 0 2px; gap: 4px; }
+.profile-library .profile-actions { gap: 3px; }
+.profile-library .profile-directory.zui-input { height: 22px; min-height: 22px; }
+.profile-library .profile-output { padding-top: 0; padding-bottom: 0; }
+.profile-library .workspace-preset { padding-top: 1px; padding-bottom: 1px; }
+.profile-library .workspace-preset-plots { gap: 3px; }
+.profile-library .workspace-preset-plot { padding: 2px 0; }
+.profile-menu-content .preset-delete.app-action.zui-button[data-variant] { color: var(--app-danger-text); }
+.profile-menu-content .preset-delete.app-action.zui-button[data-variant]:hover { background: var(--app-danger); border-color: var(--app-danger-border); }
+.profile-preset-tree { flex: none; min-width: 0; gap: 3px; }
+.profile-library .profile-files-toggle.app-action.zui-button[data-variant] { justify-content: flex-start; gap: 4px; background: var(--app-inset); border-color: transparent; margin-top: 4px; }
+.profile-files { padding-left: 8px; border-left: 1px solid var(--app-border); }
+.profile-recipe-preview { min-width: 0; gap: 3px; padding: 3px 6px; border-left: 1px solid var(--app-border); }
+.profile-library .workspace-plots-toggle.app-action.zui-button[data-variant] { justify-content: flex-start; gap: 4px; background: var(--app-inset); border-color: transparent; }
+.profile-plot-source > .profile-output-line .signal-name { font-weight: 600; }
+.workspace-collection { flex: none; min-width: 0; padding: 2px 0 2px 6px; }
+.workspace-collection-views { flex: none; min-width: 0; margin-left: 10px; padding-left: 6px; border-left: 1px solid var(--app-border-strong); }

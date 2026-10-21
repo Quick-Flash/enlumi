@@ -10,18 +10,30 @@ No Betaflight alias table or motor pole-count default is built into Enlumi.
 1. Open a log. Expand **Parameters** in field tree for every recorded entry.
    Numeric parameters drag into plots and filters; numeric arrays expand into elements.
    Select a parameter for full, selectable value and direct plot/filter buttons.
-   Click **Profiles** directly in sidebar heading. **Fields** switches back.
-2. Browse folders and expand a profile. Drag one of its views onto a plot.
-   Enlumi loads profile if needed, computes available outputs, and adds that view.
-   **Load** prepares resources without placing plots; **Load file…** supports
-   profiles outside library directory. Existing work is preserved.
-3. Each profile expands into **Views**, **Fields**, and **Geometry**. Views start
-   open; Fields/Geometry expand on demand. Search opens matching sections and
-   filters their rows. Click highlights output; Ctrl-click toggles selection, and Shift-click selects range across expanded sections/profiles. Drag selected outputs onto plot to add them together. Create empty plot with plot-tab **+** first when needed.
+   Sidebar contains independently collapsible **Parameters**, **Raw**, **Derived**, and
+   **Profiles** sections. Raw starts collapsed when opening a log. Expand Profiles
+   alongside other fields to mix their selections without switching modes.
+2. Expand **Views** or **Plots** directly under Profiles. Views contain plots;
+   plots expand to show individual fields. Drag a view, plot, or field to use it.
+   Resources prepare on demand; **Import file…** adds profiles outside the library.
+   **Profile files** contains the file/folder tree and file edit/delete actions.
+3. **Fields** and **Geometry** contain reusable resources from all profiles.
+   Each preset's **…** menu offers actions and identifies its source file.
+   Shared sidebar search filters raw,
+   derived, and profile results without opening folders or sections. Expand or
+   collapse matches manually. Click highlights output; Ctrl-click toggles selection,
+   and Shift-click selects range across expanded sections/profiles. Raw, derived,
+   and profile fields can be selected and dragged together into plots, Filters,
+   or Analyze. Missing profiles prepare before the complete selection is placed.
+   Create empty plot with plot-tab **+** first when needed.
+   Expand a view preset to see each plot with its fields grouped underneath.
+   Drag the whole view to open it as a new workspace view, or drag one nested
+   plot to create a separate plot with its saved settings. Individual fields remain draggable.
    Field **⋯ → Use in filter** also accepts individual outputs; fields drag into
    filter inputs or state-band source area. Imports outside library appear under
    **Imported**. Existing plot contents remain; duplicate sources are skipped.
-   View geometry attaches too. Search, expansion and scroll survive mode switches.
+   View geometry attaches too. Search, expansion and scroll survive collapsing
+   and reopening Profiles.
 
 Named state bands also appear in the geometry library. Their name and each
 state's name/color can be edited with existing geometry controls. Labels render
@@ -42,9 +54,94 @@ Invalid JSON/schema, duplicate IDs/view names, and commit conflicts reject load.
 Changing logs cancels in-flight preparation. Filters use existing cancellation,
 validation, and Rust/WASM execution limits.
 
+## Workspaces
+
+A workspace is a collection of views. Each view contains its own plots and layout.
+Use the **Workspace** dropdown beside **View** to switch collections without
+mixing their view lists. Existing workspace sessions retain their selected view
+and plot bounds when switching.
+
+Saved workspaces in the profile library appear in the Workspace dropdown
+automatically. They can be selected before opening a log; opening a log then
+populates their plots. Profiles also exposes **Workspaces → Views → Plots →
+Fields**, with drag support for whole workspaces, individual views, and plots.
+
+Workspace **… → Save** captures every view in the current
+workspace, including its active view, plots, filters, styles, and layouts.
+Save overwrites the linked preset without opening an editor. For an unlinked view
+or workspace, Save creates its profile in the profile folder. **Save as...**
+opens an editor for a separate copy. **Duplicate**
+copies all open views and plots into an independent workspace. Workspace names and view
+names can be edited in the shared profile editor. Recipes omit zoom bounds and
+analysis time intervals. Inactive views do not render in the background.
+
+Saving preserves deleted derived outputs. Deleted filter recipes are removed from
+the saved file only when no other preset or resource references them; saving does
+not reactivate deleted outputs retained for other presets.
+
+Saved presets can share inputs with different captured labels. Existing input
+labels stay active; label differences do not block loading or dragging plots.
+
+Workspace recipes use `workspace_presets`: each entry contains `name`, `views`
+(view preset objects), and `active` (zero-based initial view index).
+
+## Create and edit profiles
+
+Profile actions include **Delete profile file…**. Confirmation removes the JSON
+file from disk; loaded fields and plots remain available in the current session.
+Plot and view preset action menus include **Delete plot preset…** and **Delete
+view preset…**. These remove only the saved preset, keeping plotted copies and
+shared fields. **Unload outputs…** removes loaded profile resources without
+deleting the saved file.
+
+- Sidebar **Save** captures selected fields into a new or existing profile.
+  Field right-click **Add to profile** includes that field and its dependencies.
+- Plot background/header **Save plot as preset** captures one plot. View menu
+  **Save view as preset** captures all plots, tabs, splits, and link settings.
+- Shared editor asks for name and destination file or loaded profile. Expand
+  dependency preview to inspect included fields, labels, filters, geometry, and
+  recipes. Edit names, component/unit labels, and filter parameters there; use
+  normal filter editor for building/changing filter stages. Arrange layouts with
+  normal workspace docking, then save view preset.
+- Profile **Edit profile** opens saved contents. **Save** writes changes;
+  **Save as / choose file** changes destination and copies Rust dependencies.
+  **Reload** explicitly refreshes prepared resources from file.
+- **Replace existing entries** must be enabled for conflicting named entries.
+  Saving preserves unrelated entries. Writes are atomic and stale editor writes
+  reject changed files rather than overwriting external changes.
+- Plot **Update source preset** opens same review editor with source destination and
+  replacement selected. **Modified** tracks recipe content, excluding viewport
+  changes, cursors, measurements, and analysis time selections.
+
+Plot presets offer **Add as new plot** and **Add fields to selected plot**. Second
+option opens field checkboxes, skips duplicates, and preserves destination style
+and current bounds. Time fields and spectra cannot mix. View presets offer
+**Open as new view** and **Add plots**; both remap runtime plot IDs. Double-click
+plot preset opens new plot; double-click view preset name opens new view.
+Legacy `views` appear as plot presets and remain unchanged until explicitly saved.
+
+Saved recipes contain field references and filter definitions, not samples or
+computed spectra. FFT/PSD/heatmap/spectrogram recipes recompute using current
+Analyze selection. Window, DC removal, window size, overlap, and conditioning
+field are retained; no zoom, axis limits, auto-fit state, or analysis interval is
+serialized. New plots fit normally. Existing plots keep bounds when fields are
+inserted. Axis links are explicit relationships, not saved numeric ranges.
+
+Rust source dependencies live beside JSON under content-addressed `sources/*.rs`
+paths. Save as copies dependencies, so move JSON and its `sources` directory
+together. Shared inputs are deduplicated when adding presets to one profile.
+Identical live filters/geometry can be reused when opening version 2 recipes in
+originating workspace; removing profile preserves borrowed resources. Removing
+resources still referenced by another profile is blocked.
+
+Field **Edit labels** offers explicit **Current log** or owning profile scope.
+Inline rename affects current log. Saving profile labels clears local override
+for that field; **Profile default** restores inherited metadata and **Raw label**
+suppresses it. Labels never change source identity or plotted samples.
+
 ## Profile directory
 
-Click **Folder…** to choose profile library directory. Choice persists across
+Expand **Profiles**, then click **Folder…** to choose profile library directory. Choice persists across
 launches and controls both browsing and automatic firmware matching. Nested
 folders are supported. **Load file…** imports one profile without changing library.
 Profile sections and **Details** expand on demand. Info icon beside profile search shows full directory path, recorded firmware, and library help. Superseded directory scans cannot replace newer results.
@@ -160,7 +257,9 @@ represents one named output.
 
 `name` is required; `unit` and `axis` are optional strings. Names/units appear in
 field labels, legends, and filter source labels. Search accepts friendly and raw
-names. Semantic `axis` is stored as metadata; it does not assign a plot Y axis.
+names. Name alone is enough. Editor calls optional `axis` **Component**: it supplies
+a short field-tree leaf label, such as Roll or Pitch, while the full name stays in
+legends. It does not assign a plot X or Y axis.
 Metadata alone does not scale values. Declare units only after verifying encoding
 and scaling. Manual edits to derived filter operations invalidate profile metadata
 for affected outputs/dependents, so old unit labels do not outlive computations.
@@ -201,10 +300,11 @@ uses gain `{"ratio":[{"setting":{"name":"motor_poles"}},2]}`. Conversion data
 and prerequisites remain explicit in the file. Enlumi does not infer encoding,
 read missing motor settings, or validate hardware pole counts from telemetry.
 
-## Schema reference (version 1)
+## Schema reference (versions 1 and 2)
 
 Top-level keys: `version`, `name`, optional `requires` (raw IDs),
-`requires_settings`, `signals`, `filters`, `geometry`, `views`. Unknown keys are
+`requires_settings`, `signals`, `filters`, `geometry`, `views`; version 2 also
+adds `plot_presets` and `view_presets` (described below). Unknown keys are
 errors. A setting requirement selects a record and uses exactly one `equals` or
 nonempty `starts_with` string. Requirements must all match. Use these to constrain
 firmware versions and settings such as high-resolution logging.
@@ -332,3 +432,49 @@ Names stay attached to plot IDs through docking; titles remain session-local.
 ## Individual view fields and analysis
 
 Arrow beside each view prepares profile if needed and exposes its available member fields. Members support selection and dragging individually. Drag whole view into **Analyze** to list every available member separately, then enable desired inputs. See [frequency analysis](FREQUENCY_ANALYSIS.md).
+
+## Version 2 plot and view recipes
+
+Version 1 remains supported. Version 2 adds `plot_presets` and `view_presets`;
+existing signal/filter/geometry/firmware definitions retain their format.
+Application writes version 2 when capturing presets. Loading never rewrites files.
+
+Example plot preset inside a profile with signal alias `$rpm`:
+
+```json
+{
+  "name": "Motor RPM",
+  "lines": [{
+    "source": "$rpm",
+    "color": [48, 180, 220, 255],
+    "width": 1.5,
+    "radius": 3.0,
+    "marker": "circle",
+    "connection": "linear",
+    "pattern": "solid",
+    "markers": false,
+    "hidden": false
+  }],
+  "links": {"x": false, "y": false, "pointer": true},
+  "analysis": null
+}
+```
+
+Optional plot properties: `geometry` contains geometry IDs, `geometry_style`
+contains presentation per ID, and `legend_order` contains `line:$alias` or
+`geometry:id` entries. Analysis object contains `mode` (`fft`, `psd`, `heatmap`,
+`spectrogram`), `window` (`hann`, `hamming`, `blackman`, `rectangular`), `size`,
+`overlap`, `heatmap_bins`, `remove_dc`, and optional `condition` field reference.
+Windowed maps require one input; conditioned heatmaps also require conditioning
+field. Viewport and interval properties are rejected by recipe schema.
+
+Each `view_presets` entry contains `name`, `plots` (same plot recipe format), and
+`layout`. Layout references zero-based plot indexes exactly once:
+
+| Layout | Properties |
+| --- | --- |
+| `plot` | `plot`: plot index |
+| `tabs` | `plots`: indexes, `active`: selected plot index |
+| `split` | `stacked`: rows if true, `ratio`, `first` and `second`: nested layouts |
+
+Example layout: `{"kind":"split","stacked":true,"ratio":0.5,"first":{"kind":"plot","plot":0},"second":{"kind":"tabs","plots":[1,2],"active":1}}`.

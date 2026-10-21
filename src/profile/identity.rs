@@ -18,13 +18,23 @@ impl ProfileKey {
 #[serde(tag = "kind", content = "name", rename_all = "snake_case")]
 pub enum Item {
     View(String),
+    Workspace(String),
+    WorkspacePreset(String),
     Field(String),
     Geometry(String),
 }
 impl Item {
+    pub fn is_workspace_item(&self) -> bool {
+        matches!(self, Self::Workspace(_) | Self::WorkspacePreset(_))
+            || matches!(self, Self::View(name) if crate::preset_lookup::is_nested_plot(name))
+    }
     pub fn name(&self) -> &str {
         match self {
-            Self::View(n) | Self::Field(n) | Self::Geometry(n) => n,
+            Self::View(n)
+            | Self::Workspace(n)
+            | Self::WorkspacePreset(n)
+            | Self::Field(n)
+            | Self::Geometry(n) => n,
         }
     }
 }
@@ -127,6 +137,28 @@ impl Profile {
         for view in &mut self.views {
             for value in &mut view.fields {
                 source(value, flight);
+            }
+        }
+        for plot in self.plot_presets.iter_mut().chain(
+            self.view_presets
+                .iter_mut()
+                .flat_map(|view| view.plots.iter_mut())
+                .chain(
+                    self.workspace_presets
+                        .iter_mut()
+                        .flat_map(|workspace| workspace.views.iter_mut())
+                        .flat_map(|view| view.plots.iter_mut()),
+                ),
+        ) {
+            for line in &mut plot.lines {
+                field(&mut line.source, flight);
+            }
+            if let Some(condition) = plot
+                .analysis
+                .as_mut()
+                .and_then(|analysis| analysis.condition.as_mut())
+            {
+                field(condition, flight);
             }
         }
         self

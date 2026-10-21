@@ -20,14 +20,26 @@
 .sidebar-help:hover .sidebar-info-icon { --zgui-stroke: var(--app-foreground); }
 .page .sidebar-help.zui-button:focus-visible { outline: 1px solid var(--app-focus); outline-offset: -1px; }
 .sidebar-info-icon { flex: none; width: 16px; height: 16px; color: transparent; --zgui-stroke: var(--app-muted); --zgui-stroke-width: 1.5px; pointer-events: none; }
-.sidebar-help-content { width: 320px; max-width: 90vw; gap: 6px; }
+.sidebar-help-content { width: 320px; max-width: 90vw; gap: 6px; padding: 10px 12px; }
+.sidebar-help-content text { color: var(--app-foreground); white-space: normal; }
 .browser-heading .heading { flex: 1; }
 .toolbar .zui-button, .browser-heading .zui-button { transition: none; }
 .browser-heading .zui-button { flex: none; padding: 3px 5px; }
 .browser-heading { align-items: center; justify-content: flex-start; gap: 4px; }
+.view-picker { flex: none; align-items: center; gap: 3px; }
+.workspace-picker .workspace-select.app-action { width: 180px; min-width: 130px; }
+.workspace-list .workspace-saved-choice.app-action { width: 100%; justify-content: flex-start; }
+.workspace-saved-heading { padding-top: 5px; border-top: 1px solid var(--app-border); }
+.view-select { width: 150px; max-width: 200px; }
+.view-caption { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.view-menu-content { width: 220px; gap: 5px; }
+.analysis-selection-actions { flex: none; gap: 4px; }
 .heading { font-weight: 600; font-size: var(--app-font-sm); }
 .muted { color: var(--app-muted); font-size: var(--app-font-xs); }
 .signal-list { flex: 1; height: 0; min-height: 28px; overflow-y: auto; overflow-x: hidden; }
+.browser-field-rows { flex: none; min-width: 0; }
+.browser-field-rows > .tree-row { flex: none; height: 28px; min-height: 28px; }
+.browser-section.app-action { flex: none; width: 100%; justify-content: flex-start; font-weight: 600; }
 .tree-row { position: relative; height: 28px; min-width: 0; align-items: center; }
 .tree-connectors { position: absolute; inset: 0; pointer-events: none; }
 .tree-guide { position: absolute; top: 0; height: 28px; width: 1px; background: var(--app-border-strong); }
@@ -337,6 +349,8 @@
 .parameter-actions { gap: 6px; }
 
 .field-label-editor { width: 290px; display: flex; flex-direction: column; gap: 5px; }
+.field-label-editor.zui-surface { --zui-surface-enter-duration: 0ms; --zui-surface-exit-duration: 0ms; animation: none; transform: none; box-shadow: none; }
+.field-label-provenance { flex: none; max-height: 160px; overflow-y: auto; white-space: pre-wrap; }
 .field-label-editor > row { gap: 6px; }
 .selected-field-row { flex: none; min-height: 28px; align-items: center; gap: 4px; }
 .selected-field-row .selected-field { flex: 1; height: auto; min-width: 0; max-height: 32px; }
@@ -350,3 +364,69 @@
 .toolbar-brand { align-items: center; flex: none; gap: 3px; }
 
 .page field { overflow-x: auto; }
+
+.field-actions, .field-actions.zui-context-menu__area { flex: 1; min-width: 0; }
+.field-inline-rename { flex: 1; min-width: 0; height: 26px; }
+.plot-menu-area, .plot-menu-gate { position: relative; flex: 1; min-width: 0; min-height: 0; }
+.plot-menu-gate > .plot-content { flex: 1; min-height: 0; }
+/* Native scrollbar paint ignores ancestor transforms; center with margins. */
+.profile-builder.zui-dialog { box-sizing: border-box; inset: 0; margin: auto; width: 680px; max-width: 92vw; height: 88vh; max-height: 760px; min-height: 0; gap: 10px; overflow: hidden; }
+.profile-builder.zui-dialog.zui-surface { --zui-surface-place: none; --zui-surface-enter-duration: 0ms; --zui-surface-exit-duration: 0ms; animation: none; box-shadow: none; }
+.profile-builder .zui-dialog__header { flex: none; padding-right: 18px; }
+.profile-builder-body.zui-scroll-area { flex: 1 1 0; min-height: 0; min-width: 0; overflow: hidden; }
+.profile-builder-body .zui-scroll-area__viewport { min-height: 0; overflow-y: scroll; overflow-x: hidden; --zgui-scrollbar-thumb: var(--app-muted); --zgui-scrollbar-track: var(--app-inset); }
+.profile-builder-form { flex: none; min-width: 0; gap: 6px; padding-right: 8px; }
+.profile-builder-form > * { flex-shrink: 0; }
+.profile-builder-preview { flex: none; min-width: 0; gap: 4px; }
+.profile-builder-section { flex: none; gap: 4px; padding: 6px 0; }
+.profile-builder-entry { flex: none; gap: 4px; padding: 6px; border: 1px solid var(--app-border); }
+.profile-builder-entry row, .profile-file-controls { align-items: center; gap: 5px; }
+.profile-builder-entry .zui-input, .profile-file-controls .zui-input { flex: 1; min-width: 0; }
+.view-preset-row { padding: 4px 6px; gap: 4px; }
+
+/* Compact workspace controls and consistent sidebar groups. */
+.view-select.app-action { flex: none; width: 138px; min-width: 138px; max-width: 180px; height: var(--app-control-height); min-height: var(--app-control-height); justify-content: space-between; gap: 8px; background: var(--app-control); border: 1px solid var(--app-border-strong); }
+.view-select-mark { flex: none; color: var(--app-muted); font-size: var(--app-font-xs); }
+.view-list { width: 230px; max-height: 45vh; gap: 3px; overflow-y: auto; background: var(--app-surface); color: var(--app-foreground); border: 1px solid var(--app-border-strong); }
+.view-list.zui-surface, .view-menu-content.zui-surface, .profile-menu-content.zui-surface { background: var(--app-surface); color: var(--app-foreground); border: 1px solid var(--app-border-strong); box-shadow: 0 5px 18px rgba(0,0,0,.34); }
+.view-choice { flex: none; align-items: center; gap: 3px; padding: 2px; border-radius: var(--app-radius-sm); }
+.view-choice:hover, .view-choice.view-current { background: var(--app-inset); }
+.view-choice-select.app-action { flex: 1; min-width: 0; justify-content: flex-start; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.view-choice .view-choice-remove.app-action.zui-button[data-variant="ghost"] { flex: none; width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 0; border-color: transparent; background: transparent; color: var(--app-muted); }
+.view-choice .view-choice-remove.app-action.zui-button[data-variant="ghost"]:hover { background: var(--app-danger); color: var(--app-danger-text); }
+.view-new-choice.app-action { flex: none; width: 100%; justify-content: flex-start; border-top: 1px solid var(--app-border); }
+.view-picker .view-menu.app-action { width: var(--app-control-height); height: var(--app-control-height); min-height: var(--app-control-height); }
+.view-choice { position: relative; }
+.view-current-icon { flex: none; box-sizing: border-box; width: 22px; height: 22px; padding: 4px; color: transparent; --zgui-stroke: var(--app-accent); --zgui-stroke-width: 1.8px; pointer-events: none; }
+.maximize-button.app-action.zui-button { flex: none; width: auto; min-width: 0; padding: 0 6px; }
+.view-select-mark, .view-remove-icon, .view-menu-icon { flex: none; width: 13px; height: 13px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.7px; pointer-events: none; }
+.zui-tooltip.zui-surface { --zui-color-tooltip: var(--app-surface); --zui-color-tooltip-foreground: var(--app-foreground); --zui-color-tooltip-border: var(--app-border-strong); --zui-surface-fill: var(--app-surface); --zui-surface-ink: var(--app-foreground); --zui-surface-border: 1px solid var(--app-border-strong); --zui-surface-shadow: 0 4px 14px rgba(0,0,0,.32); background: var(--app-surface); color: var(--app-foreground); border-color: var(--app-border-strong); }
+.view-list.zui-surface, .view-menu-content.zui-surface, .profile-menu-content.zui-surface { --zui-surface-enter-duration: 0ms; --zui-surface-exit-duration: 0ms; animation: none; transform: none; box-shadow: none; }
+.tree-branch.raw-section, .tree-branch.derived-section, .tree-branch.parameters-section, .profiles-trigger { border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-inset); }
+.tree-branch.raw-section:hover, .tree-branch.derived-section:hover, .tree-branch.parameters-section:hover, .profiles-trigger:hover { border-color: var(--app-accent); background: var(--app-hover); }
+.tree-branch.raw-section.tree-open, .tree-branch.derived-section.tree-open, .tree-branch.parameters-section.tree-open, .profiles-trigger[aria-expanded="true"] { border-color: var(--app-border-strong); background: var(--app-control); }
+.signal-list .profiles-trigger.app-action.zui-button[data-variant="ghost"] { height: 26px; min-height: 26px; padding: 2px 3px; gap: 4px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-inset); color: var(--app-foreground); box-shadow: none; }
+.signal-list .profiles-trigger.app-action.zui-button[data-variant="ghost"]:hover { border-color: var(--app-accent); background: var(--app-hover); }
+.signal-list .profiles-trigger.app-action.zui-button[data-variant="ghost"][aria-expanded="true"] { background: var(--app-control); border-color: var(--app-border-strong); }
+.signal-list .profiles-trigger.app-action.zui-button[data-variant="ghost"]:hover .tree-arrow { --zgui-stroke: var(--app-foreground); }
+.profile-tree-arrow { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: var(--app-accent-text); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.profile-more-icon { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 2px; pointer-events: none; }
+.profile-browser-pane .profile-actions { padding-bottom: 5px; border-bottom: 1px solid var(--app-border); }
+.profile-builder { min-width: 0; }
+.profile-builder .zui-dialog__footer { flex: none; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.profile-builder .preset-save.app-action.zui-button[data-variant], .profile-builder .preset-cancel.app-action.zui-button[data-variant] { flex: none; width: auto; min-width: 72px; height: 30px; min-height: 30px; padding: 0 12px; font-size: var(--app-font-sm); }
+.profile-replace-option { flex: none; align-items: center; gap: 8px; }
+.profile-replace-option .zui-checkbox { flex: none; }
+.captured-view-plots { flex: none; gap: 6px; }
+.plot-tab-context, .plot-tab-context-content { flex: 1; min-width: 0; min-height: 0; }
+.plot-tab-context-content { height: 100%; }
+.plot-strip .plot-tab-context { flex: 1; min-width: 0; }
+.plot-strip .plot-actions .zui-button[data-size="xs"] { height: 20px; min-height: 20px; padding-top: 0; padding-bottom: 0; }
+.plot-strip .plot-actions .plot-preset-menu { width: 20px; min-width: 20px; padding: 0; }
+.workspace-view-stack { position: relative; flex: 1; width: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.workspace-view-host { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.profile-browser-pane { padding-top: 6px; padding-left: 12px; }
+.filter-mode-banner { align-items: center; gap: 8px; }
+.filter-edit-state { flex: none; padding: 1px 6px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); color: var(--app-muted); font-size: var(--app-font-xs); }
+.filter-edit-state.filter-edit-unchanged { color: var(--app-muted); }
+.filter-edit-state:not(.filter-edit-unchanged) { border-color: var(--app-accent); color: var(--app-accent); }

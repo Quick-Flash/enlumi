@@ -62,7 +62,7 @@ fn missing_geometry_does_not_create_panel() {
             .place_profile_view(prepared.views[0].clone(), true)
             .is_err()
     );
-    assert_eq!(workbench.panes.with_untracked(Vec::len), 1);
+    assert_eq!(workbench.panes().with_untracked(Vec::len), 1);
 }
 
 #[test]

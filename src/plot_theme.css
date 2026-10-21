@@ -7,12 +7,14 @@
 .page .plot-strip .plot-links-trigger { background: var(--app-control); color: var(--app-foreground); border-color: var(--app-border-strong); }
 .page .plot-strip .plot-links-trigger.links-active, .page .plot-strip .plot-links-trigger.links-open { background: var(--app-selected); border-color: var(--app-accent); }
 .page .plot-strip .plot-links-trigger:hover { background: var(--app-hover); }
-.plot-links-surface.plot-links-surface, .plot-settings-surface.plot-settings-surface { background: var(--app-surface); color: var(--app-foreground); border-color: var(--app-border-strong); }
-.plot-links-surface .zui-menu__item { color: var(--app-foreground); }
-.plot-links-surface .zui-menu__item[data-state="checked"] { background: var(--app-selected); }
-.plot-links-surface .zui-menu__item:hover, .plot-links-surface .zui-menu__item:focus { background: var(--app-hover); }
-.plot-links-surface .zui-menu__indicator { background: var(--app-inset); border-color: var(--app-border-strong); color: var(--app-accent-text); }
-.plot-links-surface .link-option[data-state="checked"] .zui-menu__indicator { background: var(--app-selected); border-color: var(--app-accent); }
+.plot-links-surface.plot-links-surface, .plot-settings-surface.plot-settings-surface { --zui-surface-fill: var(--app-surface); --zui-surface-ink: var(--app-foreground); --zui-surface-border: 1px solid var(--app-border-strong); background: var(--app-surface); color: var(--app-foreground); border: 1px solid var(--app-border-strong); box-shadow: 0 5px 18px rgba(0,0,0,.34); }
+.zui-surface.plot-links-surface.plot-links-surface { --zui-color-popover: var(--app-surface); --zui-color-popover-foreground: var(--app-foreground); --zui-surface-fill: var(--app-surface); --zui-surface-ink: var(--app-foreground); background: var(--app-surface); color: var(--app-foreground); border-color: var(--app-border-strong); }
+.plot-links-surface.plot-links-surface .zui-menu__item { color: var(--app-foreground); }
+.plot-links-surface.plot-links-surface .zui-menu__item[data-state="checked"] { background: var(--app-selected); color: var(--app-foreground); }
+.plot-links-surface.plot-links-surface .zui-menu__item[data-state="unchecked"] { background: transparent; color: var(--app-foreground); }
+.plot-links-surface.plot-links-surface .zui-menu__item:hover, .plot-links-surface.plot-links-surface .zui-menu__item:focus { background: var(--app-hover); color: var(--app-foreground); }
+.plot-links-surface.plot-links-surface .zui-menu__indicator { background: var(--app-inset); border-color: var(--app-border-strong); color: var(--app-accent-text); }
+.plot-links-surface.plot-links-surface .link-option[data-state="checked"] .zui-menu__indicator { background: var(--app-selected); border-color: var(--app-accent); }
 .workbench-legend.workbench-legend { background: var(--app-inset); border-color: var(--app-border-strong); }
 .snapped-cursor-values.snapped-cursor-values { color: var(--app-foreground); }
 .plot-settings-surface .zui-button[data-variant] { background: var(--app-control); color: var(--app-foreground); border-color: var(--app-border-strong); }
@@ -29,3 +31,7 @@
 .workbench-legend.workbench-legend { max-height: calc(100% - 8px); overflow-y: auto; }
 .workbench-legend .legend-heading, .workbench-legend .geometry-legend, .workbench-legend .legend-entry { flex-shrink: 0; }
 .legend-chevron { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.plot-strip .plot-actions { flex: none; align-self: center; align-items: center; height: 20px; min-height: 20px; gap: 3px; }
+.plot-strip .plot-actions .zui-button[data-variant][data-size] { align-self: center; align-items: center; justify-content: center; height: 20px; min-height: 20px; max-height: 20px; margin: 0; padding-top: 0; padding-bottom: 0; }
+.plot-strip .plot-actions .zui-button[data-variant][data-size="icon-xs"] { width: 20px; min-width: 20px; padding: 0; }
+.plot-more-icon { flex: none; width: 13px; height: 13px; color: var(--app-foreground); pointer-events: none; }

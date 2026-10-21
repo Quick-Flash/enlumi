@@ -3,137 +3,97 @@ use crate::field_label::FieldLabelProps;
 use crate::geometry_library::GeometryLibraryProps;
 use crate::parameter_details::ParameterDetailsProps;
 use crate::profile_library::ProfileLibraryProps;
-use crate::{field_row::FieldRowProps, field_tree::FieldTree, state::Workbench};
+use crate::{field_row::FieldRowProps, state::Workbench};
 use crate::{sidebar_help::SidebarHelpProps, sidebar_search::SidebarSearchProps};
 use zgui::prelude::*;
-use zgui_ui::prelude::*;
 
 #[component]
 pub fn Browser(workbench: Workbench) -> impl IntoView {
-    let tree = Memo::new(move |_| {
-        workbench.log.with(|log| {
-            log.as_ref().map_or_else(FieldTree::default, |log| {
-                let mut labels: std::collections::BTreeMap<_, _> =
-                    workbench.profiles.metadata.with(|metadata| {
-                        metadata
-                            .iter()
-                            .map(|(source, meta)| (source.clone(), meta.tree_label()))
-                            .collect()
-                    });
-                labels.extend(workbench.profiles.groups.get());
-                let names = workbench.profiles.metadata.with(|metadata| {
-                    metadata
-                        .iter()
-                        .map(|(source, meta)| (source.clone(), meta.label()))
-                        .collect()
-                });
-                let tree = FieldTree::new(&log.catalogue)
-                    .with_labels(&labels)
-                    .with_search_labels(&names);
-                if log.blackbox_headers.len() == 1 {
-                    tree.without_single_root()
-                } else {
-                    tree
-                }
-            })
-        })
-    });
-    let rows = Memo::new(move |_| {
-        let query = workbench.query.get();
-        let expanded = workbench.expanded.get();
-        let mut rows = Vec::new();
-        let fields = workbench.derived.get();
-        let matching: Vec<_> = fields
-            .iter()
-            .filter(|field| {
-                "derived fields".contains(&query.to_lowercase())
-                    || workbench
-                        .field_name(&field.key())
-                        .to_lowercase()
-                        .contains(&query.to_lowercase())
-            })
-            .collect();
-        if !matching.is_empty() {
-            let open = expanded.contains("@derived");
-            rows.push(crate::field_tree::TreeRow {
-                id: "@derived".into(),
-                label: "Derived fields".into(),
-                depth: 0,
-                count: matching.len(),
-                field: None,
-                open,
-                last: false,
-                guides: Vec::new(),
-            });
-            if open {
-                for (index, field) in matching.iter().enumerate() {
-                    rows.push(crate::field_tree::TreeRow {
-                        id: field.key(),
-                        label: workbench.field_name(&field.key()),
-                        depth: 1,
-                        count: field.data.as_ref().map_or(0, |data| data.samples().len()),
-                        field: Some(field.key()),
-                        open: false,
-                        last: index + 1 == matching.len(),
-                        guides: Vec::new(),
-                    });
-                }
-            }
-        }
-        workbench.log.with(|log| {
-            if let Some(log) = log {
-                rows.extend(crate::parameter_rows::rows(log, &query, &expanded));
-            }
-        });
-        rows.extend(tree.with(|tree| tree.rows(&query, &expanded)));
-        rows
-    });
-    let visible_fields = Memo::new(move |_| {
-        rows.with(|rows| {
-            rows.iter()
-                .filter(|row| row.count > 0)
-                .filter_map(|row| row.field.clone())
-                .collect::<Vec<_>>()
-        })
-    });
+    let rows = crate::browser_fields::rows(workbench);
+    let port = NodeRef::new();
+    let virtualized = zgui_ui::virtualize::Virtualize::new(
+        port,
+        Signal::derive_local(move || rows.with(Vec::len)),
+        28.0,
+        4,
+    );
+    let visible_fields = Memo::new(move |_| workbench.browser_fields.get());
     let resize = RwSignal::new_local(None::<(f32, f32)>);
+    let analysis_unavailable = Signal::derive_local(move || {
+        workbench.log.with(Option::is_none)
+            || workbench.loading.get()
+            || workbench.derived_busy.get()
+            || workbench.profiles.busy.get()
+            || workbench.analysis().busy.get()
+    });
+    let no_analysis_selection = Signal::derive_local(move || {
+        workbench.selected_field.with(|source| {
+            source.as_ref().is_none_or(|source| {
+                source.starts_with("@setting/")
+                    || source.starts_with("@analysis/")
+                    || crate::profile::identity::Drag::parse(source).is_some_and(|drag| {
+                        matches!(drag.item, crate::profile::identity::Item::Geometry(_))
+                    })
+            })
+        })
+    });
+    let spectra_unavailable =
+        Signal::derive_local(move || analysis_unavailable.get() || no_analysis_selection.get());
     view! {
         row(class = "browser", class:hidden = move || !workbench.sidebar_visible.get(), style:width = move || Some(format!("{}px", workbench.sidebar_width.get() + 3.0))) {
             column(class = "signal-sidebar") {
                 row(class = "browser-heading") {
-                    ActionButton(class = "fields-menu", class:setting-active = move || !workbench.profiles.browsing.get(), on:click = move |_| workbench.profiles.browsing.set(false)) { "Fields" }
-                    ActionButton(class = "profiles-trigger", class:setting-active = move || workbench.profiles.browsing.get(), on:click = move |_| workbench.profiles.browsing.set(true)) { "Profiles" }
+                    text(class="heading") {"Fields"}
                     ActionButton(class = "open-filters", node_ref = workbench.filter_button, class:setting-active = move || workbench.filters_open.get(), disabled = Signal::derive_local(move || workbench.log.get().is_none() || workbench.loading.get()), on:click = move |_| workbench.filters_open.update(|open| *open = !*open)) { "Filters" }
-                    if move || !workbench.profiles.browsing.get() {
-                        ActionButton(class = "collapse-fields", on:click = move |_| workbench.expanded.set(Default::default())) { "Collapse all" }
-                    }
+                    ActionButton(class = "collapse-fields", on:click = move |_| {workbench.expanded.set(std::collections::BTreeSet::from(["@raw".into()]));workbench.profiles.open.set(false);}) { "Collapse all" }
                 }
-                if move || workbench.selected_field.get().is_some_and(|source| !source.starts_with("@setting/") && !source.starts_with("@analysis/")) {
-                    row(class = "field-selection-actions") {
-                        ActionButton(on:click = move |_| workbench.create_selected_spectra("fft")) { "Create FFTs" }
-                        ActionButton(on:click = move |_| workbench.create_selected_spectra("psd")) { "Create PSDs" }
-                        ActionButton(class = "analyze-selection", on:click = move |_| workbench.analyze_selection()) { "Configure" }
-                    }
-                }
-                column(class="profile-browser-pane",class:hidden=move ||!workbench.profiles.browsing.get()) {
-                    ProfileLibrary(workbench = workbench)
-                }
-                column(class="field-browser-pane",class:hidden=move ||workbench.profiles.browsing.get()) {
-                SidebarSearch(value = workbench.query, placeholder = "Search topics and fields", label = "Search log fields") {
+                SidebarSearch(value = workbench.query, placeholder = "Search fields and profiles", label = "Search fields and profiles") {
                     SidebarHelp(label = "Field shortcuts") {
                         text(class="heading") { "Plot and filter fields" }
                         text { "Drag onto plot to add line. Enter plots focused field." }
-                        text { "Ctrl-click toggles selection. Shift-click selects range." }
-                        text { "Drag selected fields together onto plot, Filters, or Analyze." }
+                        text { "Ctrl-click toggles selection across Raw, Derived and Profiles. Shift-click selects range." }
+                        text { "Search filters results; expand sections to browse matches." }
                     }
                 }
-                text(class = "muted") {{move || workbench.log.with(|log| log.as_ref().map_or_else(|| "Open a log to browse fields".into(), |log| format!("{} fields | drag onto a plot", log.catalogue.len())))}}
+                column(class="analysis-selection-actions") {
+                    row(class = "field-selection-actions") {
+                        ActionButton(class="save-selection-profile",disabled=Signal::derive_local(move ||analysis_unavailable.get()||workbench.selected_field.with(Option::is_none)),on:click=move |_|workbench.save_selected_profile()) {"Save?"}
+                        ActionButton(class="create-selection-fft",disabled=spectra_unavailable,on:click = move |_| workbench.create_selected_spectra("fft")) { "Create FFTs" }
+                        ActionButton(class="create-selection-psd",disabled=spectra_unavailable,on:click = move |_| workbench.create_selected_spectra("psd")) { "Create PSDs" }
+                        ActionButton(class = "analyze-selection",disabled=analysis_unavailable, on:click = move |_| {
+                            if no_analysis_selection.get_untracked() {
+                                workbench.analysis().open.set(true);
+                                workbench.filters_open.set(false);
+                            } else {workbench.analyze_selection();}
+                        }) { "Configure" }
+                        SidebarHelp(label="FFT, PSD and Configure help") {
+                            text(class="heading") {"Analyze selected fields"}
+                            text {"Create FFTs: show frequency amplitudes, one plot per selected field."}
+                            text {"Create PSDs: show power per Hz, one plot per selected field."}
+                            text {"Configure: open Analyze to adjust inputs, time range, window and DC removal before creating plots."}
+                            text {"Select fields or profile views to enable FFT/PSD. Views use their member fields; folders organize profiles."}
+                        }
+                    }
+                    text(class="analysis-selection-hint muted") {{move ||if workbench.log.with(Option::is_none){"Open a log to analyze fields."}else if no_analysis_selection.get(){"Select fields for FFT / PSD."}else{"Drag fields to plots or Analyze."}}}
+                }
                 GeometryLibrary(workbench = workbench)
-                VirtualList(count = Signal::derive_local(move || rows.with(Vec::len)), row_size = 28.0, label = "Log field tree", class = "signal-list",
-                    row = move |index: usize| view! { FieldRow(workbench = workbench, row = Memo::new(move |_| rows.with(|rows| rows.get(index).cloned())), visible_fields = visible_fields) })
+                scroll(class="signal-list",node_ref=port,a11y:label="Fields and profiles") {
+                    column(class="browser-field-rows",style:padding-top=move ||Some(format!("{}px",virtualized.window().lead)),style:padding-bottom=move ||Some(format!("{}px",virtualized.window().trail))) {
+                        for index in move ||virtualized.indices(),key=|index|*index {
+                            FieldRow(workbench=workbench,row=Memo::new(move |_|rows.with(|rows|rows.get(index).cloned())),visible_fields=visible_fields)
+                        }
+                    }
+                    ActionButton(class="profiles-trigger browser-section tree-branch",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).label("Toggle Profiles").expanded(move ||workbench.profiles.open.get()))},on:click=move |_|workbench.profiles.open.update(|open|*open = !*open)) {
+                        vector(class="tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if workbench.profiles.open.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)
+                        text(class="tree-name") {"Profiles"}
+                    }
+                    column(class="profile-browser-pane",class:hidden=move ||!workbench.profiles.open.get()) {
+                        ProfileLibrary(workbench=workbench)
+                    }
+                }
                 ParameterDetails(workbench = workbench)
-                row(class = "selected-field-row", class:hidden = move || workbench.selected_field.get().is_none_or(|id| id.starts_with("@setting/"))) {
-                text(class = "selected-field") {{move || workbench.selected_field.get().map_or_else(|| "Select a field or drag it onto a plot".into(), |field| workbench.field_name(&field))}}
+                row(class = "selected-field-row") {
+                text(class = "selected-field") {{move || workbench.selected_field.get().map_or_else(|| "Select a field to edit labels".into(), |field| workbench.field_name(&field))}}
                     FieldLabel(workbench = workbench)
                 }
                 if move ||workbench.selected_fields.with(|fields|fields.len()>1) {
@@ -144,7 +104,6 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                 }
                 if move || workbench.log.get().is_some_and(|log| !log.warnings.is_empty()) {
                     text(class = "warnings") {{move || workbench.log.with(|log| log.as_ref().map_or_else(String::new, |log| format!("{} load warnings", log.warnings.len())))}}
-                }
                 }
             }
             control(class = "sidebar-grip workspace-divider", tabindex = Focus::Sequential, a11y:label = "Resize field browser",

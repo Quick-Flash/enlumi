@@ -51,7 +51,7 @@ pub fn GeometryLegendRow(workbench: Workbench, pane: Pane, item: Geometry) -> im
                 row(class="legend-entry geometry-legend-row", node_ref = row,
                     class:legend-dragging = move || drag.state.get().is_some_and(|source| source.pane == pane.id && source.line == key && source.moving),
                     class:legend-insert-before = move || drag.target.get().is_some_and(|target| target.pane == pane.id && target.before == Some(key)),
-                    class:legend-insert-after = move || drag.target.get().is_some_and(|target| target.pane == pane.id && target.before.is_none()) && workbench.legend_keys(pane).last() == Some(&key),class:geometry-legend-hidden=move || pane.hidden_geometry.with(|ids|ids.contains(&id)),class:geometry-legend-editing=move || workbench.geometry.editing.get() && workbench.geometry.selected.get()==Some(id) && workbench.active.get()==pane.id) {
+                    class:legend-insert-after = move || drag.target.get().is_some_and(|target| target.pane == pane.id && target.before.is_none()) && workbench.legend_keys(pane).last() == Some(&key),class:geometry-legend-hidden=move || pane.hidden_geometry.with(|ids|ids.contains(&id)),class:geometry-legend-editing=move || workbench.geometry.editing.get() && workbench.geometry.selected.get()==Some(id) && workbench.active().get()==pane.id) {
                     row(class="legend-drag-source geometry-legend-toggle", a11y:label = "Drag geometry to move; Up/Down reorders",
                         on:pointer_down:capture = move |event| {
                             if event.button != Some(zgui::vocab::PointerButton::Primary) { return; }

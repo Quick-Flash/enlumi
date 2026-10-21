@@ -105,32 +105,32 @@ impl AnalysisUi {
 }
 impl Workbench {
     pub fn new_analysis(self) {
-        self.analysis.cancel();
-        self.analysis.run_selection.set(false);
-        self.analysis.picking_range.set(false);
-        self.analysis.target.set(None);
-        self.analysis.open.set(true);
+        self.analysis().cancel();
+        self.analysis().run_selection.set(false);
+        self.analysis().picking_range.set(false);
+        self.analysis().target.set(None);
+        self.analysis().open.set(true);
         self.filters_open.set(false);
-        self.analysis
+        self.analysis()
             .message
             .set("Choose analysis type, then drag signals onto a plot".into());
     }
     pub fn select_analysis_mode(self, mode: &str) {
-        if self.analysis.mode.get_untracked() != mode {
+        if self.analysis().mode.get_untracked() != mode {
             self.new_analysis();
-            self.analysis.mode.set(mode.into());
+            self.analysis().mode.set(mode.into());
         }
     }
     pub fn set_analysis_condition(self, sources: Vec<String>) {
         if sources.len() != 1 {
-            self.analysis
+            self.analysis()
                 .message
                 .set("Drop one conditioning field".into());
             return;
         }
-        self.analysis.cancel();
-        self.analysis.condition.set(sources[0].clone());
-        self.analysis
+        self.analysis().cancel();
+        self.analysis().condition.set(sources[0].clone());
+        self.analysis()
             .message
             .set("Conditioning field set. Drag signal onto plot to create heatmap.".into());
     }
@@ -139,23 +139,23 @@ impl Workbench {
             || self.derived_busy.get_untracked()
             || self.profiles.busy.get_untracked()
         {
-            self.analysis.open.set(true);
-            self.analysis
+            self.analysis().open.set(true);
+            self.analysis()
                 .message
                 .set("Wait for log, profiles, and filters to finish".into());
             return;
         }
-        self.analysis.reset();
-        self.analysis.mode.set(mode.into());
-        self.analysis.separate.set(true);
-        self.analysis.run_selection.set(true);
+        self.analysis().reset();
+        self.analysis().mode.set(mode.into());
+        self.analysis().separate.set(true);
+        self.analysis().run_selection.set(true);
         self.analyze_selection();
-        if self.analysis.run_selection.get_untracked() {
+        if self.analysis().run_selection.get_untracked() {
             // Profile selections resume after asynchronous preparation.
             if !self.profiles.busy.get_untracked()
                 && self.profiles.pending_drop.with_value(Option::is_none)
             {
-                self.analysis.run_selection.set(false);
+                self.analysis().run_selection.set(false);
                 self.run_analysis();
             }
         }
@@ -164,7 +164,7 @@ impl Workbench {
         let Some(result) = pane.analysis.get_untracked() else {
             return;
         };
-        let ui = self.analysis;
+        let ui = self.analysis();
         ui.reset();
         ui.open.set(true);
         self.filters_open.set(false);
@@ -223,70 +223,62 @@ impl Workbench {
         ui.separate.set(false);
     }
     pub fn analyze_selection(self) {
-        self.analysis.target.set(None);
+        self.analysis().target.set(None);
         let sources = self
             .selected_field
             .get_untracked()
             .map(|source| self.drag_fields(source))
             .unwrap_or_default();
-        self.analysis.open.set(true);
+        self.analysis().open.set(true);
         self.filters_open.set(false);
-        self.analysis.start.set(String::new());
-        self.analysis.end.set(String::new());
-        if sources
-            .first()
-            .is_some_and(|source| source.starts_with("@profile/"))
-        {
-            self.use_profile_items(
-                sources
-                    .iter()
-                    .filter_map(|source| crate::profile::identity::Drag::parse(source))
-                    .collect(),
-                crate::profile_state::Destination::Analysis,
-            );
-        } else {
-            self.add_analysis_sources(
-                sources
-                    .into_iter()
-                    .filter(|source| !source.starts_with("@setting/"))
-                    .collect(),
-            );
-        }
+        self.analysis().start.set(String::new());
+        self.analysis().end.set(String::new());
+        self.queue_field_sources(
+            sources
+                .into_iter()
+                .filter(|source| !source.starts_with("@setting/"))
+                .collect(),
+            crate::profile_state::Destination::Analysis,
+            None,
+        );
     }
+
     pub fn use_visible_analysis_range(self) {
         let pane = self.pane();
         if pane.analysis.get_untracked().is_some() {
-            self.analysis.message.set("Select a time plot first".into());
+            self.analysis()
+                .message
+                .set("Select a time plot first".into());
             return;
         }
         let range = pane.plot.ranges.get_untracked().x;
-        self.analysis.start.set(range.min.to_string());
-        self.analysis.end.set(range.max.to_string());
-        self.analysis.picking_range.set(false);
+        self.analysis().start.set(range.min.to_string());
+        self.analysis().end.set(range.max.to_string());
+        self.analysis().picking_range.set(false);
     }
     pub fn add_analysis_sources(self, sources: Vec<String>) {
-        self.analysis.cancel();
-        self.analysis.sources.update(|all| {
+        self.analysis().cancel();
+        self.analysis().sources.update(|all| {
             for source in sources {
                 if !all.contains(&source) {
                     all.push(source);
                 }
             }
         });
-        self.analysis.message.set("Drag signals onto a plot to create analysis. Results are snapshots; drag again after changing settings.".into());
+        self.analysis().message.set("Drag signals onto a plot to create analysis. Results are snapshots; drag again after changing settings.".into());
     }
     pub fn run_analysis(self) {
-        self.run_analysis_request(None, self.analysis.target.get_untracked(), false);
+        self.run_analysis_request(None, self.analysis().target.get_untracked(), false);
     }
     pub fn drop_analysis_sources(self, sources: Vec<String>, target: Option<u64>) {
-        if self.analysis.busy.get_untracked() {
-            self.analysis.message.set(
+        if self.analysis().busy.get_untracked() {
+            self.analysis().message.set(
                 "Wait for current analysis to finish, or Cancel before dropping another signal"
                     .into(),
             );
             return;
         }
-        let mode = self.analysis.mode.get_untracked();
+        let mode = self.analysis().mode.get_untracked();
         let accepts = |pane: &Pane| {
             pane.analysis.with_untracked(|result| {
                 result.as_ref().is_some_and(|result| {
@@ -303,7 +295,7 @@ impl Workbench {
                 .and_then(|id| self.find(id))
                 .filter(accepts)
                 .or_else(|| {
-                    self.panes
+                    self.panes()
                         .with_untracked(|panes| panes.iter().copied().find(accepts))
                 })
                 .map(|pane| pane.id)
@@ -318,7 +310,16 @@ impl Workbench {
         target: Option<u64>,
         append: bool,
     ) {
-        let ui = self.analysis;
+        self.bind_view()
+            .start_analysis_request(requested, target, append);
+    }
+    fn start_analysis_request(
+        self,
+        requested: Option<Vec<String>>,
+        target: Option<u64>,
+        append: bool,
+    ) {
+        let ui = self.analysis();
         if self.loading.get_untracked()
             || self.derived_busy.get_untracked()
             || self.profiles.busy.get_untracked()
@@ -570,7 +571,7 @@ impl Workbench {
                 (grouped.into_values().collect::<Vec<_>>(), messages)
             })
             .await;
-            if self.generation.get_untracked() != generation
+            if !self.view_exists() || self.generation.get_untracked() != generation
                 || ui.revision.get_untracked() != revision
             {
                 return;
@@ -582,6 +583,7 @@ impl Workbench {
             } else {
                 messages.join("\n")
             });
+            if target.is_some_and(|id|self.find(id).is_none()) {return;}
             for (index, result) in results.iter().enumerate() {
                 if let Some(pane) = target.filter(|_| append || index == 0).and_then(|id| self.find(id)) {
                     let mut result = result.clone();
@@ -607,7 +609,7 @@ impl Workbench {
 
 impl Workbench {
     pub fn add_analysis_panel(self, result: AnalysisResult) -> Pane {
-        let pane = self.add_plot(self.active.get_untracked(), false, true);
+        let pane = self.add_plot(self.active().get_untracked(), false, true);
         pane.links.set(plot::zgui_link::LinkOptions {
             x: false,
             y: false,
@@ -616,7 +618,7 @@ impl Workbench {
         self.set_analysis_panel(pane, result);
         pane
     }
-    fn set_analysis_panel(self, pane: Pane, result: AnalysisResult) {
+    pub(crate) fn set_analysis_panel(self, pane: Pane, result: AnalysisResult) {
         let updating = pane.analysis.with_untracked(Option::is_some);
         if updating {
             pane.plot.auto_fit.set(false);
@@ -671,7 +673,7 @@ impl Workbench {
     }
 
     pub fn analysis_size_job(self) -> impl FnOnce() -> Vec<usize> + Send {
-        let ui = self.analysis;
+        let ui = self.analysis();
         let start = ui.start.get().trim().parse::<f64>().ok();
         let end = ui.end.get().trim().parse::<f64>().ok();
         let sources = ui.sources.get();

@@ -69,7 +69,7 @@ pub fn prepare(
 }
 
 pub fn prepare_with_ids(
-    profile: Profile,
+    mut profile: Profile,
     log: &LogStore,
     base: &Path,
     ids: super::identity::ResourceIds,
@@ -379,7 +379,34 @@ pub fn prepare_with_ids(
     }
     let mut views = Vec::new();
     let mut view_names = BTreeSet::new();
+    for plot in &profile.plot_presets {
+        profile.views.push(crate::preset_apply::prepared_recipe(
+            plot,
+            plot.name.clone(),
+        ));
+    }
+    for view in &profile.view_presets {
+        for (index, plot) in view.plots.iter().enumerate() {
+            profile.views.push(crate::preset_apply::prepared_recipe(
+                plot,
+                format!("@workspace/{}/{index}", view.name),
+            ));
+        }
+    }
     // Validate view references even when creating plots is unchecked.
+    for workspace in &profile.workspace_presets {
+        for (view_index, view) in workspace.views.iter().enumerate() {
+            for (plot_index, plot) in view.plots.iter().enumerate() {
+                profile.views.push(crate::preset_apply::prepared_recipe(
+                    plot,
+                    format!(
+                        "@workspace-set/{}/{view_index}/{plot_index}",
+                        workspace.name
+                    ),
+                ));
+            }
+        }
+    }
     for view in profile.views {
         if !view_names.insert(view.name.clone()) {
             return Err(format!("Duplicate view name {}", view.name));

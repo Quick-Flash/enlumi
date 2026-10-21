@@ -33,7 +33,26 @@ impl Workbench {
         rows.into_iter().map(|(_, _, source)| source).collect()
     }
 
+    pub fn sidebar_sources(self) -> Vec<String> {
+        let mut sources = self.browser_fields.get_untracked();
+        sources.extend(self.visible_profile_sources());
+        sources
+    }
+
     pub fn use_profile_items(self, items: Vec<Drag>, target: Destination) {
+        self.queue_field_sources(
+            items.into_iter().map(|drag| drag.source()).collect(),
+            target,
+            None,
+        );
+    }
+
+    pub(crate) fn queue_field_sources(
+        self,
+        sources: Vec<String>,
+        target: Destination,
+        filter_slot: Option<usize>,
+    ) {
         if self.profiles.busy.get_untracked()
             || self.derived_busy.get_untracked()
             || self.loading.get_untracked()
@@ -50,8 +69,9 @@ impl Workbench {
         if matches!(
             target,
             Destination::Filter | Destination::Bands | Destination::AnalysisCondition
-        ) && items
+        ) && sources
             .iter()
+            .filter_map(|source| Drag::parse(source))
             .any(|drag| !matches!(drag.item, Item::Field(_)))
         {
             self.profiles
@@ -59,35 +79,52 @@ impl Workbench {
                 .set("Choose fields for filters or state bands".into());
             return;
         }
-        if matches!(target, Destination::AnalysisCondition) && items.len() != 1 {
-            self.analysis
-                .message
-                .set("Drop one conditioning field".into());
+        if matches!(target, Destination::Bands | Destination::AnalysisCondition)
+            && sources.len() != 1
+        {
+            if matches!(target, Destination::Bands) {
+                self.bands
+                    .error
+                    .set("Drop one discrete source field".into());
+            } else {
+                self.analysis()
+                    .message
+                    .set("Drop one conditioning field".into());
+            }
             return;
         }
-        if matches!(target, Destination::Bands) && items.len() != 1 {
-            self.bands
-                .error
-                .set("Drop one discrete source field".into());
-            return;
-        }
-        self.profiles.pending_drop.set_value(Some((items, target)));
+        self.profiles
+            .pending_drop
+            .set_value(Some(crate::profile_state::PendingDrop {
+                view: self.bind_view().view().id,
+                sources,
+                target,
+                filter_slot,
+            }));
         self.resume_profile_drop();
     }
 
-    // Prepare missing profiles sequentially, then place complete selection.
+    // Prepare missing profiles sequentially, then place entire mixed selection.
     pub(crate) fn resume_profile_drop(self) {
-        let Some((items, target)) = self.profiles.pending_drop.get_value() else {
+        let Some(pending) = self.profiles.pending_drop.get_value() else {
             return;
         };
         if self.profiles.busy.get_untracked() {
             return;
         }
+        let Some(workbench) = self.for_view(pending.view) else {
+            self.profiles.pending_drop.set_value(None);
+            return;
+        };
+        workbench.place_field_sources(pending);
+    }
+    fn place_field_sources(self, pending: crate::profile_state::PendingDrop) {
         let missing = self.profiles.instances.with_untracked(|instances| {
-            items
+            pending
+                .sources
                 .iter()
+                .filter_map(|source| Drag::parse(source))
                 .find(|drag| !instances.contains_key(&drag.profile))
-                .cloned()
         });
         if let Some(drag) = missing {
             self.profiles.flight.set(drag.profile.flight);
@@ -95,71 +132,51 @@ impl Workbench {
             return;
         }
         self.profiles.pending_drop.set_value(None);
-        match target {
+        let sources = self.resolve_field_sources(&pending.sources);
+        match pending.target {
+            Destination::SaveSelection => {
+                self.begin_save(crate::preset_capture::CaptureKind::Selection(sources))
+            }
             Destination::Analysis | Destination::AnalysisCondition => {
-                let sources: Vec<String> = self.profiles.instances.with_untracked(|instances| {
-                    items
-                        .iter()
-                        .flat_map(|drag| {
-                            let Some(instance) = instances.get(&drag.profile) else {
-                                return Vec::new();
-                            };
-                            match &drag.item {
-                                Item::Field(name) => instance.resolve(name).into_iter().collect(),
-                                Item::View(name) => {
-                                    instance.views.get(name).map_or_else(Vec::new, |view| {
-                                        view.fields
-                                            .iter()
-                                            .map(|(source, _)| source.clone())
-                                            .collect()
-                                    })
-                                }
-                                Item::Geometry(_) => Vec::new(),
-                            }
-                        })
-                        .collect()
-                });
                 if sources.is_empty() {
-                    self.analysis.run_selection.set(false);
-                    self.analysis.message.set("No sample fields available. Drop fields or a usable profile view; geometry has no samples.".into());
-                } else if matches!(target, Destination::AnalysisCondition) {
+                    self.analysis().run_selection.set(false);
+                    self.analysis().message.set("No sample fields available. Drop fields or a usable profile view; geometry has no samples.".into());
+                } else if matches!(pending.target, Destination::AnalysisCondition) {
                     self.set_analysis_condition(sources);
                 } else {
                     self.add_analysis_sources(sources);
-                    if self.analysis.run_selection.get_untracked() {
-                        self.analysis.run_selection.set(false);
+                    if self.analysis().run_selection.get_untracked() {
+                        self.analysis().run_selection.set(false);
                         self.run_analysis();
                     }
                 }
             }
-            Destination::Plot(_) => {
-                for drag in items {
-                    self.place_prepared_item(drag.profile, drag.item, target);
+            Destination::Plot(pane) => {
+                if let Some(id) = pane {
+                    if self.find(id).is_none() {
+                        self.status.set("Destination plot was closed".into());
+                        return;
+                    }
+                    self.activate(id);
+                }
+                for source in pending.sources {
+                    if let Some(drag) = Drag::parse(&source) {
+                        self.place_prepared_item(drag.profile, drag.item, pending.target);
+                    } else {
+                        self.add(source);
+                    }
                 }
             }
             Destination::Filter | Destination::Bands => {
-                let sources = self.profiles.instances.with_untracked(|instances| {
-                    items
-                        .iter()
-                        .filter_map(|drag| {
-                            let Item::Field(name) = &drag.item else {
-                                return None;
-                            };
-                            instances.get(&drag.profile)?.resolve(name)
-                        })
-                        .collect::<Vec<_>>()
-                });
-                if sources.len() != items.len() {
-                    self.profiles
-                        .error
-                        .set("Some selected fields unavailable; see skipped outputs".into());
-                }
                 if sources.is_empty() {
                     return;
                 }
-                if matches!(target, Destination::Filter) {
-                    self.filters_open.set(true);
-                    if let Err(error) = self.accept_filter_sources(sources) {
+                if matches!(pending.target, Destination::Filter) {
+                    if self.is_current_view() {
+                        self.filters_open.set(true);
+                    }
+                    if let Err(error) = self.accept_filter_sources_at(sources, pending.filter_slot)
+                    {
                         self.filter_error.set(error);
                     }
                 } else {
@@ -167,5 +184,63 @@ impl Workbench {
                 }
             }
         }
+    }
+
+    fn resolve_field_sources(self, selected: &[String]) -> Vec<String> {
+        let mut sources = Vec::new();
+        self.profiles.instances.with_untracked(|instances| {
+            for source in selected {
+                let resolved = if let Some(drag) = Drag::parse(source) {
+                    instances
+                        .get(&drag.profile)
+                        .map_or_else(Vec::new, |instance| match &drag.item {
+                            Item::Field(name) => instance.resolve(name).into_iter().collect(),
+                            Item::View(name) => {
+                                instance.views.get(name).map_or_else(Vec::new, |view| {
+                                    view.fields
+                                        .iter()
+                                        .map(|(source, _)| source.clone())
+                                        .collect()
+                                })
+                            }
+                            Item::Workspace(name) => instance
+                                .definition
+                                .view_presets
+                                .iter()
+                                .find(|view| &view.name == name)
+                                .map_or_else(Vec::new, |view| {
+                                    view.plots
+                                        .iter()
+                                        .flat_map(|plot| plot.lines.iter())
+                                        .filter_map(|line| instance.resolve(&line.source))
+                                        .collect()
+                                }),
+                            Item::WorkspacePreset(name) => instance
+                                .definition
+                                .workspace_presets
+                                .iter()
+                                .find(|workspace| &workspace.name == name)
+                                .map_or_else(Vec::new, |workspace| {
+                                    workspace
+                                        .views
+                                        .iter()
+                                        .flat_map(|view| view.plots.iter())
+                                        .flat_map(|plot| plot.lines.iter())
+                                        .filter_map(|line| instance.resolve(&line.source))
+                                        .collect()
+                                }),
+                            Item::Geometry(_) => Vec::new(),
+                        })
+                } else {
+                    vec![source.clone()]
+                };
+                for source in resolved {
+                    if !sources.contains(&source) {
+                        sources.push(source);
+                    }
+                }
+            }
+        });
+        sources
     }
 }

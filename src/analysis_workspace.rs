@@ -6,8 +6,15 @@ use zgui_ui::prelude::*;
 
 #[component]
 pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
+    view! {for current in move ||vec![workbench.view()],key=|view|view.id {
+        ViewAnalysisWorkspace(workbench=workbench.for_view(current.id).expect("View exists"))
+    }}
+}
+
+#[component]
+fn ViewAnalysisWorkspace(workbench: Workbench) -> impl IntoView {
     install_stylesheet("enlumi-analysis", include_str!("analysis.css"));
-    let ui = workbench.analysis;
+    let ui = workbench.analysis();
     let sizes = RwSignal::new_local(Vec::<usize>::new());
     let sizing = RwSignal::new_local(false);
     let size_revision = RwSignal::new_local(0_u64);
@@ -51,10 +58,8 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                 column(class = "analysis-controls") {
                     text(class = "muted") {{move || ui.target.get().map_or_else(||"New analysis · drag signals onto a plot to create results".into(),|id|format!("Editing plot {id} · Update plot applies settings; choosing another type starts new analysis"))}}
                     row(class="analysis-context-actions") {
-                        if move ||ui.target.get().is_some() {ActionButton(class="analysis-new",on:click=move |_|workbench.new_analysis()) {"New analysis"}}
-                        if move ||{let active=workbench.active.get();workbench.find(active).is_some_and(|pane|pane.analysis.get().is_some()) && ui.target.get()!=Some(active)} {
-                            ActionButton(class="analysis-edit-selected",on:click=move |_|workbench.edit_analysis(workbench.pane())) {"Edit selected plot"}
-                        }
+                        ActionButton(class="analysis-new",disabled=Signal::derive_local(move ||ui.busy.get()),on:click=move |_|workbench.new_analysis()) {"New analysis"}
+                        ActionButton(class="analysis-edit-selected",class:setting-active=move ||ui.target.get()==Some(workbench.active().get()),disabled=Signal::derive_local(move ||{let active=workbench.active().get();ui.busy.get() ||ui.target.get()==Some(active)||workbench.find(active).is_none_or(|pane|pane.analysis.get().is_none())}),on:click=move |_|workbench.edit_analysis(workbench.pane())) {"Edit selected plot"}
                     }
                     row(class="analysis-modes",a11y:label="Analysis type") {
                         for mode in move || [("fft", "FFT amplitude"), ("psd", "PSD"), ("heatmap", "FFT vs field heatmap"), ("spectrogram", "Spectrogram")],key=|mode|mode.0 {
@@ -118,9 +123,7 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                         text(class="muted") {"Conditioning field · mean value per FFT window"}
                         column(class="analysis-condition-drop",node_ref=ui.condition_drop,class:analysis-drop-active=move ||ui.condition_hover.get(),a11y:label="Drop heatmap conditioning field") {
                             text {{move || if ui.condition.get().is_empty() { "Drop throttle, RPM, or another field here".into() } else { workbench.field_name(&ui.condition.get()) }}}
-                            if move || !ui.condition.get().is_empty() {
-                                ActionButton(on:click=move |_|{ui.cancel();ui.condition.set(String::new());}) {"Remove conditioning field"}
-                            }
+                            ActionButton(disabled=Signal::derive_local(move ||ui.condition.get().is_empty()),on:click=move |_|{ui.cancel();ui.condition.set(String::new());}) {"Remove conditioning field"}
                         }
                         Select(value=ui.heatmap_bins) {
                             SelectTrigger(label="Heatmap conditioning bins") {SelectValue()}
@@ -138,9 +141,7 @@ pub fn AnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                         text(class="muted") {"X = time; Y = frequency; color = PSD in dB. Time bin spacing follows FFT window size and overlap."}
                     }
                     row {
-                        if move || ui.target.get().is_some() {
-                            ActionButton(disabled=Signal::derive_local(move ||ui.busy.get() || (matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") && sizes.get().is_empty())),on:click=move |_|workbench.run_analysis()) {"Update plot"}
-                        }
+                        ActionButton(class="analysis-update",disabled=Signal::derive_local(move ||ui.target.get().is_none() ||ui.sources.with(Vec::is_empty)||ui.busy.get() || (matches!(ui.mode.get().as_str(), "heatmap" | "spectrogram") && sizes.get().is_empty())),on:click=move |_|workbench.run_analysis()) {"Update plot"}
                         ActionButton(disabled=Signal::derive_local(move ||!ui.busy.get()),on:click=move |_|{ui.cancel();ui.message.set("Cancelled".into());}) {"Cancel"}
                         ActionButton(on:click=move |_|ui.reset()) {"Clear"}
                     }

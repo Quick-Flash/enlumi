@@ -1,3 +1,4 @@
+use crate::plot_menu::{PlotContextProps, PlotTabContextProps};
 use crate::{
     analysis_plot::AnalysisPlotProps,
     plot_actions::PlotActionsProps,
@@ -32,12 +33,18 @@ pub fn Panel(
     };
     provide_local_context(PlotLinks::with_options(pane.id, group, pane.links));
     let visible = Signal::derive_local(move || {
-        plot_visible(pane.id, workbench.maximized.get(), workbench.layout.get())
+        workbench.views.active.get() == workbench.view().id
+            && plot_visible(
+                pane.id,
+                workbench.maximized().get(),
+                workbench.layout().get(),
+            )
     });
     view! {
-        WorkspacePane(pane = pane.dock, dock = dock, geometry = geometry, active = workbench.active, maximized = workbench.maximized,
+        WorkspacePane(pane = pane.dock, dock = dock, geometry = geometry, active = workbench.active(), maximized = workbench.maximized(),
             on_select = UnsyncCallback::new(move |id| workbench.activate(id))) {
             row(class = "plot-strip") {
+                PlotTabContext(workbench=workbench,dock=dock) {
                 PlotTabs(pane = pane.dock, dock = dock,
                     title = UnsyncCallback::new(move |id| workbench.profiles.titles.with(|titles| titles.get(&id).cloned().unwrap_or_else(|| format!("Plot {id}")))),
                     on_select = UnsyncCallback::new(move |id| workbench.activate(id)),
@@ -46,9 +53,11 @@ pub fn Panel(
                     }),
                     on_close = UnsyncCallback::new(move |id| workbench.close_plot(id)),
                     on_add = UnsyncCallback::new(move |id| { workbench.add_plot(id, false, true); }))
+                }
                 PlotLinksMenu(options = pane.links)
                 PlotActions(workbench = workbench, pane = pane)
             }
+            PlotContext(workbench=workbench,pane=pane) {
             column(class = "plot-content", class:legend-drop-active = move || workbench.line_drag.target.get().is_some_and(|target| target.pane == pane.id)) {
                 if move || pane.analysis.with(|result| result.as_ref().is_some_and(|result| result.heatmap.is_some())) {
                     {move || pane.analysis.get().map(|result| AnyView::new(view! {AnalysisPlot(result=result,state=pane.plot,visible=visible,snapshot=pane.snapshot)}))}
@@ -63,7 +72,8 @@ pub fn Panel(
                 }
 
             }
-            if move || workbench.drag.state.get().is_some_and(|drag| drag.3 && (pane.analysis.get().is_none() || drag.0.starts_with("@analysis/"))) {
+            }
+            if move || workbench.drag.state.get().is_some_and(|drag| drag.3 && (pane.analysis.get().is_none() || drag.0.starts_with("@analysis/") || crate::profile::identity::Drag::parse(&drag.0).is_some_and(|drag|drag.item.is_workspace_item()))) {
                 column(class = "signal-drop-overlay", class:signal-drop-active = move || workbench.drop_target.get() == Some(pane.id)) {
                     text(class = "drop-title") {{move || if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@analysis/")) { if pane.analysis.get().is_some() { "Drop to add compatible spectrum or create analysis plot" } else { "Drop to create separate analysis plot" } } else if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@profile/")) { if workbench.drop_target.get() == Some(pane.id) { "Release to add view" } else { "Drop view here" } } else if workbench.drop_target.get() == Some(pane.id) { "Release to add line" } else { "Drop field here" }}}
                     text(class = "drop-name") {{move || workbench.drag.state.get().map(|drag| workbench.field_name(&drag.0)).unwrap_or_default()}}

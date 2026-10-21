@@ -77,7 +77,11 @@ fn settle(window: &Window, condition: impl Fn() -> bool) {
 
 fn load(window: &Window, workbench: Workbench) {
     window.scope.with(|| workbench.open(fixture()));
-    settle(window, || !workbench.loading.get_untracked());
+    settle(window, || {
+        !workbench.loading.get_untracked()
+            && !workbench.profiles.busy.get_untracked()
+            && !workbench.derived_busy.get_untracked()
+    });
     assert!(
         workbench.log.get_untracked().is_some(),
         "{}",
@@ -108,12 +112,12 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     window
         .scope
         .with(|| workbench.drop_analysis_sources(vec![sources[0].clone()], Some(normal.id)));
-    settle(&window, || !workbench.analysis.busy.get_untracked());
+    settle(&window, || !workbench.analysis().busy.get_untracked());
     assert_eq!(
-        workbench.panes.get_untracked().len(),
+        workbench.panes().get_untracked().len(),
         2,
         "{}",
-        workbench.analysis.message.get_untracked()
+        workbench.analysis().message.get_untracked()
     );
     let fft = workbench.pane();
     let id = fft.lines.get_untracked()[0].id;
@@ -126,8 +130,8 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     window
         .scope
         .with(|| workbench.drop_analysis_sources(vec![sources[1].clone()], Some(normal.id)));
-    settle(&window, || !workbench.analysis.busy.get_untracked());
-    assert_eq!(workbench.panes.get_untracked().len(), 2);
+    settle(&window, || !workbench.analysis().busy.get_untracked());
+    assert_eq!(workbench.panes().get_untracked().len(), 2);
     assert_eq!(fft.lines.get_untracked().len(), 2);
     assert_eq!(normal.lines.get_untracked().len(), 1);
     assert_eq!(
@@ -137,12 +141,12 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     assert!(!workbench.can_place_line(fft.id, id, normal.id));
     window.scope.with(|| {
         workbench.edit_analysis(fft);
-        workbench.analysis.remove_dc.set(false);
+        workbench.analysis().remove_dc.set(false);
         workbench.run_analysis();
     });
     let updated_view = plot::Ranges::new((10., 20.), (-4., 8.));
     fft.plot.set_view(updated_view).unwrap();
-    settle(&window, || !workbench.analysis.busy.get_untracked());
+    settle(&window, || !workbench.analysis().busy.get_untracked());
     assert_eq!(fft.plot.ranges.get_untracked(), updated_view);
     assert_eq!(
         fft.drawing.get_untracked()[&id].connection,
@@ -150,7 +154,7 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     );
     assert!(!fft.analysis.get_untracked().unwrap().options.remove_dc);
     window.scope.with(|| workbench.edit_analysis(fft));
-    assert!(!workbench.analysis.remove_dc.get_untracked());
+    assert!(!workbench.analysis().remove_dc.get_untracked());
     let second = window
         .scope
         .with(|| workbench.add_analysis_panel(fft.analysis.get_untracked().unwrap()));
@@ -184,10 +188,10 @@ fn analysis_selection_stays_separate_and_conditioner_is_not_a_spectral_input() {
         ["@analysis/raw"]
     );
     workbench.set_analysis_condition(vec!["rpm".into()]);
-    assert_eq!(workbench.analysis.condition.get_untracked(), "rpm");
-    assert!(workbench.analysis.sources.get_untracked().is_empty());
+    assert_eq!(workbench.analysis().condition.get_untracked(), "rpm");
+    assert!(workbench.analysis().sources.get_untracked().is_empty());
     workbench.set_analysis_condition(vec!["x".into(), "y".into()]);
-    assert_eq!(workbench.analysis.condition.get_untracked(), "rpm");
+    assert_eq!(workbench.analysis().condition.get_untracked(), "rpm");
 }
 
 #[test]
@@ -232,6 +236,37 @@ fn app_starts_with_one_full_workspace_and_adds_plots_with_keyboard() {
 }
 
 #[test]
+fn preset_editor_hides_obsolete_plot_groups_without_deleting_profile_data() {
+    use crate::{preset_capture::Bundle, preset_dialog::PresetDialogProps, preset_ui::SaveSession};
+    let window = Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    workbench.authoring.name.set("Example".into());
+    workbench.authoring.session.set(Some(SaveSession{view:1,kind:None,origin:None,previous:None,bundle:Bundle{
+        document:serde_json::json!({"version":1,"name":"Example","views":[{"name":"Motor","fields":["sensor/0/rpm"]}]}),files:Default::default(),
+    }}));
+    workbench.authoring.open.set(true);
+    let mut built = window.scope.with(|| {
+        view! {ThemeProvider(scheme=ColorScheme::Dark){PresetDialog(workbench=workbench)}}
+            .into_view()
+            .build(&mut window.cx.cx())
+    });
+    built.mount(&window.dom_handle, window.root, None);
+    window.frame();
+    assert_eq!(class(&window, "profile-builder-entry").len(), 0);
+    assert_eq!(
+        workbench.authoring.session.with_untracked(|session| session
+            .as_ref()
+            .unwrap()
+            .bundle
+            .document["views"]
+            .as_array()
+            .unwrap()
+            .len()),
+        1
+    );
+}
+
+#[test]
 fn tree_disclosures_search_selection_and_keyboard_add_work() {
     let window = Window::open();
     let workbench = window.scope.with(Workbench::new);
@@ -245,7 +280,8 @@ fn tree_disclosures_search_selection_and_keyboard_add_work() {
     load(&window, workbench);
     window.place(class(&window, "signal-list")[0], 0.0, 0.0, 300.0, 600.0);
     window.frame();
-    assert!(class(&window, "metric-option").is_empty());
+    assert!(workbench.browser_fields.with_untracked(Vec::is_empty));
+    click(&window, class(&window, "raw-section")[0]);
     let topic = class(&window, "topic-branch")[0];
     assert!(
         !class(&window, "zui-button").contains(&topic),
@@ -274,9 +310,9 @@ fn tree_disclosures_search_selection_and_keyboard_add_work() {
     workbench.query.set("esc_rpm".into());
     window.frame();
     assert_eq!(workbench.expanded.get_untracked(), expanded);
-    assert!(class(&window, "metric-option").is_empty());
+    assert!(workbench.browser_fields.with_untracked(Vec::is_empty));
     for _ in 0..8 {
-        if !class(&window, "metric-option").is_empty() {
+        if !workbench.browser_fields.with_untracked(Vec::is_empty) {
             break;
         }
         let branch = class(&window, "tree-branch")
@@ -289,7 +325,10 @@ fn tree_disclosures_search_selection_and_keyboard_add_work() {
         );
         window.frame();
     }
-    let leaf = class(&window, "metric-option")[0];
+    let leaf = class(&window, "metric-option")
+        .into_iter()
+        .find(|node| window.dom.tree().text_content(*node).contains("esc_rpm"))
+        .unwrap();
     click(&window, leaf);
     assert!(
         workbench
@@ -386,7 +425,7 @@ fn filtering_and_plot_state_survive_transient_settings_owner() {
         .with(|| workbench.place_line(pane.id, moving, second.id, None));
     assert_eq!(second.lines.get_untracked().len(), 1);
     assert_eq!(pane.lines.get_untracked().len(), 1);
-    assert_eq!(workbench.active.get_untracked(), second.id);
+    assert_eq!(workbench.active().get_untracked(), second.id);
     assert_eq!(second.drawing.get_untracked()[&moving], appearance);
     assert!(!pane.drawing.get_untracked().contains_key(&moving));
 }
@@ -412,7 +451,7 @@ fn latest_load_wins_and_reload_clears_lines_and_field_selection() {
     load(&window, workbench);
     assert!(
         workbench
-            .panes
+            .panes()
             .get_untracked()
             .iter()
             .all(|pane| pane.lines.get_untracked().is_empty())
@@ -442,26 +481,26 @@ fn docking_tabs_split_close_duplicate_and_maximize_preserve_data() {
         .scope
         .with(|| workbench.add_plot(first.id, false, true));
     assert_eq!(
-        workbench.layout.get_untracked().tab_ids(first.id),
+        workbench.layout().get_untracked().tab_ids(first.id),
         [first.id, tab.id]
     );
     workbench.activate(first.id);
-    assert!(!workbench.layout.get_untracked().is_visible(tab.id));
-    workbench.layout.update(|layout| {
+    assert!(!workbench.layout().get_untracked().is_visible(tab.id));
+    workbench.layout().update(|layout| {
         assert!(layout.dock_split(tab.id, first.id, DropZone::Bottom));
     });
-    assert!(workbench.layout.get_untracked().is_visible(tab.id));
+    assert!(workbench.layout().get_untracked().is_visible(tab.id));
     workbench.maximize(first.id);
-    assert_eq!(workbench.maximized.get_untracked(), Some(first.id));
-    workbench.layout.update(|layout| {
+    assert_eq!(workbench.maximized().get_untracked(), Some(first.id));
+    workbench.layout().update(|layout| {
         if let plot::workspace::layout::Layout::Split { ratio, .. } = layout {
             *ratio = 0.8;
         }
     });
     workbench.equalize_panels();
-    assert!(workbench.maximized.get_untracked().is_none());
+    assert!(workbench.maximized().get_untracked().is_none());
     assert!(matches!(
-        workbench.layout.get_untracked(),
+        workbench.layout().get_untracked(),
         plot::workspace::layout::Layout::Split { ratio: 0.5, .. }
     ));
     assert_eq!(first.lines.get_untracked()[0].id, original.id);
@@ -495,7 +534,7 @@ fn docking_tabs_split_close_duplicate_and_maximize_preserve_data() {
     workbench.close_plot(copy.id);
     workbench.close_plot(tab.id);
     workbench.close_plot(first.id);
-    assert_eq!(workbench.panes.get_untracked().len(), 1);
+    assert_eq!(workbench.panes().get_untracked().len(), 1);
     assert!(workbench.pane().lines.get_untracked().is_empty());
 }
 

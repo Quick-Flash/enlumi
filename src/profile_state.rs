@@ -22,13 +22,22 @@ pub enum Destination {
     Bands,
     Analysis,
     AnalysisCondition,
+    SaveSelection,
+}
+
+#[derive(Clone)]
+pub(crate) struct PendingDrop {
+    pub view: u64,
+    pub sources: Vec<String>,
+    pub target: Destination,
+    pub filter_slot: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
 pub struct ProfileUi {
     pub directory: RwSignal<Option<PathBuf>, LocalStorage>,
     pub groups: RwSignal<BTreeMap<String, String>, LocalStorage>,
-    pub browsing: RwSignal<bool, LocalStorage>,
+    pub open: RwSignal<bool, LocalStorage>,
     pub busy: RwSignal<bool, LocalStorage>,
     pub loading_profile: RwSignal<Option<ProfileKey>, LocalStorage>,
     pub error: RwSignal<String, LocalStorage>,
@@ -43,7 +52,7 @@ pub struct ProfileUi {
     pub overrides: RwSignal<BTreeMap<String, Option<profile::Metadata>>, LocalStorage>,
     pub removal: RwSignal<Option<ProfileKey>, LocalStorage>,
     pub rows: StoredValue<BTreeMap<u64, crate::profile_selection::ProfileSourceRow>, LocalStorage>,
-    pub pending_drop: StoredValue<Option<(Vec<Drag>, Destination)>, LocalStorage>,
+    pub(crate) pending_drop: StoredValue<Option<PendingDrop>, LocalStorage>,
     pending: StoredValue<Vec<PathBuf>, LocalStorage>,
     cancel: StoredValue<Option<Arc<AtomicBool>>, LocalStorage>,
 }
@@ -52,7 +61,7 @@ impl ProfileUi {
         Self {
             directory: RwSignal::new_local(None),
             groups: RwSignal::new_local(BTreeMap::new()),
-            browsing: RwSignal::new_local(false),
+            open: RwSignal::new_local(false),
             busy: RwSignal::new_local(false),
             loading_profile: RwSignal::new_local(None),
             error: RwSignal::new_local(String::new()),
@@ -146,7 +155,7 @@ impl Workbench {
             match result {
                 Ok((mut paths, warnings)) => {
                     if !paths.is_empty() {
-                        self.profiles.browsing.set(true);
+                        self.profiles.open.set(true);
                     }
                     self.profiles.warnings.update(|all| all.extend(warnings));
                     paths.reverse();
@@ -159,6 +168,7 @@ impl Workbench {
     }
 
     fn next_default_profile(self) {
+        self.resume_preset_apply();
         self.resume_profile_drop();
         if self.profiles.busy.get_untracked() {
             return;
@@ -209,6 +219,7 @@ impl Workbench {
         self.profiles
             .loading_profile
             .set(Some(ProfileKey::new(path.clone(), flight)));
+        let requested_path = path.clone();
         self.task(async move {
             let loaded = blocking(move || {
                 let path = path.canonicalize().map_err(|e| e.to_string())?;
@@ -227,6 +238,25 @@ impl Workbench {
                 }
             };
             let key = ProfileKey::new(path.clone(), flight);
+            self.authoring.pending.update_value(|pending| {
+                if let Some(request) = pending
+                    && request.key.path == requested_path
+                    && request.key.flight == flight
+                {
+                    request.key = key.clone();
+                }
+            });
+            self.workspaces.items.with_untracked(|items| {
+                for workspace in items {
+                    workspace.source.update(|source| {
+                        if let Some(source) = source
+                            && source.path == requested_path
+                        {
+                            source.path = path.clone();
+                        }
+                    });
+                }
+            });
             self.profiles.loading_profile.set(Some(key.clone()));
             let previous = self
                 .profiles
@@ -248,6 +278,10 @@ impl Workbench {
                 .as_ref()
                 .map(|old| old.ids.clone())
                 .unwrap_or_default();
+            ids.fields
+                .retain(|id, _| profile.filters.iter().any(|field| &field.id == id));
+            ids.geometry
+                .retain(|id, _| profile.geometry.iter().any(|geometry| &geometry.id == id));
             for field in &profile.filters {
                 ids.fields
                     .entry(field.id.clone())
@@ -290,6 +324,17 @@ impl Workbench {
                     geometry.name = format!("{} · flight {flight}", geometry.name);
                 }
             }
+            if definition.version >= 2 {
+                self.reuse_preset_resources(&mut prepared, previous.as_ref());
+            }
+            if self
+                .authoring
+                .saved
+                .with_value(|saved| saved.as_ref().is_some_and(|saved| saved.path == key.path))
+                && let Some(previous) = &previous
+            {
+                self.preserve_deleted_profile_fields(&mut prepared, previous);
+            }
             let instance = AppliedProfile::from_prepared(key.clone(), definition, prepared);
             let baseline = self.derived.get_untracked();
             let mut combined = baseline.clone();
@@ -297,7 +342,8 @@ impl Workbench {
             if let Some(old) = &previous {
                 // Previously working branches must remain working on reload. Intentional deletions are allowed.
                 for field in &old.fields {
-                    if instance.ids.fields.values().any(|id| *id == field.id)
+                    if baseline.iter().any(|active| active.id == field.id)
+                        && instance.ids.fields.values().any(|id| *id == field.id)
                         && instance
                             .definition
                             .filters
@@ -433,6 +479,7 @@ impl Workbench {
                         failures.remove(&key);
                     });
                     self.status.set(format!("Applied profile: {name}"));
+                    self.refresh_saved_capture(&key);
                     if let Some((item, target)) = destination {
                         self.place_prepared_item(key, item, target);
                     }
@@ -444,10 +491,18 @@ impl Workbench {
     }
 
     fn profile_failed(self, error: String) {
+        self.authoring.saved.set_value(None);
         if let Some(key) = self.profiles.loading_profile.get_untracked() {
+            self.authoring.pending.update_value(|pending| {
+                if pending.as_ref().is_some_and(|pending| pending.key == key) {
+                    *pending = None;
+                }
+            });
             self.profiles.pending_drop.update_value(|pending| {
-                if let Some((items, _)) = pending {
-                    items.retain(|drag| drag.profile != key);
+                if let Some(pending) = pending {
+                    pending.sources.retain(|source| {
+                        Drag::parse(source).is_none_or(|drag| drag.profile != key)
+                    });
                 }
             });
             self.profiles.failures.update(|failures| {

@@ -118,13 +118,17 @@ impl Workbench {
                     .map_or_else(Vec::new, |pane| self.legend_keys(pane))
             })),
             panes: Signal::derive_local(move || {
-                self.panes.get().iter().map(|pane| pane.display()).collect()
+                self.panes()
+                    .get()
+                    .iter()
+                    .map(|pane| pane.display())
+                    .collect()
             }),
             visible: UnsyncCallback::new(move |id| {
                 plot::workspace::plot_visible(
                     id,
-                    self.maximized.get_untracked(),
-                    self.layout.get_untracked(),
+                    self.maximized().get_untracked(),
+                    self.layout().get_untracked(),
                 )
             }),
             hit_plot: UnsyncCallback::new(move |(x, y)| self.hit_any_plot(x, y)),
@@ -197,7 +201,7 @@ impl Workbench {
                 lines.insert(index, line);
             });
         } else {
-            let global = self.panes.with_untracked(|panes| {
+            let global = self.panes().with_untracked(|panes| {
                 panes
                     .iter()
                     .flat_map(|pane| pane.display().colors())
