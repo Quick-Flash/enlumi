@@ -34,6 +34,34 @@ impl ThemePreference {
         Ok(())
     }
 }
+/// Folder of the last opened log, kept so the file dialog starts there on platforms whose
+/// native dialog does not remember it.
+#[derive(Clone, Default)]
+pub struct LastLogDirectory(Option<PathBuf>);
+impl LastLogDirectory {
+    pub fn user() -> Self {
+        Self(config_directory().map(|path| path.join("last-log-directory")))
+    }
+    pub fn load(&self) -> Option<PathBuf> {
+        let text = std::fs::read_to_string(self.0.as_ref()?).ok()?;
+        let path = PathBuf::from(text.trim_end_matches(['\r', '\n']));
+        (path.is_absolute() && path.is_dir()).then_some(path)
+    }
+    pub fn save(&self, log: &Path) -> io::Result<()> {
+        let (Some(path), Some(folder)) = (&self.0, log.parent()) else {
+            return Ok(());
+        };
+        let Some(folder) = folder.to_str().filter(|f| !f.contains(['\r', '\n'])) else {
+            return Ok(());
+        };
+        let parent = path.parent().unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent)?;
+        let mut file = tempfile::NamedTempFile::new_in(parent)?;
+        writeln!(file, "{folder}")?;
+        file.persist(path).map_err(|error| error.error)?;
+        Ok(())
+    }
+}
 pub(crate) fn config_directory() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -66,6 +94,25 @@ pub(crate) fn config_directory() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn last_log_directory_roundtrips_and_rejects_stale_or_relative_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = LastLogDirectory(Some(dir.path().join("config/last-log-directory")));
+        assert_eq!(store.load(), None);
+        let logs = dir.path().join("logs");
+        std::fs::create_dir(&logs).unwrap();
+        store.save(&logs.join("a.bbl")).unwrap();
+        assert_eq!(store.load(), Some(logs.clone()));
+        std::fs::remove_dir(&logs).unwrap();
+        assert_eq!(store.load(), None);
+        std::fs::write(
+            dir.path().join("config/last-log-directory"),
+            "relative/dir\n",
+        )
+        .unwrap();
+        assert_eq!(store.load(), None);
+        assert!(LastLogDirectory(None).save(Path::new("/x/a.bbl")).is_ok());
+    }
     #[test]
     fn only_theme_id_roundtrips_and_invalid_preferences_fall_back() {
         let directory = tempfile::tempdir().unwrap();
