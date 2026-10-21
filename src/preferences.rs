@@ -105,7 +105,11 @@ mod tests {
         assert_eq!(store.load(), Some(logs.clone()));
         std::fs::remove_dir(&logs).unwrap();
         assert_eq!(store.load(), None);
-        std::fs::write(dir.path().join("config/last-log-directory"), "relative/dir\n").unwrap();
+        std::fs::write(
+            dir.path().join("config/last-log-directory"),
+            "relative/dir\n",
+        )
+        .unwrap();
         assert_eq!(store.load(), None);
         assert!(LastLogDirectory(None).save(Path::new("/x/a.bbl")).is_ok());
     }
