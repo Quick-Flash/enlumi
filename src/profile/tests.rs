@@ -38,6 +38,52 @@ fn prepare_json(value: serde_json::Value, log: &LogStore) -> Result<prepare::Pre
 }
 
 #[test]
+fn streaming_profile_publishes_raw_then_dependency_waves_and_honors_cancel() {
+    use std::sync::{Mutex, atomic::Ordering};
+    let log = fixture();
+    let profile: Profile = serde_json::from_value(recipe()).unwrap();
+    let ids = identity::ResourceIds {
+        fields: BTreeMap::from([("first".into(), 100), ("second".into(), 101)]),
+        geometry: BTreeMap::from([("region".into(), 102)]),
+    };
+    let snapshots = Mutex::new(Vec::new());
+    let prepared = prepare::prepare_streaming(
+        profile.clone(),
+        &log,
+        Path::new("."),
+        ids.clone(),
+        Arc::new(AtomicBool::new(false)),
+        &|progress| {
+            snapshots.lock().unwrap().push(progress);
+        },
+    )
+    .unwrap();
+    let snapshots = snapshots.into_inner().unwrap();
+    let raw = "esc_status/0/esc[5].esc_rpm";
+    let first = &prepared.symbols["first"];
+    let second = &prepared.symbols["second"];
+    let at = |source: &str| {
+        snapshots
+            .iter()
+            .position(|snapshot| snapshot.data.contains_key(source))
+            .unwrap()
+    };
+    assert!(at(raw) < at(first) && at(first) < at(second));
+    for field in &prepared.fields {
+        assert_eq!(
+            snapshots.last().unwrap().data[&field.key()].samples(),
+            field.data.as_ref().unwrap().samples()
+        );
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    let result =
+        prepare::prepare_streaming(profile, &log, Path::new("."), ids, cancel.clone(), &|_| {
+            cancel.store(true, Ordering::Relaxed);
+        });
+    assert!(result.err().unwrap().contains("cancelled"));
+}
+
+#[test]
 fn captured_filter_aliases_reuse_identical_outputs_and_keep_dependents_available() {
     let mut value = recipe();
     value["filters"] = json!([

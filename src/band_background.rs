@@ -4,13 +4,13 @@ use crate::{
 };
 use kurbo::{BezPath, Shape};
 use plot::PlotGeometry;
+use std::collections::BTreeMap;
 use zgui::{
     canvas::{Brush, ShapeBuilder, zgui_color::Color},
     prelude::*,
 };
 #[derive(Clone, PartialEq)]
 struct Label {
-    key: (u64, usize),
     name: String,
     left: f64,
     width: f64,
@@ -20,8 +20,39 @@ struct Label {
 #[derive(Clone, Default, PartialEq)]
 struct Backdrop {
     paints: Vec<(u64, BezPath, [u8; 3], f64)>,
-    labels: Vec<Label>,
-    ribbons: Vec<(f64, f64, [u8; 3], f64)>,
+    labels: BTreeMap<(u64, usize), Label>,
+    edges: Vec<StateEdges>,
+}
+#[derive(Clone, PartialEq)]
+struct StateEdges {
+    owner: u64,
+    color: [u8; 3],
+    edges: BezPath,
+}
+impl Backdrop {
+    fn state_edge(&mut self, owner: u64, left: f64, color: [u8; 3], height: f64) {
+        let index = self
+            .edges
+            .iter()
+            .position(|ribbon| ribbon.owner == owner && ribbon.color == color)
+            .unwrap_or_else(|| {
+                self.edges.push(StateEdges {
+                    owner,
+                    color,
+                    edges: BezPath::new(),
+                });
+                self.edges.len() - 1
+            });
+        let edge = &mut self.edges[index];
+        edge.edges.move_to((left, 0.));
+        edge.edges.line_to((left, height));
+    }
+}
+
+fn label_span(left: f64, right: f64) -> Option<(f64, f64)> {
+    let ticks = plot::zgui_plot::theme::TREND_LABELS;
+    let left = left.max(ticks.inset + ticks.y_label.0 + 4.);
+    (right - left >= 36.).then_some((left, right - left))
 }
 #[component]
 pub fn BandBackground(
@@ -31,9 +62,19 @@ pub fn BandBackground(
 ) -> impl IntoView {
     let host = NodeRef::new();
     let bounds = host.observe_border_box();
+    let x_range = Memo::new(move |_| pane.plot.ranges.get().x);
     let scene = Memo::new(move |_| {
         let mut out = Backdrop::default();
         if !visible.get() {
+            return out;
+        }
+        let hidden = pane.hidden_geometry.get();
+        let items = workbench.ordered_geometry(pane);
+        let items: Vec<_> = items
+            .iter()
+            .filter(|item| item.kind == GeometryKind::Band && !hidden.contains(&item.id))
+            .collect();
+        if items.is_empty() {
             return out;
         }
         let Some(bounds) = bounds.get() else {
@@ -44,28 +85,17 @@ pub fn BandBackground(
         let Some(g) = PlotGeometry::with_bounds(0., 0., width, height, width, height) else {
             return out;
         };
-        let ranges = pane.plot.ranges.get();
-        let ids = pane.geometry.get();
-        let hidden = pane.hidden_geometry.get();
-        let items = workbench.ordered_geometry(pane);
-        for (row, item) in items
-            .iter()
-            .filter(|item| {
-                item.kind == GeometryKind::Band
-                    && ids.contains(&item.id)
-                    && !hidden.contains(&item.id)
-            })
-            .enumerate()
-        {
+        let x_range = x_range.get();
+        for (row, item) in items.into_iter().enumerate() {
             let mut append = |index: usize, start: f64, end: f64, name: &str, color: [u8; 3]| {
-                let left = g.x(start.max(ranges.x.min), ranges.x);
-                let right = g.x(end.min(ranges.x.max), ranges.x);
+                let left = g.x(start.max(x_range.min), x_range);
+                let right = g.x(end.min(x_range.max), x_range);
                 if right <= left {
                     return;
                 }
                 let path = kurbo::Rect::new(left, 0., right, height).to_path(0.1);
                 if item.states.is_some() && item.opacity > 0.0 {
-                    out.ribbons.push((left, right, color, height));
+                    out.state_edge(item.id, left, color, height);
                 }
                 if let Some((_, existing, _, _)) =
                     out.paints.iter_mut().find(|(owner, _, rgb, alpha)| {
@@ -76,15 +106,21 @@ pub fn BandBackground(
                 } else {
                     out.paints.push((item.id, path, color, item.opacity));
                 }
-                if item.labels && right - left >= 36. && out.labels.len() < 300 && row < 4 {
-                    out.labels.push(Label {
-                        key: (item.id, index),
-                        name: name.into(),
-                        left,
-                        width: right - left,
-                        row,
-                        color,
-                    });
+                if item.labels
+                    && out.labels.len() < 300
+                    && row < 4
+                    && let Some((left, width)) = label_span(left, right)
+                {
+                    out.labels.insert(
+                        (item.id, index),
+                        Label {
+                            name: name.into(),
+                            left,
+                            width,
+                            row,
+                            color,
+                        },
+                    );
                 }
             };
             if let Some(states) = &item.states {
@@ -93,13 +129,13 @@ pub fn BandBackground(
                 }
                 let start = states
                     .intervals
-                    .partition_point(|interval| interval.end <= ranges.x.min);
+                    .partition_point(|interval| interval.end <= x_range.min);
                 for (index, interval) in states
                     .intervals
                     .iter()
                     .enumerate()
                     .skip(start)
-                    .take_while(|(_, v)| v.start < ranges.x.max)
+                    .take_while(|(_, v)| v.start < x_range.max)
                 {
                     if let Some(rule) = states
                         .rules
@@ -121,7 +157,7 @@ pub fn BandBackground(
     plot::zgui_svg::register_description(
         plot::zgui_svg::SnapshotLayer::Foreground,
         move |description| {
-            for label in scene.get_untracked().labels {
+            for label in scene.get_untracked().labels.into_values() {
                 description.text.push(plot::SvgText {
                     x: label.left + 3.,
                     y: 20. + label.row as f64 * 20.,
@@ -155,18 +191,11 @@ pub fn BandBackground(
                             .build(),
                     );
                 }
-                for (left, right, [r, g, b], height) in &scene.ribbons {
-                    let color = Color::srgb_u8(*r, *g, *b, 255);
+                for edge in &scene.edges {
+                    let [r, g, b] = edge.color;
+                    let color = Color::srgb_u8(r, g, b, 255);
                     canvas_scene.push(
-                        ShapeBuilder::new(kurbo::Rect::new(*left, 0., *right, 3.).to_path(0.1))
-                            .fill(Brush::Solid(color.with_alpha(0.85)))
-                            .build(),
-                    );
-                    let mut edge = BezPath::new();
-                    edge.move_to((*left, 0.));
-                    edge.line_to((*left, *height));
-                    canvas_scene.push(
-                        ShapeBuilder::new(edge)
+                        ShapeBuilder::new(edge.edges.clone())
                             .stroke(Brush::Solid(color.with_alpha(0.35)), 1.)
                             .build(),
                     );
@@ -179,9 +208,49 @@ pub fn BandBackground(
         .scene(&handle);
     view! {column(class="band-background",node_ref=host) {
         {canvas.into_view()}
-        for key in move ||scene.with(|scene|scene.labels.iter().map(|label|label.key).collect::<Vec<_>>()),key=|key|*key {
-            text(class="band-label",style:border-left-color=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("rgb({}, {}, {})",label.color[0],label.color[1],label.color[2]))),style:left=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",label.left+3.))),style:top=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",8+label.row*20))),style:max-width=move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map(|label|format!("{}px",label.width-6.)))) {{move ||scene.with(|scene|scene.labels.iter().find(|label|label.key==key).map_or_else(String::new,|label|label.name.clone()))}}
+        for key in move ||scene.with(|scene|scene.labels.keys().copied().collect::<Vec<_>>()),key=|key|*key {
+            text(class="band-label",style:border-left-color=move ||scene.with(|scene|scene.labels.get(&key).map(|label|format!("rgb({}, {}, {})",label.color[0],label.color[1],label.color[2]))),style:left=move ||scene.with(|scene|scene.labels.get(&key).map(|label|format!("{}px",label.left+3.))),style:top=move ||scene.with(|scene|scene.labels.get(&key).map(|label|format!("{}px",8+label.row*20))),style:max-width=move ||scene.with(|scene|scene.labels.get(&key).map(|label|format!("{}px",label.width-6.)))) {{move ||scene.with(|scene|scene.labels.get(&key).map_or_else(String::new,|label|label.name.clone()))}}
         }
 
     }}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn mode_labels_clear_y_ticks_and_stay_inside_their_interval() {
+        assert_eq!(label_span(0., 200.), Some((64., 136.)));
+        assert_eq!(label_span(100., 200.), Some((100., 100.)));
+        assert!(label_span(0., 80.).is_none());
+    }
+    #[test]
+    fn repeated_state_intervals_batch_vertical_edges_without_merging_owners_or_colors() {
+        let mut scene = Backdrop::default();
+        for interval in 0..100 {
+            let left = interval as f64 * 10.;
+            scene.state_edge(1, left, [10, 20, 30], 200.);
+        }
+        assert_eq!(
+            scene.edges.len(),
+            1,
+            "One stroke replaces 100 canvas shapes"
+        );
+        assert_eq!(scene.edges[0].edges.elements().len(), 200);
+        for segment in scene.edges[0].edges.elements().chunks_exact(2) {
+            let [kurbo::PathEl::MoveTo(start), kurbo::PathEl::LineTo(end)] = segment else {
+                panic!("Only vertical interval boundaries expected");
+            };
+            assert_eq!(start.x, end.x);
+        }
+        scene.state_edge(2, 0., [10, 20, 30], 200.);
+        scene.state_edge(1, 5., [40, 50, 60], 200.);
+        assert_eq!(
+            scene.edges.len(),
+            3,
+            "Separate band layers retain their opacity and paint order"
+        );
+        assert_eq!(scene.edges[0].owner, 1);
+        assert_eq!(scene.edges[1].owner, 2);
+    }
 }

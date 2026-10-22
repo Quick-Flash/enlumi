@@ -123,7 +123,7 @@ fn settle(window: &Window, workbench: Workbench, ready: impl Fn() -> bool) {
     let end = Instant::now() + Duration::from_secs(15);
     loop {
         window.frame();
-        if ready() {
+        if ready() && workbench.authoring.workspace_load.get_value().is_none() {
             return;
         }
         assert!(
@@ -358,6 +358,194 @@ fn duplicate_workspace_copies_all_views_without_linking_saved_source() {
     workbench.switch_workspace(original);
     assert_eq!(workbench.view().name.get_untracked(), "View 3");
     assert_eq!(source.plot.ranges.get_untracked(), bounds);
+}
+
+#[test]
+fn workspace_streams_into_selected_layout_without_committing_preview_or_resetting_zoom() {
+    use crate::{
+        preset_ui::ApplyAction,
+        profile::{identity::ProfileKey, progress::Progress},
+    };
+    use std::collections::BTreeMap;
+    let window = Window::open();
+    let source = window.scope.with(Workbench::new);
+    five_views(&window, source);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("stream.json");
+    let bundle = preset_capture::capture(source, &CaptureKind::Workspace, "Streamed").unwrap();
+    crate::preset_store::save(bundle, &path, false, None).unwrap();
+    let path = path.canonicalize().unwrap();
+    let definition = Arc::new(crate::profile::load(&path).unwrap());
+    let workbench = window.scope.with(Workbench::new);
+    let log = source.log.get_untracked().unwrap();
+    let symbols = definition
+        .signals
+        .iter()
+        .map(|signal| {
+            (
+                signal.id.clone(),
+                crate::profile::resolve::source(&log, &signal.source, &BTreeMap::new()).unwrap(),
+            )
+        })
+        .collect();
+    workbench.log.set(Some(log.clone()));
+    workbench.open_saved_workspace(SavedWorkspace {
+        path: path.clone(),
+        name: "Streamed".into(),
+        views: 5,
+        definition,
+    });
+    assert_eq!(workbench.workspace().name.get_untracked(), "Streamed");
+    assert_eq!(workbench.views.items.with_untracked(Vec::len), 5);
+    assert!(
+        workbench
+            .workspace()
+            .loading
+            .with_untracked(Option::is_some)
+    );
+    let panes = workbench.views.items.with_untracked(|views| {
+        views
+            .iter()
+            .flat_map(|view| view.panes.get_untracked())
+            .collect::<Vec<_>>()
+    });
+    assert!(
+        panes
+            .iter()
+            .all(|pane| pane.lines.with_untracked(Vec::is_empty))
+    );
+    let key = ProfileKey::new(path, 1);
+    let raw = source.pane().lines.get_untracked()[0].source.clone();
+    let data = log.prepare(&raw).unwrap();
+    workbench.preview_workspace(
+        &key,
+        Progress {
+            symbols,
+            metadata: BTreeMap::new(),
+            data: BTreeMap::from([(raw.clone(), data)]),
+        },
+    );
+    assert!(
+        panes
+            .iter()
+            .all(|pane| pane.lines.with_untracked(Vec::len) == 1)
+    );
+    assert!(workbench.derived.with_untracked(Vec::is_empty));
+    assert!(
+        workbench
+            .profiles
+            .instances
+            .with_untracked(BTreeMap::is_empty)
+    );
+    let bounds = plot::Ranges::new((10., 20.), (-9., 9.));
+    for pane in &panes {
+        pane.plot.set_view(bounds).unwrap();
+    }
+    let line_ids: Vec<_> = panes
+        .iter()
+        .map(|pane| pane.lines.get_untracked()[0].id)
+        .collect();
+    settle(&window, workbench, || {
+        !workbench.profiles.busy.get_untracked()
+            && workbench
+                .workspace()
+                .loading
+                .with_untracked(Option::is_none)
+    });
+    for (pane, id) in panes.iter().zip(line_ids) {
+        assert_eq!(pane.lines.with_untracked(Vec::len), 1);
+        assert_eq!(pane.lines.get_untracked()[0].id, id);
+        assert_eq!(pane.plot.ranges.get_untracked(), bounds);
+    }
+    assert!(
+        workbench
+            .profiles
+            .instances
+            .with_untracked(|instances| instances[&key].placements.len() >= panes.len())
+    );
+    let recipe = crate::profile::load(&key.path)
+        .unwrap()
+        .workspace_presets
+        .remove(0);
+    let instance = workbench
+        .profiles
+        .instances
+        .with_untracked(|instances| instances[&key].clone());
+    workbench.profiles.instances.update(|instances| {
+        instances.remove(&key);
+    });
+    workbench.begin_workspace_load(&key, recipe).unwrap();
+    workbench.profiles.instances.update(|instances| {
+        instances.insert(key.clone(), instance.clone());
+    });
+    workbench.complete_workspace_load(&instance);
+    assert!(workbench.workspace_finishing());
+    let targets = workbench
+        .panes()
+        .with_untracked(|panes| panes.iter().map(|pane| pane.id).collect::<Vec<_>>());
+    let workspace = workbench.workspaces.active.get_untracked();
+    workbench.select_workspace(workspace);
+    workbench.use_saved_preset(key.clone(), "Streamed".into(), ApplyAction::Workspace);
+    workbench.complete_workspace_load(&instance);
+    assert_eq!(workbench.workspaces.active.get_untracked(), workspace);
+    assert!(
+        !workbench.profiles.busy.get_untracked(),
+        "Reselecting loading workspace must not restart preparation"
+    );
+    assert!(workbench.authoring.pending.get_value().is_none());
+    assert_eq!(
+        workbench
+            .panes()
+            .with_untracked(|panes| panes.iter().map(|pane| pane.id).collect::<Vec<_>>()),
+        targets
+    );
+    settle(&window, workbench, || !workbench.workspace_finishing());
+    workbench.use_saved_preset(key, "Streamed".into(), ApplyAction::Workspace);
+    settle(&window, workbench, || {
+        workbench.panes().with_untracked(|panes| {
+            panes
+                .iter()
+                .all(|pane| !pane.lines.with_untracked(Vec::is_empty))
+        })
+    });
+}
+
+#[test]
+fn closing_loading_workspace_discards_late_previews_and_profile_results() {
+    let window = Window::open();
+    let source = window.scope.with(Workbench::new);
+    five_views(&window, source);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("cancel.json");
+    crate::preset_store::save(
+        preset_capture::capture(source, &CaptureKind::Workspace, "Cancel").unwrap(),
+        &path,
+        false,
+        None,
+    )
+    .unwrap();
+    let workbench = window.scope.with(Workbench::new);
+    workbench.log.set(source.log.get_untracked());
+    workbench.open_saved_workspace(SavedWorkspace {
+        path: path.clone(),
+        name: "Cancel".into(),
+        views: 5,
+        definition: Arc::new(crate::profile::load(&path).unwrap()),
+    });
+    workbench.close_workspace(workbench.workspaces.active.get_untracked());
+    assert!(workbench.authoring.workspace_load.get_value().is_none());
+    assert!(!workbench.profiles.busy.get_untracked());
+    for _ in 0..10 {
+        window.frame();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(workbench.workspace().name.get_untracked(), "Untitled");
+    assert!(
+        workbench
+            .profiles
+            .instances
+            .with_untracked(|instances| instances.is_empty())
+    );
 }
 
 #[test]

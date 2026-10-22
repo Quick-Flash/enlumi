@@ -3,6 +3,7 @@
 mod examples_tests;
 pub mod identity;
 pub mod prepare;
+pub(crate) mod progress;
 pub mod resolve;
 #[cfg(test)]
 mod tests;

@@ -31,14 +31,14 @@ pub fn WorkspacePicker(workbench: Workbench) -> impl IntoView {
         row(class="workspace-picker view-picker") {
             Popover(open=open) {
                 PopoverTrigger(class="app-action workspace-select view-select",size=ButtonSize::Xs,variant=ButtonVariant::Ghost,a11y:label="Choose workspace") {
-                    text(class="view-caption") {{move ||format!("Workspace: {}",workbench.workspace().name.get())}}
+                    text(class="view-caption") {{move || {let workspace=workbench.workspace(); format!("Workspace: {}{}",workspace.name.get(),if workspace.loading.with(Option::is_some){" · loading"}else{""})}}}
                     vector(class="view-select-mark",prop:viewBox="0 0 12 12",prop:d="M2 4 L6 8 L10 4",a11y:hidden=true)
                 }
                 PopoverContent(class="view-list workspace-list") {
                     text(class="muted") {"Open workspaces"}
                     for workspace in move ||workbench.workspaces.items.get(),key=|workspace|workspace.id {
                         row(class="view-choice",class:view-current=move ||workbench.workspaces.active.get()==workspace.id) {
-                            ActionButton(class="workspace-choice view-choice-select",on:click=move |_|{open.set(false);workbench.select_workspace(workspace.id);}) {{move ||workspace.name.get()}}
+                            ActionButton(class="workspace-choice view-choice-select",on:click=move |_|{open.set(false);workbench.select_workspace(workspace.id);}) {{move ||format!("{}{}",workspace.name.get(),if workspace.loading.with(Option::is_some){" · loading"}else{""})}}
                             if move ||workbench.workspaces.active.get()==workspace.id {
                                 vector(class="view-current-icon",prop:viewBox="0 0 12 12",prop:d="M2 6.2 L4.7 9 L10 3",a11y:label="Current workspace")
                             } else {

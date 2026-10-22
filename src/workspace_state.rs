@@ -10,6 +10,7 @@ use zgui::prelude::*;
 pub struct Workspace {
     pub id: u64,
     pub name: RwSignal<String, LocalStorage>,
+    pub loading: RwSignal<Option<String>, LocalStorage>,
     pub source: RwSignal<Option<PresetSource>, LocalStorage>,
     pub views: Vec<WorkspaceView>,
     pub active_view: u64,
@@ -39,6 +40,7 @@ impl Workspaces {
             items: RwSignal::new_local(vec![Workspace {
                 id: 1,
                 name: RwSignal::new_local("Untitled".into()),
+                loading: RwSignal::new_local(None),
                 source: RwSignal::new_local(None),
                 views: views.items.get_untracked(),
                 active_view: views.active.get_untracked(),
@@ -139,6 +141,7 @@ impl Workbench {
             owner.with(|| Workspace {
                 id,
                 name: RwSignal::new_local(name),
+                loading: RwSignal::new_local(None),
                 source: RwSignal::new_local(None),
                 views: vec![view],
                 active_view: view.id,
@@ -158,6 +161,15 @@ impl Workbench {
         let Some(next) = next else {
             return;
         };
+        if self
+            .authoring
+            .workspace_load
+            .with_value(|load| load.as_ref().is_some_and(|load| load.workspace == id))
+        {
+            self.profiles.cancel();
+            self.authoring.pending.set_value(None);
+            self.clear_workspace_load();
+        }
         if self.workspaces.active.get_untracked() == id {
             self.switch_workspace(next);
         }
@@ -189,7 +201,13 @@ impl Workbench {
     pub fn select_workspace(self, id: u64) {
         self.switch_workspace(id);
         let workspace = self.workspace();
-        if workspace.generation != self.generation.get_untracked()
+        if (workspace.generation != self.generation.get_untracked()
+            || workspace.loading.with_untracked(|loading| {
+                loading
+                    .as_ref()
+                    .is_some_and(|message| message.starts_with("Load failed:"))
+            }))
+            && !self.profiles.busy.get_untracked()
             && self.log.with_untracked(Option::is_some)
             && let Some(source) = workspace.source.get_untracked()
         {
@@ -218,6 +236,34 @@ impl Workbench {
         }) {
             self.select_workspace(id);
         } else if self.log.with_untracked(Option::is_some) {
+            if self.loading.get_untracked()
+                || self.profiles.busy.get_untracked()
+                || self.derived_busy.get_untracked()
+                || self.workspace_finishing()
+            {
+                self.status
+                    .set("Wait for loading and filters to finish".into());
+                return;
+            }
+            let key = crate::profile::identity::ProfileKey::new(
+                saved.path.clone(),
+                self.profiles.flight.get_untracked(),
+            );
+            if !self
+                .profiles
+                .instances
+                .with_untracked(|instances| instances.contains_key(&key))
+                && let Some(recipe) = saved
+                    .definition
+                    .workspace_presets
+                    .iter()
+                    .find(|recipe| recipe.name == saved.name)
+                    .cloned()
+                && let Err(error) = self.begin_workspace_load(&key, recipe)
+            {
+                self.status.set(error);
+                return;
+            }
             self.use_saved_preset(
                 crate::profile::identity::ProfileKey::new(
                     saved.path,

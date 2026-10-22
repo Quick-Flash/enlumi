@@ -64,17 +64,22 @@ pub fn GeometryOverlay(
             if !visible.get() {
                 return;
             }
+            let hidden = pane.hidden_geometry.get();
+            let items = workbench.ordered_geometry(pane);
+            let items: Vec<_> = items
+                .iter()
+                .filter(|item| {
+                    item.kind != crate::geometry::GeometryKind::Band && !hidden.contains(&item.id)
+                })
+                .collect();
+            if items.is_empty() {
+                return;
+            }
             let Some(geometry) = geometry.get() else {
                 return;
             };
             let ranges = pane.plot.ranges.get();
-            let ids = pane.geometry.get();
-            let hidden = pane.hidden_geometry.get();
-            let items = workbench.ordered_geometry(pane);
-            for item in items
-                .iter()
-                .filter(|item| ids.contains(&item.id) && !hidden.contains(&item.id))
-            {
+            for item in items {
                 let (fill, stroke) = item.paths(ranges, geometry);
                 let [r, g, b] = item.color;
                 let color = Color::srgb_u8(r, g, b, 255);

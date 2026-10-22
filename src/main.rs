@@ -137,6 +137,7 @@ mod view_tests;
 mod workspace;
 mod workspace_catalogue;
 mod workspace_collection;
+mod workspace_loading;
 mod workspace_picker;
 mod workspace_preset;
 mod workspace_state;

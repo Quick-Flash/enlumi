@@ -33,6 +33,7 @@ impl Line {
 #[derive(Clone, Copy)]
 pub struct Pane {
     pub id: u64,
+    pub loading: RwSignal<Option<String>, LocalStorage>,
     pub dock: DockPane,
     pub preset: RwSignal<Option<crate::preset::PresetSource>, LocalStorage>,
     pub menu_area: RwSignal<Option<NodeRef>, LocalStorage>,
@@ -64,20 +65,24 @@ impl Pane {
                 })
                 .collect()
         });
-        let series = Signal::derive_local(move || {
-            TimeSeriesSet::new(
-                lines
-                    .get()
-                    .iter()
-                    .map(|line| {
-                        TimeSeries::new(line.id.to_string(), line.label(), line.data.clone())
-                    })
-                    .collect(),
-            )
-            .expect("unique line IDs")
+        let series = Memo::new_owning(move |_| {
+            let series = lines.with(|lines| {
+                TimeSeriesSet::new(
+                    lines
+                        .iter()
+                        .map(|line| {
+                            TimeSeries::new(line.id.to_string(), line.label(), line.data.clone())
+                        })
+                        .collect(),
+                )
+                .expect("unique line IDs")
+            });
+            (series, true)
         });
+        let series = Signal::derive_local(move || series.get());
         Self {
             id,
+            loading: RwSignal::new_local(None),
             dock: DockPane::new(id),
             preset: RwSignal::new_local(None),
             menu_area: RwSignal::new_local(None),
@@ -263,6 +268,7 @@ impl Workbench {
         pane.selected.set(Some(id));
     }
     pub fn open(self, path: PathBuf) {
+        self.clear_workspace_load();
         self.profiles.cancel();
         for view in self.all_views() {
             view.analysis.reset();

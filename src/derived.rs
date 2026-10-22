@@ -270,6 +270,12 @@ pub(crate) struct EvaluationCache {
     scripts: Vec<CachedScript>,
 }
 impl EvaluationCache {
+    pub(crate) fn series(&self) -> &BTreeMap<String, SeriesData> {
+        &self.series
+    }
+    pub(crate) fn insert_series(&mut self, source: String, data: SeriesData) {
+        self.series.insert(source, data);
+    }
     pub(crate) fn into_series(self) -> BTreeMap<String, SeriesData> {
         self.series
     }

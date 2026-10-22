@@ -6,6 +6,7 @@ use crate::{
     state_bands::StateBands,
 };
 use plot::time_series::SeriesData;
+use rayon::prelude::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -79,11 +80,33 @@ pub fn prepare_with_ids(
 }
 
 pub(super) fn prepare_inner(
+    profile: Profile,
+    log: &LogStore,
+    base: &Path,
+    ids: super::identity::ResourceIds,
+    cancel: Arc<AtomicBool>,
+) -> Result<Prepared, String> {
+    prepare_progress(profile, log, base, ids, cancel, None)
+}
+
+pub(crate) fn prepare_streaming(
+    profile: Profile,
+    log: &LogStore,
+    base: &Path,
+    ids: super::identity::ResourceIds,
+    cancel: Arc<AtomicBool>,
+    progress: &(dyn Fn(super::progress::Progress) + Sync),
+) -> Result<Prepared, String> {
+    derived::pool()?.install(|| prepare_progress(profile, log, base, ids, cancel, Some(progress)))
+}
+
+fn prepare_progress(
     mut profile: Profile,
     log: &LogStore,
     base: &Path,
     mut ids: super::identity::ResourceIds,
     cancel: Arc<AtomicBool>,
+    progress: Option<&(dyn Fn(super::progress::Progress) + Sync)>,
 ) -> Result<Prepared, String> {
     let mut diagnostics = Vec::new();
     let mut symbols = BTreeMap::new();
@@ -207,6 +230,33 @@ pub(super) fn prepare_inner(
     }
     let mut fields: Vec<DerivedField> = Vec::new();
     let mut evaluation = derived::EvaluationCache::default();
+    if let Some(progress) = progress {
+        progress(super::progress::Progress::capture(
+            &profile,
+            &symbols,
+            &metadata,
+            &evaluation,
+        ));
+        let raw = super::progress::raw_sources(&profile, log, &symbols);
+        for chunk in raw.chunks(4) {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Profile cancelled".into());
+            }
+            let decoded: Vec<_> = chunk
+                .par_iter()
+                .filter_map(|source| log.prepare(source).ok().map(|data| (source.clone(), data)))
+                .collect();
+            for (source, data) in decoded {
+                evaluation.insert_series(source, data);
+            }
+            progress(super::progress::Progress::capture(
+                &profile,
+                &symbols,
+                &metadata,
+                &evaluation,
+            ));
+        }
+    }
     while !pending.is_empty() {
         if cancel.load(Ordering::Relaxed) {
             return Err("Profile cancelled".into());
@@ -306,6 +356,14 @@ pub(super) fn prepare_inner(
                     report(&mut diagnostics, &name, None, error);
                 }
             }
+        }
+        if let Some(progress) = progress {
+            progress(super::progress::Progress::capture(
+                &profile,
+                &symbols,
+                &metadata,
+                &evaluation,
+            ));
         }
     }
     fields.sort_by_key(|field| field.id);

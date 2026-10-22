@@ -56,6 +56,9 @@ pub fn Panel(
                 }
                 PlotLinksMenu(options = pane.links)
                 PlotActions(workbench = workbench, pane = pane)
+                if move || pane.loading.with(Option::is_some) {
+                    text(class="plot-loading",a11y:role=Role::Status) {{move ||pane.loading.get().unwrap_or_default()}}
+                }
             }
             PlotContext(workbench=workbench,pane=pane) {
             column(class = "plot-content", class:legend-drop-active = move || workbench.line_drag.target.get().is_some_and(|target| target.pane == pane.id)) {
@@ -66,8 +69,8 @@ pub fn Panel(
                 }
                 if move || pane.analysis.get().is_none() && pane.lines.with(|lines| lines.is_empty()) {
                     column(class = "plot-empty", a11y:label = "Empty plot") {
-                        text(class = "empty-title") { "Drag fields or views here" }
-                        text(class = "muted") { "Choose Fields or Profiles in sidebar, then drag an item onto this plot." }
+                        text(class = "empty-title") {{move ||pane.loading.get().unwrap_or_else(||"Drag fields or views here".into())}}
+                        text(class = "muted") {{move ||if pane.loading.with(Option::is_some){"Available data appears while remaining fields prepare."}else{"Choose Fields or Profiles in sidebar, then drag an item onto this plot."}}}
                     }
                 }
 

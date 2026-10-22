@@ -90,6 +90,55 @@ fn load(window: &Window, workbench: Workbench) {
 }
 
 #[test]
+fn plot_series_snapshot_is_shared_during_navigation_and_refreshes_after_line_edits() {
+    let window = Window::open();
+    let pane = window.scope.with(|| crate::state::Pane::new(1));
+    let data = plot::time_series::SeriesData::new(vec![
+        plot::PlotPoint { x: 0., y: 1. },
+        plot::PlotPoint { x: 1., y: 2. },
+    ])
+    .unwrap();
+    pane.lines.set(vec![crate::state::Line {
+        id: 1,
+        source: "sample".into(),
+        name: "Original".into(),
+        data: data.clone(),
+        revision: 0,
+    }]);
+    let original = pane.series.get_untracked();
+    for index in 0..100 {
+        let x = index as f64;
+        pane.plot
+            .ranges
+            .set(plot::Ranges::new((x, x + 1.), (0., 2.)));
+        let next = pane.series.get_untracked();
+        assert!(
+            std::ptr::eq(original.series(), next.series()),
+            "Navigation must not reconstruct immutable series lists"
+        );
+    }
+    pane.lines.update(|lines| lines[0].name = "Renamed".into());
+    let renamed = pane.series.get_untracked();
+    assert_eq!(renamed.series()[0].label(), "Renamed");
+    assert!(!std::ptr::eq(original.series(), renamed.series()));
+    assert!(std::ptr::eq(
+        original.series()[0].data().samples(),
+        renamed.series()[0].data().samples()
+    ));
+    pane.lines.update(|lines| {
+        lines[0].data =
+            plot::time_series::SeriesData::new(vec![plot::PlotPoint { x: 0., y: 9. }]).unwrap();
+        lines[0].revision += 1;
+    });
+    assert_eq!(
+        pane.series.get_untracked().series()[0].data().samples()[0].y,
+        9.
+    );
+    pane.lines.set(Vec::new());
+    assert!(pane.series.get_untracked().series().is_empty());
+}
+
+#[test]
 fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_separate() {
     use plot::line_draw::Connection;
     let window = Window::open();

@@ -52,6 +52,8 @@ pub struct Authoring {
     pub revision: RwSignal<u64, LocalStorage>,
     pub browse: RwSignal<Option<crate::preset_browser::BrowseRequest>, LocalStorage>,
     pub pending: StoredValue<Option<ApplyRequest>, LocalStorage>,
+    pub(crate) workspace_load:
+        StoredValue<Option<crate::workspace_loading::WorkspaceLoad>, LocalStorage>,
     pub saved: StoredValue<Option<SavedCapture>, LocalStorage>,
     pub restoring: StoredValue<std::collections::BTreeMap<u64, usize>, LocalStorage>,
     pub field_edit: RwSignal<Option<String>, LocalStorage>,
@@ -70,6 +72,7 @@ impl Authoring {
             error: RwSignal::new_local(String::new()),
             revision: RwSignal::new_local(0),
             pending: StoredValue::new_local(None),
+            workspace_load: StoredValue::new_local(None),
             saved: StoredValue::new_local(None),
             restoring: StoredValue::new_local(Default::default()),
             field_edit: RwSignal::new_local(None),
@@ -81,6 +84,11 @@ impl Workbench {
         self.begin_save_from(kind, None, SaveMode::Review);
     }
     pub fn save_preset(self, kind: CaptureKind) {
+        if self.workspace().loading.with_untracked(Option::is_some) {
+            self.status
+                .set("Workspace is still loading; wait before saving".into());
+            return;
+        }
         if self.authoring.busy.get_untracked() {
             return;
         }
@@ -110,6 +118,15 @@ impl Workbench {
         mode: SaveMode,
     ) {
         let workbench = self.bind_view();
+        if workbench
+            .workspace()
+            .loading
+            .with_untracked(Option::is_some)
+        {
+            self.status
+                .set("Workspace is still loading; wait before saving".into());
+            return;
+        }
         let name = source
             .as_ref()
             .map(|source| {

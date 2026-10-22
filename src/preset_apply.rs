@@ -38,6 +38,7 @@ impl Workbench {
         if self.loading.get_untracked()
             || self.profiles.busy.get_untracked()
             || self.derived_busy.get_untracked()
+            || self.workspace_finishing()
         {
             self.status
                 .set("Wait for loading and filters to finish".into());
@@ -67,7 +68,10 @@ impl Workbench {
         let Some(request) = self.authoring.pending.get_value() else {
             return;
         };
-        let Some(workbench) = self.for_view(request.view) else {
+        let Some(workbench) = self
+            .for_view(request.view)
+            .or_else(|| matches!(request.action, ApplyAction::Workspace).then_some(self))
+        else {
             self.authoring.pending.set_value(None);
             return;
         };
@@ -107,6 +111,14 @@ impl Workbench {
                             matches!(request.action, ApplyAction::NewView),
                         )
                     })
+            }
+            ApplyAction::Workspace
+                if self.authoring.workspace_load.with_value(|load| {
+                    load.as_ref().is_some_and(|load| load.key == instance.key)
+                }) =>
+            {
+                self.complete_workspace_load(&instance);
+                Ok(())
             }
             ApplyAction::Workspace => instance
                 .definition
@@ -203,7 +215,13 @@ impl Workbench {
         target.finish_view_restore();
         Ok(())
     }
-    fn populate_preset(self, key: &ProfileKey, recipe: PlotPreset, pane: Pane, fields_only: bool) {
+    pub(crate) fn populate_preset(
+        self,
+        key: &ProfileKey,
+        recipe: PlotPreset,
+        pane: Pane,
+        fields_only: bool,
+    ) {
         let Some(instance) = self
             .profiles
             .instances
@@ -285,9 +303,12 @@ impl Workbench {
                 "{}: no usable inputs; see profile diagnostics",
                 recipe.name
             ));
+            pane.loading.set(None);
             self.preset_plot_finished();
             return;
         }
+        let preserve_bounds =
+            pane.loading.with_untracked(Option::is_some) && !pane.plot.auto_fit.get_untracked();
         let generation = self.generation.get_untracked();
         let interval = (
             self.analysis().start.get_untracked().parse().ok(),
@@ -311,6 +332,7 @@ impl Workbench {
                 || workbench.generation.get_untracked() != generation
                 || workbench.find(pane.id).is_none()
             {
+                pane.loading.set(None);
                 workbench.preset_plot_finished();
                 return;
             }
@@ -400,7 +422,7 @@ impl Workbench {
                                 });
                             }
                         });
-                        if !fields_only {
+                        if !fields_only && !preserve_bounds {
                             pane.fit_axes(plot::interaction::Axes::BOTH);
                         }
                     }
@@ -462,6 +484,7 @@ impl Workbench {
                 }
                 Err(error) => workbench.status.set(format!("{}: {error}", recipe.name)),
             }
+            pane.loading.set(None);
             workbench.preset_plot_finished();
         });
     }
@@ -472,6 +495,7 @@ impl Workbench {
             }
         });
         self.finish_view_restore();
+        self.finish_workspace_load();
     }
     fn finish_view_restore(self) {
         let done = self
@@ -505,10 +529,6 @@ impl Workbench {
         inputs: &[(String, String, SeriesData, String)],
         instance: &crate::profile_instance::AppliedProfile,
     ) {
-        use plot::{
-            line_draw::{Connection, LineDraw, LinePattern},
-            plot_data::{MarkerShape, SeriesStyle},
-        };
         let mut order = BTreeMap::new();
         for line in pane.lines.get_untracked() {
             let source = line
@@ -521,49 +541,7 @@ impl Workbench {
             let Some(style) = recipe.lines.iter().find(|line| &line.source == token) else {
                 continue;
             };
-            let id = line.id.to_string();
-            pane.plot.styles.update(|styles| {
-                styles.insert(
-                    id.clone(),
-                    SeriesStyle {
-                        color: style.color,
-                        width: style.width,
-                        radius: style.radius,
-                        marker: match style.marker.as_str() {
-                            "square" => MarkerShape::Square,
-                            "triangle" => MarkerShape::Triangle,
-                            "diamond" => MarkerShape::Diamond,
-                            "cross" => MarkerShape::Cross,
-                            _ => MarkerShape::Circle,
-                        },
-                    },
-                );
-            });
-            pane.drawing.update(|drawing| {
-                drawing.insert(
-                    line.id,
-                    LineDraw {
-                        connection: match style.connection.as_str() {
-                            "pre" => Connection::Pre,
-                            "post" => Connection::Post,
-                            _ => Connection::Linear,
-                        },
-                        pattern: match style.pattern.as_str() {
-                            "dashed" => LinePattern::Dashed,
-                            "dotted" => LinePattern::Dotted,
-                            "dash_dot" => LinePattern::DashDot,
-                            "none" => LinePattern::None,
-                            _ => LinePattern::Solid,
-                        },
-                        markers: style.markers,
-                    },
-                );
-            });
-            if style.hidden {
-                pane.plot.hidden.update(|hidden| {
-                    hidden.insert(id);
-                });
-            }
+            apply_line_appearance(pane, line.id, style);
             order.insert(format!("line:{token}"), line.id);
         }
         for token in &recipe.geometry {
@@ -804,4 +782,54 @@ pub fn available_plots(instance: &crate::profile_instance::AppliedProfile) -> Ve
         });
     }
     plots
+}
+
+pub(crate) fn apply_line_appearance(pane: Pane, id: u64, style: &PresetLine) {
+    use plot::{
+        line_draw::{Connection, LineDraw, LinePattern},
+        plot_data::{MarkerShape, SeriesStyle},
+    };
+    let key = id.to_string();
+    pane.plot.styles.update(|styles| {
+        styles.insert(
+            key.clone(),
+            SeriesStyle {
+                color: style.color,
+                width: style.width,
+                radius: style.radius,
+                marker: match style.marker.as_str() {
+                    "square" => MarkerShape::Square,
+                    "triangle" => MarkerShape::Triangle,
+                    "diamond" => MarkerShape::Diamond,
+                    "cross" => MarkerShape::Cross,
+                    _ => MarkerShape::Circle,
+                },
+            },
+        );
+    });
+    pane.drawing.update(|drawing| {
+        drawing.insert(
+            id,
+            LineDraw {
+                connection: match style.connection.as_str() {
+                    "pre" => Connection::Pre,
+                    "post" => Connection::Post,
+                    _ => Connection::Linear,
+                },
+                pattern: match style.pattern.as_str() {
+                    "dashed" => LinePattern::Dashed,
+                    "dotted" => LinePattern::Dotted,
+                    "dash_dot" => LinePattern::DashDot,
+                    "none" => LinePattern::None,
+                    _ => LinePattern::Solid,
+                },
+                markers: style.markers,
+            },
+        );
+    });
+    if style.hidden {
+        pane.plot.hidden.update(|hidden| {
+            hidden.insert(key);
+        });
+    }
 }

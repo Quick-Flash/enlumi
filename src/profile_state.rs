@@ -261,6 +261,11 @@ impl Workbench {
                 }
             });
             self.profiles.loading_profile.set(Some(key.clone()));
+            self.authoring.workspace_load.update_value(|load| {
+                if let Some(load) = load && load.key.path == requested_path && load.key.flight == flight {
+                    load.key = key.clone();
+                }
+            });
             let previous = self
                 .profiles
                 .instances
@@ -276,6 +281,14 @@ impl Workbench {
                 }
                 self.next_default_profile();
                 return;
+            }
+            if let Some(request) = self.authoring.pending.get_value()
+                && request.key == key && matches!(request.action, crate::preset_ui::ApplyAction::Workspace)
+            {
+                let recipe = profile.workspace_presets.iter().find(|recipe| recipe.name == request.name).cloned();
+                let result = recipe.ok_or_else(|| "Workspace preset no longer exists".to_owned())
+                    .and_then(|recipe| self.begin_workspace_load(&key, recipe));
+                if let Err(error) = result { self.profile_failed(error); return; }
             }
             let mut ids = previous
                 .as_ref()
@@ -308,8 +321,14 @@ impl Workbench {
                 .to_path_buf();
             let cancelled = cancel.clone();
             let prepare_log = log.clone();
+            let progress = self.authoring.workspace_load.with_value(|load| load.as_ref().is_some_and(|load| load.key == key))
+                .then(|| self.stream_workspace(key.clone(), generation));
             let result = blocking(move || {
-                profile::prepare::prepare_with_ids(profile, &prepare_log, &base, ids, cancelled)
+                if let Some(progress) = progress {
+                    profile::prepare::prepare_streaming(profile, &prepare_log, &base, ids, cancelled, &|update| { let _ = progress.send_blocking(update); })
+                } else {
+                    profile::prepare::prepare_with_ids(profile, &prepare_log, &base, ids, cancelled)
+                }
             })
             .await;
             if self.generation.get_untracked() != generation || cancel.load(Ordering::Relaxed) {
@@ -486,6 +505,7 @@ impl Workbench {
     }
 
     fn profile_failed(self, error: String) {
+        self.fail_workspace_load(&error);
         self.authoring.saved.set_value(None);
         if let Some(key) = self.profiles.loading_profile.get_untracked() {
             self.authoring.pending.update_value(|pending| {
