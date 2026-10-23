@@ -3190,8 +3190,27 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
             (bounds.origin.x.0 + bounds.size.width.0 / 2.0) / tab.scale(),
             (bounds.origin.y.0 + bounds.size.height.0 / 2.0) / tab.scale(),
         ));
+        assert!(
+            workbench
+                .dock()
+                .drag
+                .with_untracked(|drag| drag.as_ref().is_some_and(|drag| drag.0 == source.id)),
+            "Press must capture tab {} for dragging; label={bounds:?}, tab={:?}, viewport={:?}, scale={}",
+            source.id,
+            tab.window_bounds(),
+            second.dock.tabs_node.window_bounds(),
+            tab.scale()
+        );
         harness.deliver_to_first(pointer(PointerAction::Moved, center.0, center.1));
         harness.settle(128);
+        assert!(
+            workbench
+                .dock()
+                .drag
+                .with_untracked(|drag| drag.as_ref().is_some_and(|drag| drag.3)),
+            "Moving from tab {} to {center:?} must start docking; label={bounds:?}",
+            source.id
+        );
         assert!(
             workbench.dock().target.get_untracked().is_none(),
             "Self-center remains no-op drop"
