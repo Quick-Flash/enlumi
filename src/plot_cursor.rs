@@ -4,6 +4,7 @@ use crate::geometry_legend::GeometryLegendProps;
 use crate::geometry_overlay::GeometryOverlayProps;
 use crate::measurement_background::MeasurementBackgroundProps;
 use crate::measurement_overlay::MeasurementOverlayProps;
+use crate::plot_appearance::PlotBackgroundProps;
 use crate::state::{Pane, Workbench};
 use plot::{PlotPoint, zgui_series::SeriesPlotProps};
 use zgui::prelude::*;
@@ -14,6 +15,10 @@ pub fn CursorPlot(
     visible: Signal<bool, LocalStorage>,
     linked: RwSignal<Option<(u64, PlotPoint)>, LocalStorage>,
 ) -> impl IntoView {
+    // Register before child layers so the default series legend can be replaced
+    // before band labels and measurement readouts are added to the description.
+    plot::zgui_svg::SnapshotLayers::current_or_new();
+    crate::geometry_legend::register_snapshot_legend(workbench, pane);
     let mut host = workbench.legend_host();
     let spectral = pane.analysis.with_untracked(|result| result.is_some());
     if spectral {
@@ -42,6 +47,7 @@ pub fn CursorPlot(
         .into(),
         background_layer: Some(ChildrenFn::new(move || {
             AnyView::new((
+                view! {PlotBackground(background=pane.background,visible=visible)}.into_view(),
                 view! {MeasurementBackground(workbench=workbench,pane=pane,visible=visible)}
                     .into_view(),
                 (!spectral)

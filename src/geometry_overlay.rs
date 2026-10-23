@@ -1,5 +1,4 @@
 use crate::geometry_handle::GeometryHandleProps;
-use crate::geometry_inspector::GeometryInspectorProps;
 use crate::{
     action_button::ActionButtonProps,
     state::{Pane, Workbench},
@@ -125,11 +124,6 @@ pub fn GeometryOverlay(
                 for index in move || {workbench.geometry.items.track();if workbench.geometry_item(id).is_some_and(|item|item.states.is_some()){vec![]}else if workbench.geometry_item(id).is_some_and(|item|item.kind==crate::geometry::GeometryKind::Rectangle){vec![0,1,2,3,4]}else{vec![0,1,4]}},key=|index|*index {
                     GeometryHandle(workbench=workbench,pane=pane,id=id,index=index,host=host,geometry=geometry)
                 }
-            }
-        }
-        if move || visible.get() && workbench.active().get()==pane.id && workbench.geometry.editing.get() && workbench.geometry.tool.get().is_none() {
-            for id in move || workbench.geometry.selected.get().filter(|id| pane.geometry.with(|ids|ids.contains(id)) && !pane.hidden_geometry.with(|ids|ids.contains(id))).into_iter().collect::<Vec<_>>(),key=|id| *id {
-                GeometryInspector(workbench=workbench,id=id)
             }
         }
     } }

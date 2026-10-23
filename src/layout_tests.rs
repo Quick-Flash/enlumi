@@ -4242,7 +4242,21 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     }
     click_class(&mut harness, "profile-file-name");
     harness.settle(128);
-    workbench.query.set("ESC view".into());
+    workbench.field_query.set("no matching fields".into());
+    harness.settle(128);
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("profile-file-name")
+            .is_empty(),
+        "Field search must not hide profile files"
+    );
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("profile-view-source")
+            .is_empty(),
+        "Field search must not hide saved plots"
+    );
+    workbench.field_query.set("ESC view".into());
     harness.settle(128);
     click_class(&mut harness, "profile-output-section");
     assert!(
@@ -4251,7 +4265,7 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
             .is_empty(),
         "Profile sections remain collapsible during search"
     );
-    workbench.query.set(String::new());
+    workbench.field_query.set(String::new());
     harness.settle(128);
     assert!(
         harness.app().windows()[0]
@@ -4466,6 +4480,16 @@ fn geometry_draw_edit_reuse_and_cancel_keep_plot_bounds() {
         "No empty legend after removing final geometry"
     );
     assert_eq!(pane.plot.ranges.get_untracked(), original_bounds);
+    click_class(&mut harness, "geometry-row");
+    assert!(
+        !pane.geometry.with_untracked(|ids| ids.contains(&item.id)),
+        "Clicking saved geometry edits its definition without adding it"
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("geometry-inspector")
+            .is_some()
+    );
     workbench.attach_geometry(item.id, pane, true);
     harness.settle(128);
     click_class(&mut harness, "geometry-legend-edit");
@@ -4551,6 +4575,8 @@ fn geometry_draw_edit_reuse_and_cancel_keep_plot_bounds() {
         "Editor title drag moves controls away from data"
     );
     assert_eq!(pane.plot.ranges.get_untracked(), before_navigation);
+    // Collapse the floating editor before reaching the move handle beneath it.
+    click_class(&mut harness, "geometry-editor-collapse");
     // Drag rectangle body; cancellation restores original coordinates.
     harness.deliver_to_first(pointer(PointerAction::Pressed, x + w * 0.4, y + h * 0.4));
     harness.deliver_to_first(pointer(PointerAction::Moved, x + w * 0.5, y + h * 0.5));
@@ -4813,6 +4839,28 @@ fn state_bands_map_sources_render_labels_refresh_and_keep_manual_highlights() {
     let window = &harness.app().windows()[0];
     assert_eq!(window.nodes_with_class("band-label").len(), 3);
     assert_eq!(window.nodes_with_class("band-rule-row").len(), 3);
+    assert!(
+        window.nodes_with_class("geometry-state-colors").is_empty(),
+        "Modes belong in a hover popup"
+    );
+    let legend = window.box_with_class("geometry-legend-toggle").unwrap();
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        legend.origin.x.0 + 5.,
+        legend.origin.y.0 + 5.,
+    ));
+    harness.advance(Duration::from_millis(700));
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("geometry-state-colors")
+            .is_some(),
+        "Hover reveals state modes"
+    );
+    harness.deliver_to_first(pointer(PointerAction::Moved, 0., 0.));
+    harness.advance(Duration::from_millis(700));
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
     assert!(
         window.nodes_with_class("geometry-handle").is_empty(),
         "Generated intervals have no manual handles"
@@ -5163,6 +5211,121 @@ fn mapping_builder_adds_custom_values_reports_duplicates_and_removes_rows() {
 }
 
 #[test]
+fn state_editor_spans_plots_and_scrolls_without_compressing_controls() {
+    let (mut harness, workbench) = geometry_harness();
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1000.),
+        DevicePx(800.),
+    )));
+    let first = workbench.pane();
+    let second = workbench.add_plot(first.id, false, false);
+    workbench.activate(first.id);
+    harness.settle(128);
+    click_class(&mut harness, "open-state-bands");
+    click_class(&mut harness, "blank-state-mapping");
+    let id = workbench.geometry.selected.get_untracked().unwrap();
+    for value in 0..24 {
+        assert!(workbench.edit_mapping_rule(
+            id,
+            None,
+            &value.to_string(),
+            &format!("Mode {value}")
+        ));
+    }
+    harness.settle(128);
+    let plot = first.dock.node.window_bounds().unwrap();
+    let editor = harness.app().windows()[0]
+        .box_with_class("geometry-inspector")
+        .unwrap();
+    assert!(
+        editor.size.width.0 > plot.size.width.0,
+        "Editor keeps usable width over narrow plots"
+    );
+    let title = harness.app().windows()[0]
+        .box_with_class("geometry-editor-heading")
+        .unwrap();
+    let start = (title.origin.x.0 + 30., title.origin.y.0 + 10.);
+    harness.deliver_to_first(pointer(PointerAction::Pressed, start.0, start.1));
+    harness.deliver_to_first(pointer(PointerAction::Moved, start.0 + 300., start.1));
+    harness.deliver_to_first(pointer(PointerAction::Released, start.0 + 300., start.1));
+    harness.settle(128);
+    let moved = harness.app().windows()[0]
+        .box_with_class("geometry-inspector")
+        .unwrap();
+    assert!(
+        moved.origin.x.0 > editor.origin.x.0 + 200.,
+        "Editor can move across plot boundaries"
+    );
+    assert!(
+        moved.origin.x.0 + moved.size.width.0
+            > second.dock.node.window_bounds().unwrap().origin.x.0
+    );
+    assert_eq!(workbench.active().get_untracked(), first.id);
+    assert!(
+        harness.app().windows()[0]
+            .pointer_capture(zgui::vocab::PointerId::MOUSE)
+            .is_none()
+    );
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(900.),
+        DevicePx(480.),
+    )));
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    let area = window.box_with_class("geometry-editor-layer").unwrap();
+    let editor = window.box_with_class("geometry-inspector").unwrap();
+    let heading = window.box_with_class("geometry-editor-heading").unwrap();
+    let footer = window.box_with_class("geometry-editor-footer").unwrap();
+    let body = window.box_with_class("geometry-editor-body").unwrap();
+    assert!(
+        editor.origin.x.0 >= area.origin.x.0 - 1. && editor.origin.y.0 >= area.origin.y.0 - 1.,
+        "{editor:?} outside {area:?}"
+    );
+    assert!(editor.origin.x.0 + editor.size.width.0 <= area.origin.x.0 + area.size.width.0 + 1.);
+    assert!(editor.origin.y.0 + editor.size.height.0 <= area.origin.y.0 + area.size.height.0 + 1.);
+    assert!(heading.size.height.0 >= 28. && footer.size.height.0 >= 24.);
+    assert!(
+        body.size.height.0 > 30. && body.size.height.0 < 300.,
+        "Body should scroll within available space: {body:?}"
+    );
+    for node in window.nodes_with_class("band-rule-value") {
+        let bounds = zgui::view::ViewHost::window_box(window.host().as_ref(), node).unwrap();
+        assert!(
+            bounds.size.height.0 >= 28.,
+            "Mapping inputs must retain their height: {bounds:?}"
+        );
+    }
+    let source = window.box_with_class("band-source-name").unwrap();
+    harness.deliver_to_first(SurfaceEvent::Wheel {
+        event: zgui::vocab::WheelEvent {
+            delta: zgui::vocab::ScrollDelta::Pixels(Size::new(CssPx(0.), CssPx(300.))),
+            phase: zgui::vocab::ScrollPhase::Moved,
+            position: Point::new(CssPx(body.origin.x.0 + 20.), CssPx(body.origin.y.0 + 15.)),
+            id: zgui::vocab::PointerId::MOUSE,
+            kind: zgui::vocab::PointerKind::Mouse,
+        },
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    assert!(
+        window
+            .box_with_class("band-source-name")
+            .unwrap()
+            .origin
+            .y
+            .0
+            < source.origin.y.0 - 10.,
+        "Body must scroll to reach controls below the mapping list"
+    );
+    assert_eq!(
+        window.box_with_class("geometry-editor-footer").unwrap(),
+        footer
+    );
+}
+
+#[test]
 fn plot_tab_pointer_rename_and_keyboard_commit_cancel_blur() {
     let (mut harness, workbench) = geometry_harness();
     let key = |harness: &mut Harness<zgui::runtime::Runtime>, key: zgui::vocab::NamedKey| {
@@ -5226,6 +5389,29 @@ fn plot_tab_pointer_rename_and_keyboard_commit_cancel_blur() {
         workbench.profiles.titles.get_untracked()[&1],
         "Pitch PID",
         "Blur saves rename"
+    );
+    let short_width = harness.app().windows()[0]
+        .box_with_class("plot-tab-select")
+        .unwrap()
+        .size
+        .width
+        .0;
+    workbench.profiles.titles.update(|titles| {
+        titles.insert(
+            1,
+            "Roll and pitch tracking error over the entire flight".into(),
+        );
+    });
+    harness.settle(128);
+    let long_width = harness.app().windows()[0]
+        .box_with_class("plot-tab-select")
+        .unwrap()
+        .size
+        .width
+        .0;
+    assert!(
+        long_width > short_width + 100. && long_width > 96.,
+        "Long plot names must widen their tabs: {short_width} -> {long_width}"
     );
     assert!(
         harness.app().windows()[0]
@@ -5490,8 +5676,18 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
     )));
     harness.settle(128);
     let (workbench, normal, time, frequency) = saved.borrow().unwrap();
+    normal.background.set(Some([245, 245, 245]));
+    time.background.set(Some([32, 40, 52]));
+    harness.settle(128);
+    let spectral_line = frequency.lines.with_untracked(|lines| lines[0].id);
+    assert_eq!(
+        frequency.plot.style(&spectral_line.to_string()).color,
+        crate::line_colors::PALETTE[0]
+    );
     let normal_svg = workbench.capture_screenshot(Some(normal)).unwrap();
     let map_svg = workbench.capture_screenshot(Some(time)).unwrap();
+    assert!(normal_svg.contains("fill=\"#f5f5f5\""));
+    assert!(map_svg.contains("fill=\"#202834\""));
     assert!(normal_svg.contains("Raw gyro") && !normal_svg.contains("Gyro over time"));
     assert!(map_svg.contains("Gyro over time"), "Missing heatmap title");
     assert!(
@@ -6092,5 +6288,363 @@ fn updates_open_centered_modal_with_shared_scrim_and_escape_dismissal() {
         harness.app().windows()[0]
             .nodes_with_class("zui-overlay-scrim")
             .is_empty()
+    );
+}
+
+#[test]
+fn screenshots_include_geometry_in_the_ordered_legend() {
+    use crate::{
+        geometry::{Geometry, GeometryKind},
+        state::Line,
+    };
+    use plot::{PlotPoint, time_series::SeriesData};
+    let (mut harness, workbench) = geometry_harness();
+    let pane = workbench.pane();
+    let line_id = workbench.id();
+    pane.lines.set(vec![Line {
+        id: line_id,
+        source: "test/source".into(),
+        name: "Export signal".into(),
+        revision: 1,
+        data: SeriesData::new(vec![
+            PlotPoint { x: 0., y: 0. },
+            PlotPoint { x: 10., y: 10. },
+        ])
+        .unwrap(),
+    }]);
+    let mut item = Geometry::new(
+        workbench.id(),
+        GeometryKind::Rectangle,
+        kurbo::Point::new(2., 2.),
+    );
+    item.name = "Export shape <A & B>".into();
+    item.coordinates = [2., 2., 4., 4.];
+    let id = item.id;
+    workbench.geometry.items.update(|items| items.push(item));
+    workbench.attach_geometry(id, pane, true);
+    pane.legend_order.set(vec![!id, line_id]);
+    harness.settle(128);
+    for svg in [
+        workbench.capture_screenshot(Some(pane)).unwrap(),
+        workbench.capture_screenshot(None).unwrap(),
+    ] {
+        let shape = svg
+            .find("Export shape &lt;A &amp; B&gt;")
+            .expect("Geometry legend is exported and escaped");
+        let line = svg
+            .find("Export signal")
+            .expect("Series legend is preserved");
+        assert!(shape < line, "Export preserves the combined legend order");
+        assert_eq!(
+            svg.matches("Export signal").count(),
+            1,
+            "No duplicate series legend"
+        );
+    }
+    workbench.toggle_geometry(pane, id);
+    harness.settle(128);
+    let svg = workbench.capture_screenshot(Some(pane)).unwrap();
+    let at = svg.find("Export shape &lt;A &amp; B&gt;").unwrap();
+    let entry = &svg[svg[..at].rfind("<text").unwrap()..at];
+    assert!(
+        entry.contains("fill-opacity=\"0.5\""),
+        "Hidden geometry stays in the legend with dimmed text"
+    );
+    pane.lines.set(vec![]);
+    harness.settle(128);
+    let svg = workbench.capture_screenshot(Some(pane)).unwrap();
+    assert!(
+        svg.contains("Export shape &lt;A &amp; B&gt;"),
+        "Geometry-only plots have an export legend"
+    );
+    assert!(!svg.contains("Export signal"));
+}
+
+#[test]
+fn background_picker_edits_its_plot_and_exports_the_live_color() {
+    let (mut harness, workbench) = geometry_harness();
+    let first = workbench.pane();
+    let second = workbench.add_plot(first.id, false, false);
+    first.background.set(Some([20, 30, 40]));
+    second.background.set(Some([90, 80, 70]));
+    workbench.activate(second.id);
+    harness.settle(128);
+    click_class(&mut harness, "plot-background-trigger");
+    let window = &harness.app().windows()[0];
+    let popup = window.box_with_class("plot-background-menu").unwrap();
+    let picker = window.box_with_class("color-picker").unwrap();
+    let apply = window.box_with_class("plot-background-all").unwrap();
+    let reset = window.box_with_class("plot-background-reset").unwrap();
+    let actions = window.box_with_class("plot-background-actions").unwrap();
+    let swatch = window.box_with_class("color-value").unwrap();
+    assert!(
+        popup.size.width.0 <= 204.,
+        "Popup should fit its picker: {popup:?}"
+    );
+    assert!(
+        popup.origin.x.0 + popup.size.width.0 - picker.origin.x.0 - picker.size.width.0 <= 12.,
+        "Picker should have only padding to its right"
+    );
+    assert!(
+        apply.size.height.0 <= 28. && apply.size.width.0 <= 100.,
+        "Apply action should be compact: {apply:?}"
+    );
+    assert!((reset.size.width.0 - apply.size.width.0).abs() < 1.);
+    assert!((reset.size.width.0 + apply.size.width.0 + 6. - actions.size.width.0).abs() < 1.);
+    assert!(
+        swatch.size.height.0 < 25.,
+        "Hex swatch should be short: {swatch:?}"
+    );
+    let value = window.nodes_with_class("color-value")[0];
+    assert_eq!(
+        window.dom().text_content(value),
+        "#141E28",
+        "Picker starts with its own plot color"
+    );
+    click_class(&mut harness, "color-hex");
+    for (text, modifiers) in [("a", Modifiers::PRIMARY), ("#345678", Modifiers::NONE)] {
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character(text),
+            modifiers,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
+    assert_eq!(first.background.get_untracked(), Some([0x34, 0x56, 0x78]));
+    assert_eq!(
+        second.background.get_untracked(),
+        Some([90, 80, 70]),
+        "Picking a color changes only this plot"
+    );
+    let svg = workbench.capture_screenshot(Some(first)).unwrap();
+    assert!(svg.contains("fill=\"#345678\""));
+    assert!(
+        svg.contains("stop-color=\"#345678\""),
+        "The rendered background canvas must use the chosen color"
+    );
+    let workspace = workbench.capture_screenshot(None).unwrap();
+    assert!(workspace.contains("fill=\"#345678\""));
+    assert!(workspace.contains("fill=\"#5a5046\""));
+    click_class(&mut harness, "plot-background-all");
+    assert_eq!(
+        second.background.get_untracked(),
+        first.background.get_untracked()
+    );
+    click_class(&mut harness, "plot-background-reset");
+    assert_eq!(first.background.get_untracked(), None);
+    assert_eq!(second.background.get_untracked(), Some([0x34, 0x56, 0x78]));
+    click_class(&mut harness, "plot-background-theme-all");
+    assert_eq!(first.background.get_untracked(), None);
+    assert_eq!(second.background.get_untracked(), None);
+}
+
+#[test]
+fn large_profile_field_tree_builds_only_viewport_rows_and_keeps_full_range_selection() {
+    use crate::profile_library::ProfileFile;
+    use crate::profile_preset_tree::{ProfilePresetTreeProps, ProfileViewport};
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler=app().with_size(460.,600.)
+        .with_renderer(Box::new(|_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n{}\n.profile-test-scroll {{height:400px;flex:none;overflow-y:auto;}} .profile-test-prefix {{height:120px;flex:none;}}",crate::theme::stylesheet(),include_str!("profile.css")))
+        .into_handler(move || {
+            let workbench=crate::state::Workbench::new();
+            workbench.profiles.open.set(true);
+            workbench.log.set(Some(std::sync::Arc::new(crate::log::LogStore::read(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/fixtures/esc_status_log.ulg"))).unwrap())));
+            let port=NodeRef::new();
+            provide_local_context(ProfileViewport(port));
+            let file=ProfileFile{path:"synthetic.json".into(),name:"Large profile".into(),compatible:Ok(()),auto_apply:false,matched:String::new(),
+                views:vec![],workspaces:vec![],workspace_plots:vec![],collections:vec![],geometry:vec![],
+                fields:(0..4000).map(|index|(format!("sensor_{index:04}"),format!("Sensor {index:04}"))).collect()};
+            *captured.borrow_mut()=Some((workbench,port));
+            view! {column(class="page") {
+                scroll(class="profile-test-scroll",node_ref=port) {
+                    box(class="profile-test-prefix")
+                    column(class="profile-library") {ProfilePresetTree(workbench=workbench,files=Signal::stored(vec![file]),field_query=workbench.field_query.into())}
+                }
+            }}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(460.),
+        DevicePx(600.),
+    )));
+    harness.settle(128);
+    let (workbench, port) = saved.borrow().unwrap();
+    click_class(&mut harness, "profile-output-section");
+    let mounted = harness.app().windows()[0]
+        .nodes_with_class("profile-field-entry")
+        .len();
+    assert!(
+        mounted > 0 && mounted < 40,
+        "Opening 4000 fields should mount only a viewport: {mounted}"
+    );
+    let sources = workbench.visible_profile_sources();
+    assert_eq!(
+        sources.len(),
+        4000,
+        "Range selection includes rows beyond the mounted window"
+    );
+    workbench.select_field(sources[0].clone(), false, false, &sources);
+    workbench.select_field(sources[3999].clone(), false, true, &sources);
+    assert_eq!(
+        workbench
+            .selected_fields
+            .with_untracked(|fields| fields.len()),
+        4000
+    );
+    port.scroll_to(
+        zgui::view::ScrollTarget::Offset(Point::new(DevicePx(0.), DevicePx(200000.))),
+        zgui::view::ScrollBehavior::Instant,
+    );
+    harness.settle(256);
+    let window = &harness.app().windows()[0];
+    assert!(
+        window
+            .nodes_with_class("signal-name")
+            .iter()
+            .any(|node| window.dom().text_content(*node) == "Sensor 3999"),
+        "Scrolling must reach the last field"
+    );
+    assert!(window.nodes_with_class("profile-field-entry").len() < 40);
+    assert!(
+        !window.nodes_with_class("tree-guide-last").is_empty(),
+        "Last sibling has a terminating connector"
+    );
+    workbench.field_query.set("Sensor 3999".into());
+    harness.settle(256);
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("profile-field-entry")
+            .len(),
+        1
+    );
+    assert_eq!(
+        workbench.visible_profile_sources().len(),
+        1,
+        "Search updates the range selection order"
+    );
+    workbench.field_query.set(String::new());
+    port.scroll_to(
+        zgui::view::ScrollTarget::Offset(Point::new(DevicePx(0.), DevicePx(0.))),
+        zgui::view::ScrollBehavior::Instant,
+    );
+    harness.settle(128);
+    click_class(&mut harness, "profile-output-section");
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("profile-field-entry")
+            .is_empty()
+    );
+    assert!(
+        workbench.visible_profile_sources().is_empty(),
+        "Collapsing Fields removes its selection range"
+    );
+}
+
+#[test]
+fn legend_alignment_readout_and_backgrounds_follow_the_selected_theme() {
+    use crate::{
+        geometry::{Geometry, GeometryKind},
+        state::Line,
+        theme::{AppThemeProps, Palette},
+        workspace::PlotWorkspaceProps,
+    };
+    use plot::{PlotPoint, time_series::SeriesData};
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let paints = Rc::new(RefCell::new(Counts::default()));
+    let rendered = paints.clone();
+    let handler=app().with_size(1200.,700.)
+        .with_renderer(Box::new(move |_,target|{let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(Capture{renderer,counts:rendered.clone()}))}))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
+        .into_handler(move || {
+            let workbench=crate::state::Workbench::new();let first=workbench.pane();
+            first.lines.set(vec![Line{id:workbench.id(),source:"test".into(),name:"Long field label for checking legend alignment".into(),revision:0,
+                data:SeriesData::new(vec![PlotPoint{x:0.,y:0.},PlotPoint{x:10.,y:10.}]).unwrap()}]);
+            let mut item=Geometry::new(workbench.id(),GeometryKind::Rectangle,kurbo::Point::new(2.,2.));
+            item.name="Region".into();item.coordinates=[2.,2.,4.,4.];let id=item.id;
+            workbench.geometry.items.update(|items|items.push(item));workbench.attach_geometry(id,first,true);
+            let second=workbench.add_plot(first.id,false,false);let palette=RwSignal::new_local(Palette::Slate);
+            *captured.borrow_mut()=Some((workbench,first,second,palette));
+            view! {AppTheme(palette=palette) {column(class="page workbench") {row(class="body") {PlotWorkspace(workbench=workbench)}}}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1200.),
+        DevicePx(700.),
+    )));
+    harness.settle(128);
+    let (workbench, first, second, palette) = saved.borrow().unwrap();
+    let window = &harness.app().windows()[0];
+    let label_box = |name: &str| {
+        let node = window
+            .nodes_with_class("plot-legend-item")
+            .into_iter()
+            .find(|node| window.dom().text_content(*node).contains(name))
+            .unwrap();
+        zgui::view::ViewHost::window_box(window.host().as_ref(), node).unwrap()
+    };
+    let field = label_box("Long field");
+    let geometry = label_box("Region");
+    assert!(
+        (field.origin.x.0 - geometry.origin.x.0).abs() < 1.,
+        "Legend labels must share the left edge: {field:?} vs {geometry:?}"
+    );
+    assert!(
+        (field.size.height.0 - geometry.size.height.0).abs() < 1.,
+        "Legend labels must use the same height"
+    );
+    let readout = window.box_with_class("snapped-cursor-values").unwrap();
+    assert!(
+        !paints.borrow().painted_boxes.iter().any(|(bounds, _)| {
+            (bounds[0] - readout.origin.x.0).abs() < 1.
+                && (bounds[1] - readout.origin.y.0).abs() < 1.
+                && (bounds[2] - readout.size.width.0).abs() < 1.
+                && (bounds[3] - readout.size.height.0).abs() < 1.
+        }),
+        "An empty cursor readout must not paint a plot-wide bar"
+    );
+    for theme in Palette::ALL {
+        palette.set(theme);
+        harness.settle(128);
+        let color = crate::plot_appearance::css(theme.plot_background());
+        for pane in [first, second] {
+            let svg = workbench.capture_screenshot(Some(pane)).unwrap();
+            assert!(
+                svg.contains(&format!("fill=\"{color}\"")),
+                "Export follows theme {}",
+                theme.name()
+            );
+            assert!(
+                svg.contains(&format!("stop-color=\"{color}\"")),
+                "Rendered canvas follows theme {}",
+                theme.name()
+            );
+        }
+    }
+    first.background.set(Some([23, 45, 67]));
+    palette.set(Palette::Forest);
+    harness.settle(128);
+    assert!(
+        workbench
+            .capture_screenshot(Some(first))
+            .unwrap()
+            .contains("fill=\"#172d43\""),
+        "Theme changes preserve an explicit custom color"
+    );
+    workbench.use_theme_backgrounds();
+    harness.settle(128);
+    assert!(first.background.get_untracked().is_none());
+    assert!(second.background.get_untracked().is_none());
+    assert!(
+        workbench
+            .capture_screenshot(Some(first))
+            .unwrap()
+            .contains(&format!(
+                "fill=\"{}\"",
+                crate::plot_appearance::css(Palette::Forest.plot_background())
+            ))
     );
 }

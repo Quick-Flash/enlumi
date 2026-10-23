@@ -1,3 +1,4 @@
+use crate::geometry_inspector::GeometryInspectorProps;
 use crate::{panel::PanelProps, state::Workbench};
 use plot::zgui_workspace::*;
 use zgui::prelude::*;
@@ -19,11 +20,19 @@ fn ViewWorkspace(workbench: Workbench) -> impl IntoView {
     let cursor = RwSignal::new_local(None);
     let geometry = WorkspaceGeometry::fitted(workbench.layout(), workbench.maximized());
     let divider_drag = RwSignal::new_local(None);
+    let editor_area = NodeRef::new();
     view! {
         WorkspaceCanvas(geometry = geometry, drag = divider_drag) {
             WorkspaceDockOverlay(dock = dock, geometry=Some(geometry))
             for pane in move || workbench.panes().get(), key = |pane| pane.id {
                 Panel(workbench = workbench, pane = pane, dock = dock, geometry = geometry, group = group, frequency_group = frequency_group, cursor = cursor)
+            }
+        }
+        column(class="geometry-editor-layer",node_ref=editor_area) {
+            if move || workbench.views.active.get()==workbench.view().id && workbench.geometry.editing.get() && workbench.geometry.tool.get().is_none() {
+                for id in move || workbench.geometry.selected.get().into_iter().collect::<Vec<_>>(),key=|id|*id {
+                    GeometryInspector(workbench=workbench,id=id,boundary=editor_area)
+                }
             }
         }
     }

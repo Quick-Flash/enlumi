@@ -316,6 +316,108 @@ fn preset_editor_hides_obsolete_plot_groups_without_deleting_profile_data() {
 }
 
 #[test]
+fn field_search_preserves_saved_outputs_and_their_expansion() {
+    use crate::{profile_library::ProfileFile, profile_preset_tree::ProfilePresetTreeProps};
+    let window = Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    let files = window.scope.with(|| {
+        RwSignal::new(vec![ProfileFile {
+            path: PathBuf::from("example.json"),
+            name: "Example".into(),
+            compatible: Ok(()),
+            auto_apply: false,
+            matched: String::new(),
+            views: vec![("Timeline".into(), 1)],
+            workspaces: vec!["Flight view".into()],
+            workspace_plots: vec![("Flight view".into(), vec![])],
+            collections: vec![("Flight workspace".into(), vec![])],
+            fields: vec![
+                ("rpm".into(), "Motor RPM".into()),
+                ("voltage".into(), "Voltage".into()),
+            ],
+            geometry: vec![("position".into(), "Position".into())],
+        }])
+    });
+    let catalogue_reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let reads = catalogue_reads.clone();
+    let catalogue = window.scope.with(|| {
+        Signal::derive(move || {
+            reads.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            files.get()
+        })
+    });
+    let mut built = window.scope.with(|| {
+        view! { ThemeProvider(scheme=ColorScheme::Dark) {
+            ProfilePresetTree(workbench=workbench, files=catalogue, field_query=workbench.field_query.into())
+        }}.into_view().build(&mut window.cx.cx())
+    });
+    built.mount(&window.dom_handle, window.root, None);
+    window.frame();
+    click(&window, button(&window, "Fields2"));
+    click(&window, button(&window, "Geometry1"));
+    // Keep a nested view expanded while the field results change.
+    let toggle =
+        class(&window, "profile-members-toggle")
+            .into_iter()
+            .find(|node| {
+                window.dom.tree().semantics(*node).is_some_and(|s| {
+                    s.label.as_deref() == Some("Show plots and fields in view preset")
+                })
+            })
+            .unwrap();
+    click(&window, toggle);
+    let preserved = [
+        "workspace-collection",
+        "workspace-preset",
+        "profile-plot-source",
+    ]
+    .map(|name| class(&window, name));
+    assert!(preserved.iter().all(|nodes| !nodes.is_empty()));
+    let reads_before_search = catalogue_reads.load(std::sync::atomic::Ordering::Relaxed);
+    for query in ["rpm", "no matching field", ""] {
+        workbench.field_query.set(query.into());
+        window.frame();
+        let text = window.dom.tree().text_content(window.root);
+        assert!(text.contains("Position"));
+        assert_eq!(text.contains("Motor RPM"), query != "no matching field");
+        assert_eq!(text.contains("Voltage"), query.is_empty());
+        for (name, nodes) in [
+            "workspace-collection",
+            "workspace-preset",
+            "profile-plot-source",
+        ]
+        .into_iter()
+        .zip(&preserved)
+        {
+            assert_eq!(
+                &class(&window, name),
+                nodes,
+                "Search must preserve {name} controls"
+            );
+        }
+        assert_eq!(
+            window.dom.tree().semantics(toggle).unwrap().expanded,
+            Some(true)
+        );
+        assert_eq!(
+            catalogue_reads.load(std::sync::atomic::Ordering::Relaxed),
+            reads_before_search,
+            "Typing a query must reuse the indexed catalogue"
+        );
+    }
+    files.update(|files| files[0].fields[0].1 = "Updated RPM".into());
+    window.frame();
+    assert!(
+        window
+            .dom
+            .tree()
+            .text_content(window.root)
+            .contains("Updated RPM"),
+        "Catalogue changes refresh field rows"
+    );
+}
+
+#[test]
 fn tree_disclosures_search_selection_and_keyboard_add_work() {
     let window = Window::open();
     let workbench = window.scope.with(Workbench::new);
@@ -356,7 +458,7 @@ fn tree_disclosures_search_selection_and_keyboard_add_work() {
         window.dom.tree().text_content(window.root)
     );
     let expanded = workbench.expanded.get_untracked();
-    workbench.query.set("esc_rpm".into());
+    workbench.field_query.set("esc_rpm".into());
     window.frame();
     assert_eq!(workbench.expanded.get_untracked(), expanded);
     assert!(workbench.browser_fields.with_untracked(Vec::is_empty));

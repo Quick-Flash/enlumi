@@ -1,4 +1,5 @@
 --app-background: #131720;
+--app-plot-background: #151b26;
 --app-surface: #1b2130;
 --app-inset: #111620;
 --app-control: #293246;
@@ -26,6 +27,8 @@
 --app-draft-text: #b3cefa;
 --app-overlay: #131b2bd9;
 --app-drop: #304e76ed;
+--app-dock-preview: #7fa5df22;
+--app-dock-source: #7fa5df44;
 --app-code-selection: #6686bc80;
 --app-code-line: #3347654d;
 --app-control-text: #b7c6df;

@@ -1,3 +1,4 @@
+use crate::plot_appearance::PlotBackgroundProps;
 use crate::{analysis_heatmap::AnalysisHeatmapProps, analysis_state::AnalysisResult};
 use plot::{
     time_series::{SeriesData, TimeSeries, TimeSeriesSet},
@@ -12,6 +13,7 @@ pub fn AnalysisPlot(
     state: PlotState,
     visible: Signal<bool, LocalStorage>,
     snapshot: plot::zgui_svg::PlotSnapshotSource,
+    background: RwSignal<Option<[u8; 3]>, LocalStorage>,
 ) -> impl IntoView {
     plot::zgui_svg::SnapshotLayers::current_or_new();
     install_stylesheet("enlumi-analysis", include_str!("analysis.css"));
@@ -117,7 +119,7 @@ pub fn AnalysisPlot(
                 }) {
                 TimeSeriesPlot(series = Signal::stored_local(series),
     state = state,
-    background_layer = move || AnyView::new(heatmap.get_value().map(|data|AnyView::new(view! {AnalysisHeatmap(data=data,state=state)}))),
+    background_layer = move || AnyView::new((view! {PlotBackground(background=background,visible=visible)}.into_view(),heatmap.get_value().map(|data|AnyView::new(view! {AnalysisHeatmap(data=data,state=state)})).into_view())),
     options = plot_options)
                 }
             }

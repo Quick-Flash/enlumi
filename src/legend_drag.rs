@@ -201,15 +201,23 @@ impl Workbench {
                 lines.insert(index, line);
             });
         } else {
-            let global = self.panes().with_untracked(|panes| {
-                panes
-                    .iter()
-                    .flat_map(|pane| pane.display().colors())
-                    .collect::<Vec<_>>()
-            });
-            source
+            let original = source.plot.style(&id.to_string()).color;
+            let color = if target
                 .display()
-                .copy_appearance(target.display(), id, &global);
+                .colors()
+                .iter()
+                .any(|used| used[..3] == original[..3])
+            {
+                self.next_line_color(target)
+            } else {
+                original
+            };
+            source.display().copy_appearance(target.display(), id, &[]);
+            target.plot.styles.update(|styles| {
+                if let Some(style) = styles.get_mut(&id.to_string()) {
+                    style.color = color;
+                }
+            });
             line.revision += 1;
             source.remove_line(id);
             target.lines.update(|lines| {

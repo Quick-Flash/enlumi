@@ -63,7 +63,7 @@ pub fn Panel(
             PlotContext(workbench=workbench,pane=pane) {
             column(class = "plot-content", class:legend-drop-active = move || workbench.line_drag.target.get().is_some_and(|target| target.pane == pane.id)) {
                 if move || pane.analysis.with(|result| result.as_ref().is_some_and(|result| result.heatmap.is_some())) {
-                    {move || pane.analysis.get().map(|result| AnyView::new(view! {AnalysisPlot(result=result,state=pane.plot,visible=visible,snapshot=pane.snapshot)}))}
+                    {move || pane.analysis.get().map(|result| AnyView::new(view! {AnalysisPlot(result=result,state=pane.plot,visible=visible,snapshot=pane.snapshot,background=pane.background)}))}
                 } else {
                     CursorPlot(workbench = workbench, pane = pane, visible = visible, linked = cursor)
                 }
@@ -147,6 +147,7 @@ impl Workbench {
             );
             target.lines.set(lines);
             target.geometry.set(pane.geometry.get_untracked());
+            target.background.set(pane.background.get_untracked());
             target.fit_axes(plot::interaction::Axes::BOTH);
             self.profiles.titles.update(|titles| {
                 titles.insert(target.id, unit);

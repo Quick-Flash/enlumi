@@ -74,6 +74,7 @@ mod panel;
 mod parameter_details;
 mod parameter_rows;
 mod plot_actions;
+mod plot_appearance;
 mod plot_bounds;
 mod plot_cursor;
 mod plot_menu;
@@ -123,6 +124,7 @@ mod theme;
 mod theme_picker;
 #[cfg(test)]
 mod theme_tests;
+mod tree_lines;
 mod update_controls;
 mod update_download;
 mod update_install;

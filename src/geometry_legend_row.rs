@@ -5,9 +5,11 @@ use crate::{
 };
 use plot::zgui_legend::{LegendItemProps, LegendMarker};
 use zgui::prelude::*;
+use zgui_ui::prelude::*;
 #[component]
 pub fn GeometryLegendRow(workbench: Workbench, pane: Pane, item: Geometry) -> impl IntoView {
     let id = item.id;
+    let has_states = item.states.is_some();
     let key = !id;
     let host = workbench.legend_host();
     let drag = host.drag;
@@ -47,7 +49,8 @@ pub fn GeometryLegendRow(workbench: Workbench, pane: Pane, item: Geometry) -> im
         marker: LegendMarker::Line,
     };
     view! {
-            column {
+            Tooltip {
+                TooltipTrigger(class="geometry-legend-trigger") {
                 row(class="legend-entry geometry-legend-row", node_ref = row,
                     class:legend-dragging = move || drag.state.get().is_some_and(|source| source.pane == pane.id && source.line == key && source.moving),
                     class:legend-insert-before = move || drag.target.get().is_some_and(|target| target.pane == pane.id && target.before == Some(key)),
@@ -95,12 +98,18 @@ pub fn GeometryLegendRow(workbench: Workbench, pane: Pane, item: Geometry) -> im
                     }
                     ActionButton(icon=true,class="geometry-legend-remove",a11y:label="Remove geometry from plot",on:pointer_down=move |event|event.stop_propagation(),on:click=move |event|{workbench.remove_geometry_from(pane,id);event.stop_propagation();}) {"×"}
                 }
-                row(class = "geometry-state-colors", class:geometry-legend-hidden = move || pane.hidden_geometry.with(|ids| ids.contains(&id))) {
+                }
+                if move || has_states {
+                TooltipContent(class="geometry-state-popup") {
+                column(class = "geometry-state-colors") {
+                    text(class="heading") {"State modes"}
                     for rule in move || { workbench.geometry.items.track(); workbench.geometry_item(id).and_then(|item| item.states)
                         .map_or_else(Vec::new, |states| states.rules.clone()) },
                         key = |rule| (rule.value, rule.name.clone(), rule.color) {
                         text(style:color = format!("#{:02x}{:02x}{:02x}", rule.color[0], rule.color[1], rule.color[2])) { {rule.name} }
                     }
+                }
+                }
                 }
             }
         }

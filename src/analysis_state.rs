@@ -656,6 +656,7 @@ impl Workbench {
             );
         }
         if result.heatmap.is_none() {
+            self.ensure_line_colors(pane);
             let ids = pane
                 .lines
                 .with_untracked(|lines| lines.iter().map(|line| line.id).collect::<Vec<_>>());

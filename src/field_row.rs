@@ -1,3 +1,4 @@
+use crate::tree_lines::TreeLinesProps;
 use crate::{field_actions::FieldActionsProps, field_tree::TreeRow, state::Workbench};
 use plot::zgui_workspace::{SeriesSourceActions, SeriesSourceProps};
 use zgui::{prelude::*, reactive::UnsyncCallback};
@@ -29,18 +30,7 @@ pub fn FieldRow(
     };
     view! {
         row(class = "tree-row", style:padding-left = move || Some(format!("{}px", row.get().map_or(0, |row| row.depth) * 12))) {
-            box(class = "tree-connectors", a11y:hidden = true) {
-                for depth in move || row.get().map_or_else(Vec::new, |row| row.guides), key = |depth| *depth {
-                    box(class = "tree-guide", style:left = Some(format!("{}px", depth * 12 + 10))) {}
-                }
-                if move || row.get().is_some_and(|row| row.depth > 0) {
-                    box(class = "tree-guide", class:tree-guide-last = move || row.get().is_some_and(|row| row.last), style:left = move || Some(format!("{}px", row.get().map_or(0, |row| row.depth.saturating_sub(1)) * 12 + 10))) {}
-                    box(class = "tree-elbow", style:left = move || Some(format!("{}px", row.get().map_or(0, |row| row.depth.saturating_sub(1)) * 12 + 10))) {}
-                }
-                if move || row.get().is_some_and(|row| row.open && row.id!="@raw" && row.id!="@derived") {
-                    box(class = "tree-stem", style:left = move || Some(format!("{}px", row.get().map_or(0, |row| row.depth) * 12 + 10))) {}
-                }
-            }
+            TreeLines(depth=Signal::derive_local(move ||row.get().map_or(0,|row|row.depth)),last=Signal::derive_local(move ||row.get().is_some_and(|row|row.last)),guides=Signal::derive_local(move ||row.get().map_or_else(Vec::new,|row|row.guides)),open=Signal::derive_local(move ||row.get().is_some_and(|row|row.open && row.id!="@raw" && row.id!="@derived")))
             if move || row.get().is_some_and(|row| row.field.is_none()) {
                 control(class = "tree-branch", class:raw-section = move ||row.get().is_some_and(|row|row.id=="@raw"), class:derived-section = move ||row.get().is_some_and(|row|row.id=="@derived"), class:parameters-section = move ||row.get().is_some_and(|row|row.id=="@parameters"), class:tree-open = move || row.get().is_some_and(|row| row.open), class:topic-branch = move || row.get().is_some_and(|row| row.depth == 1 && !row.id.starts_with('@')), class:field-branch = move || row.get().is_some_and(|row| row.depth > 1), tabindex = Focus::Sequential, {..semantics()},
                     on:click = move |_| { if let Some(id) = current_id() { workbench.toggle_branch(id); } },

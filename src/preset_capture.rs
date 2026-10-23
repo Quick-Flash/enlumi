@@ -459,6 +459,7 @@ impl Capture {
         let links = pane.links.get_untracked();
         Ok(PlotPreset {
             name: name.into(),
+            background: pane.background.get_untracked(),
             lines,
             geometry,
             geometry_style,

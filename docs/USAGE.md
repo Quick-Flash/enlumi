@@ -25,6 +25,17 @@ application session. View menu offers **Rename**, **Save**, **Save as...**, and 
 Drag presets from Profiles to open views or plots. **Save** overwrites the linked
 preset directly; a first save asks for a destination. **Save as...** opens the
 editor to create another preset. A captured view previews its plots directly.
+
+Open **Background** in a plot header to edit that plot's background.
+On narrow plots, this button shows just the color swatch.
+The picker starts with that plot's current color. **Apply to all** copies it
+to every open plot, including other views and workspaces. Plots follow the app
+theme until you choose a custom color. **Use theme** restores this behavior for
+one plot; **Use theme for all plots** restores it everywhere.
+Background colors are preserved by duplication, saved presets, and screenshots.
+Automatic line colors use the Betaflight Blackbox Explorer palette independently
+in each plot; manually chosen and saved line colors remain intact.
+
 Right-click plot background or open plot header
 menu to save individual plots. Presets store recipes and layout; zoom, visible
 X/Y ranges, and analysis time selections stay in current session.
@@ -69,6 +80,10 @@ absent from log cannot be reconstructed.
 **Profiles → Folder…** chooses saved library directory. Nested folders and
 auto firmware matching use same location. **Profiles** groups saved **Views** and **Plots** directly.
 Views contain plots, and plots contain fields. **Profile files** holds file edit/delete actions.
+Saved resources use the same tree connectors, disclosure arrows, and row spacing as
+raw fields. Large profile field lists build only nearby rows as you scroll in the
+shared sidebar; Shift-selection still includes off-screen matches. Use Left/Right
+to collapse or expand a focused branch, or Enter/Space to toggle it.
 Drag a view or plot to use it; profile loads on demand. Missing
 fields skip affected outputs while remaining view works. Views, fields and geometry offer **Add** / **New panel**; fields also offer
 **Filter**. **Reload** updates owned outputs without resetting log; **Remove…**
@@ -191,7 +206,9 @@ Each plot's legend includes its geometry, even when plot contains no signals. Dr
 Click geometry name to show/hide that plot's copy. Pencil opens live editor;
 **X** removes geometry from that plot while preserving saved definition.
 
-Live editor sits inside selected plot, leaving field browser available. Name and
+Live editor floats above the plot workspace, leaving the field browser available.
+Drag its title across plot boundaries to reposition controls. The title and footer
+remain visible in smaller windows while the editor body scrolls. Name and
 **Coordinates** update immediately. Drag arrow handle to move geometry; square
 handles resize corners/endpoints. Move handle stays on visible section of line
 when its defining endpoints are offscreen. Background drag pans, including

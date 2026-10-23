@@ -20,18 +20,25 @@ pub fn ProfileViewSource(
             None
         }
     });
-    workbench.profiles.rows.update_value(|rows| {
-        rows.insert(
-            row_id,
-            crate::profile_selection::ProfileSourceRow { source: id, node },
-        );
-    });
-    on_cleanup_local(move || {
+    if use_local_context::<crate::profile_preset_tree::VirtualProfileFields>().is_none() {
         workbench.profiles.rows.update_value(|rows| {
-            rows.remove(&row_id);
-        })
-    });
+            rows.insert(
+                row_id,
+                crate::profile_selection::ProfileSourceRow {
+                    source: id,
+                    node,
+                    range: None,
+                },
+            );
+        });
+        on_cleanup_local(move || {
+            workbench.profiles.rows.update_value(|rows| {
+                rows.remove(&row_id);
+            })
+        });
+    }
     let plain_click = RwSignal::new_local(true);
+    let field_data = use_local_context::<crate::profile_outputs::ProfileFieldData>();
     let samples = Signal::derive_local(move || {
         let Some(drag) = crate::profile::identity::Drag::parse(&source.get()) else {
             return String::new();
@@ -51,6 +58,13 @@ pub fn ProfileViewSource(
         let Some(source) = resolved else {
             return String::new();
         };
+        if let Some(data) = field_data {
+            return data.counts.with(|counts| {
+                counts
+                    .get(&source)
+                    .map_or_else(String::new, usize::to_string)
+            });
+        }
         let count = if source.starts_with("@derived/") {
             workbench.derived.with(|fields| {
                 fields

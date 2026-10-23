@@ -22,6 +22,7 @@ pub struct GeometryDrag {
 pub struct EditorDrag {
     pub pane: u64,
     pub editor: NodeRef,
+    pub boundary: NodeRef,
     pub offset: RwSignal<(f64, f64), LocalStorage>,
     pub start: Point,
     pub original: (f64, f64),
@@ -275,7 +276,6 @@ impl Workbench {
         self.edit_geometry_on(pane, id);
     }
     pub fn edit_geometry_on(self, pane: Pane, id: u64) {
-        self.attach_geometry(id, pane, true);
         self.activate(pane.id);
         self.select_geometry(id);
     }

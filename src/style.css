@@ -272,14 +272,19 @@
 .geometry-interaction { position: absolute; inset: 0; pointer-events: auto; cursor: crosshair; z-index: 1; }
 .geometry-edit-hint { position: absolute; left: 12px; bottom: 26px; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--app-radius); background: var(--app-control); color: var(--app-control-text); pointer-events: auto; z-index: 2; }
 .geometry-drop-target { outline: 2px solid var(--app-accent); outline-offset: -3px; }
-.geometry-inspector { position: absolute; left: 12px; bottom: 30px; width: 372px; max-width: calc(100% - 24px); max-height: calc(100% - 70px); padding: 12px; gap: 10px; min-height: 0; overflow-y: auto; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-surface); color: var(--app-foreground); pointer-events: auto; z-index: 3; }
+.geometry-editor-layer { position: absolute; inset: 0; pointer-events: none; z-index: 60; }
+.geometry-inspector { position: absolute; left: 12px; bottom: 30px; box-sizing: border-box; width: 400px; max-width: calc(100% - 24px); max-height: calc(100% - 42px); padding: 14px; gap: 12px; min-height: 0; overflow: hidden; border: 1px solid var(--app-border-strong); border-radius: 10px; background: var(--app-surface); color: var(--app-foreground); box-shadow: 0 8px 28px var(--app-drag-shadow); pointer-events: auto; z-index: 3; }
+.geometry-inspector > * { flex-shrink: 0; }
 .geometry-editor-heading { align-items: center; gap: 8px; cursor: grab; }
 .geometry-editor-heading:active { cursor: grabbing; }
 .geometry-editor-heading > column { flex: 1; gap: 2px; }
 .geometry-title-mark { width: 5px; height: 28px; border-radius: var(--app-radius-sm); }
-.geometry-editor-tabs { gap: 4px; }
+.geometry-name-field { gap: 5px; }
+.geometry-section-label { font-size: var(--app-font-xs); font-weight: 600; }
+.geometry-editor-tabs { gap: 3px; padding: 3px; border-radius: var(--app-radius); background: var(--app-inset); }
 .geometry-editor-tabs .app-action { flex: 1; }
-.geometry-editor-body { gap: 10px; min-height: 0; }
+.geometry-inspector .geometry-editor-body { flex-shrink: 1; overflow-y: auto; gap: 12px; min-height: 0; padding: 10px; border: 1px solid var(--app-border); border-radius: var(--app-radius); }
+.geometry-editor-body > *, .band-mapping > *, .band-rule-list > * { flex-shrink: 0; }
 .geometry-coordinate-grid { gap: 8px; }
 .geometry-coordinate-row { gap: 8px; align-items: center; }
 .geometry-point-name, .geometry-option-name { width: 56px; flex: none; }
@@ -293,6 +298,7 @@
 .geometry-style-controls .zui-slider { width: auto; }
 .geometry-editor-footer { gap: 8px; align-items: center; padding-top: 8px; border-top: 1px solid var(--app-border); }
 .geometry-editor-footer > text { flex: 1; }
+.geometry-placement-hint { white-space: normal; font-size: var(--app-font-xs); }
 .geometry-legend { gap: 0; }
 .geometry-legend-editing { box-shadow: inset 2px 0 0 0 var(--app-accent); }
 .workbench-legend .geometry-legend-toggle { cursor: grab; }
@@ -357,8 +363,9 @@
 
 .github-logo { width: 16px; height: 16px; color: var(--app-foreground); pointer-events: none; }
 
-.geometry-state-colors { padding-left: 12px; gap: 2px 8px; flex-wrap: wrap; max-width: 300px; max-height: 80px; overflow-y: auto; }
-.geometry-state-colors.geometry-legend-hidden { opacity: 0.4; }
+.workbench-legend .geometry-legend-trigger.zui-tooltip__trigger { display: flex; flex-direction: column; align-items: stretch; align-self: stretch; width: 100%; min-width: 0; }
+.geometry-state-popup { padding: 10px 12px; background: var(--app-surface); color: var(--app-foreground); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); }
+.geometry-state-colors { gap: 5px; max-width: 300px; max-height: 280px; overflow-y: auto; }
 .geometry-state-colors text { font-size: var(--app-font-sm); }
 
 .toolbar-brand { align-items: center; flex: none; gap: 3px; }

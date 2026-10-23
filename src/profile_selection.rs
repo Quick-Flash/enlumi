@@ -9,6 +9,7 @@ use zgui::prelude::*;
 pub struct ProfileSourceRow {
     pub source: Signal<Option<String>, LocalStorage>,
     pub node: NodeRef,
+    pub range: Option<Signal<Vec<String>, LocalStorage>>,
 }
 
 impl Workbench {
@@ -18,9 +19,15 @@ impl Workbench {
                 .filter_map(|row| {
                     let bounds = row.node.window_bounds()?;
                     (bounds.size.width.0 > 0.0 && bounds.size.height.0 > 0.0).then(|| {
-                        row.source
-                            .get_untracked()
-                            .map(|source| (bounds.origin.y.0, bounds.origin.x.0, source))
+                        let sources = row.range.map_or_else(
+                            || row.source.get_untracked().into_iter().collect(),
+                            |range| range.get_untracked(),
+                        );
+                        (!sources.is_empty()).then_some((
+                            bounds.origin.y.0,
+                            bounds.origin.x.0,
+                            sources,
+                        ))
                     })?
                 })
                 .collect::<Vec<_>>()
@@ -30,7 +37,9 @@ impl Workbench {
                 .then(a.1.total_cmp(&b.1))
                 .then(a.2.cmp(&b.2))
         });
-        rows.into_iter().map(|(_, _, source)| source).collect()
+        rows.into_iter()
+            .flat_map(|(_, _, sources)| sources)
+            .collect()
     }
 
     pub fn sidebar_sources(self) -> Vec<String> {

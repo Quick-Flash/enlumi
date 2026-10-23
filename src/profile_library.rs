@@ -1,4 +1,5 @@
 use crate::sidebar_help::SidebarHelpProps;
+use crate::tree_lines::{TreeBranchProps, TreeLinesProps};
 use crate::{
     action_button::ActionButtonProps, profile, profile_preset_tree::ProfilePresetTreeProps,
     state::Workbench,
@@ -200,7 +201,6 @@ fn refresh(workbench: Workbench, files: RwSignal<Vec<ProfileFile>, LocalStorage>
 pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
     install_stylesheet("enlumi-profiles", include_str!("profile.css"));
     let files = RwSignal::new_local(Vec::<ProfileFile>::new());
-    let query = workbench.query;
 
     let warnings_open = RwSignal::new_local(false);
     let files_open = RwSignal::new_local(false);
@@ -221,137 +221,105 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
     });
     let catalogue = Memo::new(move |_| {
         let mut listed = files.get();
-        for instance in workbench
-            .profiles
-            .instances
-            .get()
-            .values()
-            .filter(|p| p.key.flight == workbench.profiles.flight.get())
-        {
-            if !listed.iter().any(|file| file.path == instance.key.path) {
-                listed.push(ProfileFile {
-                    collections: instance
-                        .definition
-                        .workspace_presets
-                        .iter()
-                        .map(|workspace| {
-                            (
-                                workspace.name.clone(),
-                                workspace
-                                    .views
+        let flight = workbench.profiles.flight.get();
+        workbench.profiles.instances.with(|instances| {
+            for instance in instances.values().filter(|p| p.key.flight == flight) {
+                if !listed.iter().any(|file| file.path == instance.key.path) {
+                    listed.push(ProfileFile {
+                        collections: instance
+                            .definition
+                            .workspace_presets
+                            .iter()
+                            .map(|workspace| {
+                                (
+                                    workspace.name.clone(),
+                                    workspace
+                                        .views
+                                        .iter()
+                                        .map(|view| {
+                                            (
+                                                view.name.clone(),
+                                                view.plots
+                                                    .iter()
+                                                    .map(|plot| {
+                                                        (plot.name.clone(), plot.lines.len())
+                                                    })
+                                                    .collect(),
+                                            )
+                                        })
+                                        .collect(),
+                                )
+                            })
+                            .collect(),
+                        workspace_plots: instance
+                            .definition
+                            .view_presets
+                            .iter()
+                            .map(|view| {
+                                (
+                                    view.name.clone(),
+                                    view.plots
+                                        .iter()
+                                        .map(|plot| (plot.name.clone(), plot.lines.len()))
+                                        .collect(),
+                                )
+                            })
+                            .collect(),
+                        path: instance.key.path.clone(),
+                        name: instance.name.clone(),
+                        workspaces: instance
+                            .definition
+                            .view_presets
+                            .iter()
+                            .map(|view| view.name.clone())
+                            .collect(),
+                        compatible: Ok(()),
+                        auto_apply: false,
+                        matched: format!("Flight {}", instance.key.flight),
+                        views: instance
+                            .definition
+                            .views
+                            .iter()
+                            .map(|v| (v.name.clone(), v.fields.len()))
+                            .chain(
+                                instance
+                                    .definition
+                                    .plot_presets
                                     .iter()
-                                    .map(|view| {
-                                        (
-                                            view.name.clone(),
-                                            view.plots
-                                                .iter()
-                                                .map(|plot| (plot.name.clone(), plot.lines.len()))
-                                                .collect(),
-                                        )
-                                    })
-                                    .collect(),
+                                    .map(|plot| (plot.name.clone(), plot.lines.len())),
                             )
-                        })
-                        .collect(),
-                    workspace_plots: instance
-                        .definition
-                        .view_presets
-                        .iter()
-                        .map(|view| {
-                            (
-                                view.name.clone(),
-                                view.plots
+                            .collect(),
+                        fields: instance
+                            .definition
+                            .signals
+                            .iter()
+                            .map(|s| (s.id.clone(), s.metadata.label()))
+                            .chain(
+                                instance
+                                    .definition
+                                    .filters
                                     .iter()
-                                    .map(|plot| (plot.name.clone(), plot.lines.len()))
-                                    .collect(),
+                                    .map(|f| (f.id.clone(), f.metadata.label())),
                             )
-                        })
-                        .collect(),
-                    path: instance.key.path.clone(),
-                    name: instance.name.clone(),
-                    workspaces: instance
-                        .definition
-                        .view_presets
-                        .iter()
-                        .map(|view| view.name.clone())
-                        .collect(),
-                    compatible: Ok(()),
-                    auto_apply: false,
-                    matched: format!("Flight {}", instance.key.flight),
-                    views: instance
-                        .definition
-                        .views
-                        .iter()
-                        .map(|v| (v.name.clone(), v.fields.len()))
-                        .chain(
-                            instance
-                                .definition
-                                .plot_presets
-                                .iter()
-                                .map(|plot| (plot.name.clone(), plot.lines.len())),
-                        )
-                        .collect(),
-                    fields: instance
-                        .definition
-                        .signals
-                        .iter()
-                        .map(|s| (s.id.clone(), s.metadata.label()))
-                        .chain(
-                            instance
-                                .definition
-                                .filters
-                                .iter()
-                                .map(|f| (f.id.clone(), f.metadata.label())),
-                        )
-                        .collect(),
-                    geometry: instance
-                        .definition
-                        .geometry
-                        .iter()
-                        .map(|g| (g.id.clone(), g.name.clone()))
-                        .collect(),
-                });
+                            .collect(),
+                        geometry: instance
+                            .definition
+                            .geometry
+                            .iter()
+                            .map(|g| (g.id.clone(), g.name.clone()))
+                            .collect(),
+                    });
+                }
             }
-        }
+        });
         listed
     });
     let rows = Memo::new(move |_| {
         let mut rows = Vec::new();
         let mut folders = BTreeSet::new();
         let root = workbench.profiles.directory.get().unwrap_or_default();
-        let query = query.get().to_lowercase();
         let expanded = expanded.get();
         for file in catalogue.get() {
-            if !query.is_empty()
-                && !file
-                    .workspaces
-                    .iter()
-                    .any(|name| name.to_lowercase().contains(&query))
-                && !file.name.to_lowercase().contains(&query)
-                && !file.path.to_string_lossy().to_lowercase().contains(&query)
-                && !file
-                    .views
-                    .iter()
-                    .any(|(name, _)| name.to_lowercase().contains(&query))
-                && !file.fields.iter().any(|(id, name)| {
-                    id.to_lowercase().contains(&query) || name.to_lowercase().contains(&query)
-                })
-                && !file.fields.iter().any(|(id, _)| {
-                    workbench.profile_field_matches(
-                        &profile::identity::ProfileKey::new(
-                            file.path.clone(),
-                            workbench.profiles.flight.get(),
-                        ),
-                        &format!("${id}"),
-                        &query,
-                    )
-                })
-                && !file.geometry.iter().any(|(id, name)| {
-                    id.to_lowercase().contains(&query) || name.to_lowercase().contains(&query)
-                })
-            {
-                continue;
-            }
             let imported = !file.path.starts_with(&root);
             let relative = file
                 .path
@@ -382,6 +350,29 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
             }
         }
         rows
+    });
+    let tree_rows = Memo::new(move |_| {
+        let rows = rows.get();
+        let tree_row = |depth| crate::field_tree::TreeRow {
+            id: String::new(),
+            label: String::new(),
+            depth,
+            count: 0,
+            field: None,
+            open: false,
+            last: false,
+            guides: Vec::new(),
+        };
+        let mut lines = vec![tree_row(0), tree_row(1)];
+        lines.extend(rows.iter().map(|row| {
+            tree_row(match row {
+                LibraryRow::Folder(_, depth) | LibraryRow::File(_, depth) => *depth + 2,
+            })
+        }));
+        crate::field_tree::connect(&mut lines);
+        rows.into_iter()
+            .zip(lines.into_iter().skip(2))
+            .collect::<Vec<_>>()
     });
     view! {
         column(class = "profile-library") {
@@ -425,29 +416,31 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 }
             }
             }
-            ProfilePresetTree(workbench=workbench,files=catalogue.into(),query=query.into())
-            ActionButton(class="profile-files-toggle profile-output-section",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).expanded(move ||files_open.get()))},on:click=move |_|files_open.update(|open|*open = !*open)) {
-                vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if files_open.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)
-                text {{move ||format!("Profile files ({})",catalogue.with(Vec::len))}}
-            }
+            ProfilePresetTree(workbench=workbench,files=catalogue.into(),field_query=workbench.field_query.into())
+            TreeBranch(open=files_open,name="Profile files".into(),count=Signal::derive_local(move ||catalogue.with(Vec::len)),last=true,class="profile-files-toggle")
             if move ||files_open.get() {
             column(class = "profile-files", a11y:label = "Profile files and folders") {
-                for row in move || rows.get(), key = |row| row.clone() {
-                    {match row {
-                        LibraryRow::Folder(path, depth) => {
+                for entry in move ||tree_rows.get(),key=|entry|(entry.0.clone(),entry.1.last,entry.1.guides.clone()) {
+                    {{let lines=entry.1;let branch_path=StoredValue::new_local(match &entry.0{LibraryRow::Folder(path,_)=>path.clone(),LibraryRow::File(file,_)=>file.path.clone()});let content=match entry.0 {
+                        LibraryRow::Folder(path, _) => {
                             let label = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
                             let toggle = path.clone();
                             let arrow_path = path.clone();
-                            AnyView::new(view! { control(class = "profile-folder tree-branch", style:padding-left = Some(format!("{}px", depth * 10)), tabindex = Focus::Sequential,
-                                a11y:label = format!("Profile folder {label}"),
+                            AnyView::new(view! { control(class = "profile-folder tree-branch", tabindex = Focus::Sequential,
+                                {..Attrs::new().a11y_from(A11yBinding::new(Role::Button).label(format!("Profile folder {label}")).expanded(move ||expanded.with(|all|all.contains(&branch_path.get_value()))))},
                                 on:click = move |_| expanded.update(|expanded| { if !expanded.remove(&toggle) { expanded.insert(toggle.clone()); } }),
                                 on:key_down = move |event| {
-                                    if matches!(event.key, zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter | zgui::vocab::NamedKey::Space)) {
-                                        expanded.update(|expanded| { if !expanded.remove(&path) { expanded.insert(path.clone()); } }); event.prevent_default();
+                                    use zgui::vocab::{Key,NamedKey};
+                                    match event.key {
+                                        Key::Named(NamedKey::ArrowRight)=>expanded.update(|all|{all.insert(path.clone());}),
+                                        Key::Named(NamedKey::ArrowLeft)=>expanded.update(|all|{all.remove(&path);}),
+                                        Key::Named(NamedKey::Enter|NamedKey::Space)=>expanded.update(|all|{if !all.remove(&path){all.insert(path.clone());}}),
+                                        _=>return,
                                     }
-                                }) { vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.with(|expanded|expanded.contains(&arrow_path)){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true) text { {label} } } })
+                                    event.prevent_default();event.stop_propagation();
+                                }) { vector(class="tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.with(|expanded|expanded.contains(&arrow_path)){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true) text { {label} } } })
                         },
-                        LibraryRow::File(file, depth) => {
+                        LibraryRow::File(file, _) => {
                             let file = *file;
                             let toggle = file.path.clone();
                             let arrow_path = file.path.clone();
@@ -459,9 +452,21 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                             let compatible = file.compatible.is_ok();
                             let reason = StoredValue::new_local(file.compatible.clone().err().unwrap_or_default());
                             let path = file.path.clone();
-                            AnyView::new(view! { column(class = "profile-tree-file", style:padding-left = Some(format!("{}px", depth * 10))) {
+                            AnyView::new(view! { column(class = "profile-tree-file") {
                                 row(class = "profile-file") {
-                                    ActionButton(class = "profile-file-name", on:click = move |_| expanded.update(|expanded| { if !expanded.remove(&toggle) { expanded.insert(toggle.clone()); } })) { vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.with(|expanded|expanded.contains(&arrow_path)){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true) text { {title} } }
+                                    control(class = "profile-file-name tree-branch",tabindex=Focus::Sequential,
+                                    {..Attrs::new().a11y_from(A11yBinding::new(Role::Button).label(title.clone()).expanded(move ||expanded.with(|all|all.contains(&branch_path.get_value()))))},
+                                    on:key_down=move |event| {
+                                        use zgui::vocab::{Key,NamedKey};
+                                        let path=branch_path.get_value();
+                                        match event.key {
+                                            Key::Named(NamedKey::ArrowRight)=>expanded.update(|all|{all.insert(path);}),
+                                            Key::Named(NamedKey::ArrowLeft)=>expanded.update(|all|{all.remove(&path);}),
+                                            Key::Named(NamedKey::Enter|NamedKey::Space)=>expanded.update(|all|{if !all.remove(&path){all.insert(path);}}),
+                                            _=>return,
+                                        }
+                                        event.prevent_default();event.stop_propagation();
+                                    }, on:click = move |_| expanded.update(|expanded| { if !expanded.remove(&toggle) { expanded.insert(toggle.clone()); } })) { vector(class="tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.with(|expanded|expanded.contains(&arrow_path)){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true) text { {title} } }
                                     Popover(open=actions_open) {
                                     PopoverTrigger(class="app-action profile-menu",size=ButtonSize::Xs,variant=ButtonVariant::Ghost,a11y:label="Profile actions") { vector(class="profile-more-icon",prop:viewBox="0 0 12 12",prop:d="M2 6 L2.1 6 M6 6 L6.1 6 M10 6 L10.1 6",a11y:hidden=true) }
                                     PopoverContent(class="profile-menu-content") {
@@ -494,7 +499,10 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                                 }
                             } })
                         }
-                    }}
+                    };view! {column(class="profile-file-entry",style:padding-left=Some(format!("{}px",lines.depth*12))) {
+                        {content}
+                        TreeLines(depth=lines.depth,last=lines.last,guides=lines.guides,open=Signal::derive_local(move ||expanded.with(|all|all.contains(&branch_path.get_value()))))
+                    }}}}
                 }
                 if move || files.with(Vec::is_empty) { text(class = "muted") { "Add JSON profiles in this directory or its subdirectories, or load a file." } }
             }

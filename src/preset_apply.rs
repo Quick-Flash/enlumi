@@ -529,6 +529,7 @@ impl Workbench {
         inputs: &[(String, String, SeriesData, String)],
         instance: &crate::profile_instance::AppliedProfile,
     ) {
+        pane.background.set(recipe.background);
         let mut order = BTreeMap::new();
         for line in pane.lines.get_untracked() {
             let source = line
@@ -753,14 +754,14 @@ pub fn available_plots(instance: &crate::profile_instance::AppliedProfile) -> Ve
         };
         plots.push(PlotPreset {
             name: view.name.clone(),
+            background: None,
             lines: prepared
                 .fields
                 .iter()
                 .enumerate()
                 .map(|(index, (source, _))| PresetLine {
                     source: source.clone(),
-                    color: plot::palette::DEFAULT_PALETTE
-                        [index % plot::palette::DEFAULT_PALETTE.len()],
+                    color: crate::line_colors::PALETTE[index % crate::line_colors::PALETTE.len()],
                     width: 1.5,
                     radius: 3.,
                     marker: "circle".into(),

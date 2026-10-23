@@ -5,12 +5,14 @@ impl Workbench {
     pub fn begin_geometry_editor(
         self,
         editor: NodeRef,
+        boundary: NodeRef,
         offset: RwSignal<(f64, f64), LocalStorage>,
         position: zgui::geom::Point<zgui::geom::CssPx, zgui::geom::Css>,
     ) {
         self.geometry.editor_drag.set(Some(EditorDrag {
             pane: self.active().get_untracked(),
             editor,
+            boundary,
             offset,
             start: Point::new(f64::from(position.x.0), f64::from(position.y.0)),
             original: offset.get_untracked(),
@@ -33,14 +35,10 @@ impl Workbench {
             drag.original.0 + f64::from(position.x.0) - drag.start.x,
             drag.original.1 + f64::from(position.y.0) - drag.start.y,
         );
-        let host = self
-            .geometry
-            .hosts
-            .with_value(|hosts| hosts.get(&pane).copied());
-        if let (Some(bounds), Some(host)) = (drag.editor.window_bounds(), host)
-            && let Some(plot) = host.window_bounds()
+        if let (Some(bounds), Some(plot)) =
+            (drag.editor.window_bounds(), drag.boundary.window_bounds())
         {
-            let scale = f64::from(host.scale());
+            let scale = f64::from(drag.boundary.scale());
             let old = drag.offset.get_untracked();
             let origin = (
                 f64::from(bounds.origin.x.0) / scale - old.0,

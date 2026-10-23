@@ -79,3 +79,34 @@
 .profile-plot-source > .profile-output-line .signal-name { font-weight: 600; }
 .workspace-collection { flex: none; min-width: 0; padding: 2px 0 2px 6px; }
 .workspace-collection-views { flex: none; min-width: 0; margin-left: 10px; padding-left: 6px; border-left: 1px solid var(--app-border-strong); }
+
+/* Saved resources use the field browser's spacing, disclosures and connectors. */
+.profile-preset-tree, .profile-section, .profile-field-rows { gap: 0; }
+.profile-group-row { flex: none; height: 28px; min-height: 28px; }
+.profile-group-row .profile-output-section { padding: 2px 3px; font-weight: 400; }
+.profile-tree-entry { position: relative; flex: none; min-width: 0; padding-left: 24px; }
+.profile-tree-entry > .tree-connectors > .tree-guide { height: 100%; }
+.profile-tree-entry > .tree-connectors > .tree-guide-last { height: 14px; }
+.profile-tree-entry > .profile-output, .profile-tree-entry > .workspace-preset, .profile-tree-entry > .workspace-collection { padding: 0; }
+.profile-field-rows { flex: none; min-width: 0; }
+.profile-field-entry { height: 28px; min-height: 28px; max-height: 28px; }
+.profile-tree-entry .profile-output-line, .profile-tree-entry .workspace-preset-heading { height: 28px; min-height: 28px; }
+.page .profile-library .profile-tree-entry .metric-option { height: 26px; min-height: 26px; }
+.profile-field-warning { flex: none; font-size: var(--app-font-xs); }
+.profile-group-row .profiles-trigger .tree-count { display: none; }
+
+.profile-nested-entry, .profile-file-entry { position: relative; flex: none; min-width: 0; padding-left: 12px; }
+.profile-nested-entry > .tree-connectors > .tree-guide, .profile-file-entry > .tree-connectors > .tree-guide { height: 100%; }
+.profile-nested-entry > .tree-connectors > .tree-guide-last, .profile-file-entry > .tree-connectors > .tree-guide-last { height: 14px; }
+.profile-tree-entry .workspace-preset-plots, .profile-tree-entry .workspace-collection-views { margin-left: 0; padding-left: 12px; border-left: none; gap: 0; }
+.profile-tree-entry .workspace-preset-plot { padding-top: 0; padding-bottom: 0; border-top: none; }
+.profile-nested-entry > .workspace-preset { padding: 0; }
+.profile-files { padding-left: 0; border-left: none; }
+.profile-file-entry .profile-file { height: 28px; padding: 0; border-bottom: none; }
+.profile-file-name.tree-branch { flex: 1; min-width: 0; font-size: var(--app-font-md); }
+.profile-file-entry .profile-folder { height: 28px; min-height: 28px; }
+
+.profile-output, .workspace-preset, .workspace-collection { position: relative; }
+.profile-tree-entry .workspace-preset-plots, .profile-tree-entry .workspace-collection-views, .profile-view-members { padding-left: 0; }
+.profile-tree-entry .workspace-preset-plot.profile-nested-entry { padding-left: 24px; }
+.profile-view-members > .profile-nested-entry { height: 28px; min-height: 28px; }

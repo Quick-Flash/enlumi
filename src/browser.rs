@@ -3,6 +3,7 @@ use crate::field_label::FieldLabelProps;
 use crate::geometry_library::GeometryLibraryProps;
 use crate::parameter_details::ParameterDetailsProps;
 use crate::profile_library::ProfileLibraryProps;
+use crate::tree_lines::TreeBranchProps;
 use crate::{field_row::FieldRowProps, state::Workbench};
 use crate::{sidebar_help::SidebarHelpProps, sidebar_search::SidebarSearchProps};
 use zgui::prelude::*;
@@ -11,6 +12,7 @@ use zgui::prelude::*;
 pub fn Browser(workbench: Workbench) -> impl IntoView {
     let rows = crate::browser_fields::rows(workbench);
     let port = NodeRef::new();
+    provide_local_context(crate::profile_preset_tree::ProfileViewport(port));
     let virtualized = zgui_ui::virtualize::Virtualize::new(
         port,
         Signal::derive_local(move || rows.with(Vec::len)),
@@ -47,12 +49,12 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                     ActionButton(class = "open-filters", node_ref = workbench.filter_button, class:setting-active = move || workbench.filters_open.get(), disabled = Signal::derive_local(move || workbench.log.get().is_none() || workbench.loading.get()), on:click = move |_| workbench.filters_open.update(|open| *open = !*open)) { "Filters" }
                     ActionButton(class = "collapse-fields", on:click = move |_| {workbench.expanded.set(std::collections::BTreeSet::from(["@raw".into()]));workbench.profiles.open.set(false);}) { "Collapse all" }
                 }
-                SidebarSearch(value = workbench.query, placeholder = "Search fields and profiles", label = "Search fields and profiles") {
+                SidebarSearch(value = workbench.field_query, placeholder = "Search fields", label = "Search fields") {
                     SidebarHelp(label = "Field shortcuts") {
                         text(class="heading") { "Plot and filter fields" }
                         text { "Drag onto plot to add line. Enter plots focused field." }
                         text { "Ctrl-click toggles selection across Raw, Derived and Profiles. Shift-click selects range." }
-                        text { "Search filters results; expand sections to browse matches." }
+                        text { "Search filters field entries; expand field sections to browse matches." }
                     }
                 }
                 column(class="analysis-selection-actions") {
@@ -83,10 +85,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                             FieldRow(workbench=workbench,row=Memo::new(move |_|rows.with(|rows|rows.get(index).cloned())),visible_fields=visible_fields)
                         }
                     }
-                    ActionButton(class="profiles-trigger browser-section tree-branch",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).label("Toggle Profiles").expanded(move ||workbench.profiles.open.get()))},on:click=move |_|workbench.profiles.open.update(|open|*open = !*open)) {
-                        vector(class="tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if workbench.profiles.open.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)
-                        text(class="tree-name") {"Profiles"}
-                    }
+                    TreeBranch(open=workbench.profiles.open,name="Profiles".into(),count=0usize,depth=0,class="profiles-trigger browser-section")
                     column(class="profile-browser-pane",class:hidden=move ||!workbench.profiles.open.get()) {
                         ProfileLibrary(workbench=workbench)
                     }

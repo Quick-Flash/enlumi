@@ -6,6 +6,8 @@ use std::{collections::BTreeSet, path::PathBuf};
 #[serde(deny_unknown_fields)]
 pub struct PlotPreset {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<[u8; 3]>,
     pub lines: Vec<PresetLine>,
     #[serde(default)]
     pub geometry: Vec<String>,

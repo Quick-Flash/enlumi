@@ -33,7 +33,7 @@ pub fn rows(workbench: Workbench) -> Memo<Vec<TreeRow>> {
         })
     });
     let rows = Memo::new(move |_| {
-        let query = workbench.query.get().trim().to_lowercase();
+        let query = workbench.field_query.get().trim().to_lowercase();
         let expanded = workbench.expanded.get();
         let raw_query = if "raw".contains(&query) { "" } else { &query };
         let mut parameter_expanded = expanded.clone();
@@ -157,7 +157,7 @@ mod tests {
                 .iter()
                 .any(|row| row.id == "@derived" && !row.open && row.count == 1)
         );
-        workbench.query.set("smoothed".into());
+        workbench.field_query.set("smoothed".into());
         assert!(
             rows.get_untracked().iter().all(|row| row.field.is_none()),
             "Search must not open sections"
@@ -173,13 +173,13 @@ mod tests {
                 .iter()
                 .any(|row| row.id == "@raw" && !row.open)
         );
-        workbench.query.set("absent".into());
+        workbench.field_query.set("absent".into());
         assert!(
             rows.get_untracked()
                 .iter()
                 .any(|row| row.id == "@derived" && row.open && row.count == 0)
         );
-        workbench.query.set(String::new());
+        workbench.field_query.set(String::new());
         assert!(
             rows.get_untracked()
                 .iter()

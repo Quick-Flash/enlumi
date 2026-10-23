@@ -1,3 +1,4 @@
+use crate::tree_lines::{TreeBranchProps, TreeLinesProps};
 use crate::{
     action_button::ActionButtonProps,
     preset_ui::ApplyAction,
@@ -13,7 +14,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn WorkspacePreset(
     workbench: Workbench,
-    file: StoredValue<ProfileFile, LocalStorage>,
+    file: StoredValue<std::sync::Arc<ProfileFile>, LocalStorage>,
     name: String,
     #[prop(optional)] source_name: Option<String>,
 ) -> impl IntoView {
@@ -45,13 +46,14 @@ pub fn WorkspacePreset(
     let plots = StoredValue::new_local(plots);
     view! {
         column(class="workspace-preset") {
+            TreeLines(depth=0,last=true,open=Signal::derive_local(move ||expanded.get()))
             row(class="workspace-preset-heading") {
                 ActionButton(icon=true,class="profile-members-toggle",a11y:label="Show plots and fields in view preset",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).expanded(move ||expanded.get()))},on:click=move |_|{
                     expanded.update(|open|*open = !*open);
                     if expanded.get_untracked() && enabled.get_untracked() && workbench.profiles.instances.with_untracked(|instances|!instances.contains_key(&key.get_untracked())) {
                         workbench.apply_profile(file.with_value(|file|file.path.clone()));
                     }
-                }) {vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)}
+                }) {vector(class="tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)}
                 ProfileViewSource(workbench=workbench,source=Signal::derive_local(move ||Drag{profile:key.get(),item:Item::Workspace(name.get_value())}.source()),name=label,count=0,enabled=enabled)
                 text(class="preset-kind") {{format!("{} plots",plots.with_value(Vec::len))}}
                 Popover(open=actions) {
@@ -69,14 +71,12 @@ pub fn WorkspacePreset(
             }
             if move ||expanded.get() {
                 column(class="workspace-preset-plots") {
-                    ActionButton(class="profile-output-section workspace-plots-toggle",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).label("Plots in saved view").expanded(move ||plots_open.get()))},on:click=move |_|plots_open.update(|open|*open = !*open)) {
-                        vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if plots_open.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)
-                        text {{format!("Plots ({})",plots.with_value(Vec::len))}}
-                    }
+                    TreeBranch(open=plots_open,name="Plots".into(),count=Signal::derive_local(move ||plots.with_value(Vec::len)),depth=1,last=true,class="workspace-plots-toggle")
                     if move ||plots_open.get() {
                     for plot in move ||plots.get_value().into_iter().enumerate().collect::<Vec<_>>(),key=|plot|plot.0 {
                         {{let index=plot.0;let count=plot.1.1;let label=plot.1.0;view! {
-                            column(class="workspace-preset-plot") {
+                            column(class="workspace-preset-plot profile-nested-entry") {
+                                TreeLines(depth=2,last=index+1==plots.with_value(Vec::len))
                                 ProfileOutputRow(workbench=workbench,file=file,drag=Signal::derive_local(move ||Drag{profile:key.get(),item:Item::View(crate::preset_lookup::plot_key(&name.get_value(),index))}),name=label,count=count)
                             }
                         }}}

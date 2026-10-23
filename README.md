@@ -7,7 +7,12 @@ fields onto docked plots.
 ## Features
 
 - Split, tab, resize, and link plots; edit line appearance and reorder legends.
+- Set each plot's background or apply its color to all open plots. Automatic line
+  colors follow Betaflight Blackbox Explorer's palette independently in each plot.
+- Click saved geometry to edit it; drag it onto a plot to place it. Hover a state
+  legend entry to see its mode colors. Screenshot legends include geometry.
 - Search fields and recorded parameters, with Ctrl/Shift selection and group dragging.
+  Field search leaves saved plots, views, workspaces, geometry, and profile files visible.
 - Built-in filters and custom Rust functions compiled to WebAssembly.
 - JSON profiles for field names/units, filter chains, geometry, flight-mode bands,
   and reusable views, with optional firmware matching.

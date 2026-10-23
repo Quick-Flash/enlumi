@@ -745,9 +745,11 @@ fn plot_restore_and_field_subset_preserve_destination_bounds() {
     let workbench = window.scope.with(Workbench::new);
     add_line(workbench, SOURCE, log().prepare(SOURCE).unwrap());
     let pane = workbench.pane();
+    pane.background.set(Some([35, 45, 55]));
     let bundle = capture(workbench, &CaptureKind::Plot(pane.id), "Motor").unwrap();
     let definition: profile::Profile = serde_json::from_value(bundle.document).unwrap();
     let recipe = definition.plot_presets[0].clone();
+    assert_eq!(recipe.background, Some([35, 45, 55]));
     let key = prepare(workbench, definition, Path::new("C:/preset-test.json"));
     let ranges = Ranges::new((0.1, 0.2), (-4., 4.));
     pane.plot.set_view(ranges).unwrap();
@@ -761,6 +763,7 @@ fn plot_restore_and_field_subset_preserve_destination_bounds() {
     assert_eq!(pane.plot.ranges.get_untracked(), ranges);
     assert_eq!(pane.lines.with_untracked(Vec::len), 1);
     assert_eq!(restored.lines.with_untracked(Vec::len), 1);
+    assert_eq!(restored.background.get_untracked(), Some([35, 45, 55]));
     assert!(restored.plot.ranges.get_untracked().x.max > ranges.x.max);
     let source = restored.preset.get_untracked().unwrap();
     assert!(!workbench.preset_modified(&CaptureKind::Plot(restored.id), &source));

@@ -109,10 +109,11 @@ v Profiles
   hover, context menus, and drag behavior.
 - Ctrl/Shift selection spans sections. Drag mixed selection into plots, Filters,
   or Analyze using existing compatibility rules.
-- Search matches display names, original source paths, units, profile names,
-  and preset names. Show match counts beside collapsed sections.
-- Search filters results without forcing sections open. Manual expansion works
-  during search; clearing query preserves chosen expansion state.
+- Field search matches display names, original source paths, units, and profile
+  field labels. Show match counts beside collapsed field sections.
+- Search filters field entries without forcing sections open. Saved plots,
+  views, workspaces, geometry, and profile files remain visible. Manual expansion
+  works during search; clearing query preserves chosen expansion state.
 - Parameters remain under Raw and retain normal search/expansion behavior.
 - Configuration entry points remain visible. Disable unavailable actions and
   explain missing prerequisites. Detail sections still expand on demand.

@@ -36,6 +36,7 @@ pub struct Pane {
     pub loading: RwSignal<Option<String>, LocalStorage>,
     pub dock: DockPane,
     pub preset: RwSignal<Option<crate::preset::PresetSource>, LocalStorage>,
+    pub background: RwSignal<Option<[u8; 3]>, LocalStorage>,
     pub menu_area: RwSignal<Option<NodeRef>, LocalStorage>,
     pub analysis: RwSignal<Option<crate::analysis_state::AnalysisResult>, LocalStorage>,
     pub snapshot: plot::zgui_svg::PlotSnapshotSource,
@@ -85,6 +86,7 @@ impl Pane {
             loading: RwSignal::new_local(None),
             dock: DockPane::new(id),
             preset: RwSignal::new_local(None),
+            background: RwSignal::new_local(None),
             menu_area: RwSignal::new_local(None),
             analysis: RwSignal::new_local(None),
             snapshot: StoredValue::new_local(None),
@@ -139,7 +141,7 @@ pub struct Workbench {
     pub log: RwSignal<Option<Arc<LogStore>>, LocalStorage>,
     pub status: RwSignal<String, LocalStorage>,
     pub loading: RwSignal<bool, LocalStorage>,
-    pub query: RwSignal<String, LocalStorage>,
+    pub field_query: RwSignal<String, LocalStorage>,
     pub browser_fields: RwSignal<Vec<String>, LocalStorage>,
     pub sidebar_width: RwSignal<f32, LocalStorage>,
     pub sidebar_visible: RwSignal<bool, LocalStorage>,
@@ -202,7 +204,7 @@ impl Workbench {
             log: RwSignal::new_local(None),
             status: RwSignal::new_local("Open a log file to begin".into()),
             loading: RwSignal::new_local(false),
-            query: RwSignal::new_local(String::new()),
+            field_query: RwSignal::new_local(String::new()),
             browser_fields: RwSignal::new_local(Vec::new()),
             sidebar_width: RwSignal::new_local(280.0),
             sidebar_visible: RwSignal::new_local(true),
@@ -313,7 +315,7 @@ impl Workbench {
                     self.filter_outputs.set(Vec::new());
                     self.filter_drop_active.set(false);
                     self.filter_error.set(String::new());
-                    self.query.set(String::new());
+                    self.field_query.set(String::new());
                     self.selected_field.set(None);
                     self.selected_fields.set(BTreeSet::new());
                     self.selection_anchor.set(None);
@@ -541,6 +543,7 @@ impl Workbench {
             })
             .collect();
         copy.analysis.set(source.analysis.get_untracked());
+        copy.background.set(source.background.get_untracked());
         if let Some(title) = self
             .profiles
             .titles

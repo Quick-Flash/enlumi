@@ -65,6 +65,16 @@ impl Palette {
             .expect("Measurement fill is eight hex digits")
             .to_be_bytes()
     }
+    pub fn plot_background(self) -> [u8; 3] {
+        let hex = self
+            .declarations()
+            .lines()
+            .find_map(|line| line.strip_prefix("--app-plot-background: #"))
+            .and_then(|value| value.strip_suffix(';'))
+            .expect("Palette defines plot background");
+        let value = u32::from_str_radix(hex, 16).expect("Background is hexadecimal RGB");
+        [(value >> 16) as u8, (value >> 8) as u8, value as u8]
+    }
 }
 pub fn stylesheet() -> String {
     format!(

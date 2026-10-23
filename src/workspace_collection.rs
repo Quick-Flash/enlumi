@@ -1,3 +1,4 @@
+use crate::tree_lines::TreeLinesProps;
 use crate::{
     action_button::ActionButtonProps,
     profile::identity::{Drag, Item, ProfileKey},
@@ -12,7 +13,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn WorkspaceCollection(
     workbench: Workbench,
-    file: StoredValue<ProfileFile, LocalStorage>,
+    file: StoredValue<std::sync::Arc<ProfileFile>, LocalStorage>,
     name: String,
 ) -> impl IntoView {
     let name = StoredValue::new_local(name);
@@ -32,8 +33,9 @@ pub fn WorkspaceCollection(
         )
     });
     view! {column(class="workspace-collection") {
+        TreeLines(depth=0,last=true,open=Signal::derive_local(move ||expanded.get()))
         row(class="workspace-preset-heading") {
-            ActionButton(icon=true,class="profile-members-toggle",a11y:label="Show views in workspace",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).expanded(move ||expanded.get()))},on:click=move |_|expanded.update(|open|*open = !*open)) {vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)}
+            ActionButton(icon=true,class="profile-members-toggle",a11y:label="Show views in workspace",{..Attrs::new().a11y_from(A11yBinding::new(Role::Button).expanded(move ||expanded.get()))},on:click=move |_|expanded.update(|open|*open = !*open)) {vector(class="tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if expanded.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)}
             ProfileViewSource(workbench=workbench,source=Signal::derive_local(move ||Drag{profile:key.get(),item:Item::WorkspacePreset(name.get_value())}.source()),name=name.get_value(),count=0,enabled=Signal::derive_local(move ||workbench.log.with(Option::is_some)&&!workbench.loading.get()&&!workbench.profiles.busy.get()))
             text(class="preset-kind") {{format!("{} views",views.with_value(Vec::len))}}
             Popover(open=menu) {
@@ -51,11 +53,10 @@ pub fn WorkspaceCollection(
         }
         if move ||expanded.get() {
             column(class="workspace-collection-views") {
-                text(class="profile-output-section") {{format!("Views ({})",views.with_value(Vec::len))}}
                 for view in move ||views.get_value().into_iter().enumerate().collect::<Vec<_>>(),key=|view|view.0 {
-                    {{let source=crate::preset_lookup::view_key(&name.get_value(),view.0);let label=view.1.0;let mut nested=file.get_value();nested.workspace_plots.push((source.clone(),view.1.1));let nested=StoredValue::new_local(nested);view! {
+                    {{let source=crate::preset_lookup::view_key(&name.get_value(),view.0);let label=view.1.0;let mut nested=file.with_value(|file|file.as_ref().clone());nested.workspace_plots.push((source.clone(),view.1.1));let nested=StoredValue::new_local(std::sync::Arc::new(nested));let last=view.0+1==views.with_value(Vec::len);view! {column(class="profile-nested-entry") {TreeLines(depth=1,last=last)
                         WorkspacePreset(workbench=workbench,file=nested,name=label,source_name=source)
-                    }}}
+                    }}}}
                 }
             }
         }
