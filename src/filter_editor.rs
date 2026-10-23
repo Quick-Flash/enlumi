@@ -1,3 +1,4 @@
+use crate::copyable_text::CopyableTextProps;
 use crate::filter_parameters::FilterParametersProps;
 use crate::filter_save_button::FilterSaveButtonProps;
 use crate::{
@@ -29,8 +30,8 @@ pub fn FilterEditor(workbench: Workbench) -> impl IntoView {
                 } else {
                     FilterParameters(workbench = workbench)
                 }
-                if move || workbench.filter_kind.get() != "rust" && !workbench.filter_error.get().is_empty() {
-                    text(class = "filter-error", a11y:role = Role::Alert) {{move || workbench.filter_error.get()}}
+                if move || workbench.filter_kind.get() != "rust" && !workbench.filter_error.with(String::is_empty) {
+                    CopyableText(class="filter-error",label="Filter error",value=workbench.filter_error)
                 }
             }
             column(class = "filter-create-action") { FilterSaveButton(workbench = workbench, prominent = true) }

@@ -109,4 +109,5 @@
 .profile-output, .workspace-preset, .workspace-collection { position: relative; }
 .profile-tree-entry .workspace-preset-plots, .profile-tree-entry .workspace-collection-views, .profile-view-members { padding-left: 0; }
 .profile-tree-entry .workspace-preset-plot.profile-nested-entry { padding-left: 24px; }
+.profile-tree-entry .workspace-collection-view.profile-nested-entry { padding-left: 24px; }
 .profile-view-members > .profile-nested-entry { height: 28px; min-height: 28px; }

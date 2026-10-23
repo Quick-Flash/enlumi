@@ -1,4 +1,5 @@
 use crate::band_mapping_add::BandMappingAddProps;
+use crate::copyable_text::CopyableTextProps;
 use crate::{
     action_button::ActionButtonProps, band_rule_row::BandRuleRowProps, geometry_inspector::change,
     state::Workbench,
@@ -24,7 +25,7 @@ pub fn BandMapping(workbench: Workbench, id: u64) -> impl IntoView {
         }
         BandMappingAdd(workbench=workbench,id=id)
         ActionButton(class="band-show-labels",class:setting-active=move ||item().is_some_and(|item|item.labels),on:click=move |_|change(workbench,id,|item|item.labels = !item.labels)) {{move ||if item().is_some_and(|item|item.labels){"Labels: on"}else{"Labels: off"}}}
-        if move || item().is_some_and(|item|item.states.as_ref().is_some_and(|states|states.error.is_some())) {text(class="warnings") {{move ||item().and_then(|item|item.states.as_ref().and_then(|states|states.error.clone())).unwrap_or_default()}}}
+        if move || item().is_some_and(|item|item.states.as_ref().is_some_and(|states|states.error.is_some())) {CopyableText(class="warnings",label="State band mapping error",value=Signal::derive_local(move ||item().and_then(|item|item.states.as_ref().and_then(|states|states.error.clone())).unwrap_or_default()))}
         text(class="geometry-help muted") {"Source controls time bounds. Derived sources refresh automatically. Missing values stay unshaded."}
     }}
 }

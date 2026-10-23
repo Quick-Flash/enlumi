@@ -1,3 +1,4 @@
+use crate::copyable_text::CopyableTextProps;
 use crate::{action_button::ActionButtonProps, state::Workbench};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
@@ -42,7 +43,7 @@ pub fn PresetDialog(workbench: Workbench) -> impl IntoView {
                         } else { ProfileCollection(workbench=workbench,collection=collection) }
                     }
                 }
-                text(class="warnings",a11y:role=Role::Alert) {{move ||ui.error.get()}}
+                if move ||!ui.error.with(String::is_empty) {CopyableText(class="warnings",label="Profile save error",value=ui.error)}
                 }
                 }
                 DialogFooter {

@@ -43,6 +43,8 @@
 
 .page .plot-tabs .plot-tab { border-radius: var(--app-radius) var(--app-radius) 0 0; }
 .page .plot-strip .plot-tabs .zui-button.plot-tab-select { max-width: none; flex: none; }
+/* Keep a native scroll region for caret reveal without a horizontal gutter. */
+.page .plot-tabs .plot-tab-name.zui-input { flex: none; width: 180px; overflow-x: hidden; overflow-y: auto; white-space: nowrap; }
 .plot-links-surface.plot-links-surface, .plot-settings-surface.plot-settings-surface, .workbench-legend.workbench-legend { border-radius: var(--app-radius); }
 .plot-links-surface .zui-menu__item, .plot-links-surface .zui-menu__indicator { border-radius: var(--app-radius-sm); }
 
@@ -56,6 +58,10 @@
 .plot-background-layer, .plot-background-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .plot-background-swatch { width: 13px; height: 13px; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius-sm); pointer-events: none; }
 .plot-background-menu.zui-popover { box-sizing: border-box; width: 202px; padding: 10px; gap: 8px; background: var(--app-surface); color: var(--app-foreground); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); }
+.plot-background-menu.zui-surface { box-shadow: none; }
+.plot-background-menu .color-hue.zui-slider > .zui-slider__thumb { box-shadow: none; transition: none; }
+.plot-background-menu .zui-slider:focus-visible { outline: 1px solid var(--app-focus); }
+.plot-background-menu .zui-input.zui-field { box-shadow: none; transition: none; }
 .plot-background-actions { gap: 6px; }
 .plot-background-menu .app-action.zui-button[data-variant="ghost"] { flex: none; height: 27px; min-height: 27px; padding: 0 6px; font-size: 12px; }
 .plot-background-actions .app-action.zui-button[data-variant="ghost"] { flex: 1; min-width: 0; }

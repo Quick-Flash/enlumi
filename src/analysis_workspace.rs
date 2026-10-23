@@ -1,3 +1,4 @@
+use crate::copyable_text::CopyableTextProps;
 use crate::{
     action_button::ActionButtonProps, analysis_source::AnalysisSourceProps, state::Workbench,
 };
@@ -146,7 +147,7 @@ fn ViewAnalysisWorkspace(workbench: Workbench) -> impl IntoView {
                         ActionButton(on:click=move |_|ui.reset()) {"Clear"}
                     }
                     text(class="muted") {"Results open as dock tabs. Drag tabs above, below, or beside other plots; use Links to share axes and pointer. Results are snapshots."}
-                    text(class="analysis-summary muted",a11y:role=Role::Status) {{move ||ui.message.get()}}
+                    if move ||!ui.message.with(String::is_empty) {CopyableText(class="analysis-summary muted",label="Analysis status and errors",value=ui.message)}
                 }
 
             }

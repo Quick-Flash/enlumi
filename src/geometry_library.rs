@@ -1,3 +1,4 @@
+use crate::copyable_text::CopyableTextProps;
 use crate::{action_button::ActionButtonProps, geometry::GeometryKind, state::Workbench};
 use zgui::prelude::*;
 #[component]
@@ -17,7 +18,7 @@ pub fn GeometryLibrary(workbench: Workbench) -> impl IntoView {
                 text(class="muted") {{move ||if workbench.bands.busy.get(){"Reading source..."}else{"Drop one discrete field here (e.g. nav_state)."}}}
                 ActionButton(class="blank-state-mapping",on:click=move |_|workbench.new_state_mapping()) {"Blank mapping"}
                 ActionButton(class="cancel-state-bands",on:click=move |_|workbench.cancel_band_source()) {"Cancel"}
-                if move ||!workbench.bands.error.with(String::is_empty) {text(class="warnings") {{move ||workbench.bands.error.get()}}}
+                if move ||!workbench.bands.error.with(String::is_empty) {CopyableText(class="warnings",label="State band source error",value=workbench.bands.error)}
             }
         }
         if move || !workbench.bands.open.get() && workbench.geometry.items.with(Vec::is_empty) {text(class="muted") {"Draw bounds; drag saved shapes onto plots."}}

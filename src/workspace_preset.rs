@@ -17,6 +17,7 @@ pub fn WorkspacePreset(
     file: StoredValue<std::sync::Arc<ProfileFile>, LocalStorage>,
     name: String,
     #[prop(optional)] source_name: Option<String>,
+    #[prop(optional)] plots: Option<Vec<(String, usize)>>,
 ) -> impl IntoView {
     let label = name.clone();
     let name = StoredValue::new_local(source_name.unwrap_or(name));
@@ -36,12 +37,14 @@ pub fn WorkspacePreset(
             && !workbench.derived_busy.get()
             && workbench.log.with(Option::is_some)
     });
-    let plots = file.with_value(|file| {
-        file.workspace_plots
-            .iter()
-            .find(|(view, _)| view == &name.get_value())
-            .map(|(_, plots)| plots.clone())
-            .unwrap_or_default()
+    let plots = plots.unwrap_or_else(|| {
+        file.with_value(|file| {
+            file.workspace_plots
+                .iter()
+                .find(|(view, _)| view == &name.get_value())
+                .map(|(_, plots)| plots.clone())
+                .unwrap_or_default()
+        })
     });
     let plots = StoredValue::new_local(plots);
     view! {

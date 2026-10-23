@@ -17,6 +17,7 @@ mod band_rule_row;
 mod band_state;
 mod browser;
 mod browser_fields;
+mod copyable_text;
 mod derived;
 mod derived_state;
 #[cfg(target_os = "linux")]

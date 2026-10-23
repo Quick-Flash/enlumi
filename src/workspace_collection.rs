@@ -1,4 +1,4 @@
-use crate::tree_lines::TreeLinesProps;
+use crate::tree_lines::{TreeBranchProps, TreeLinesProps};
 use crate::{
     action_button::ActionButtonProps,
     profile::identity::{Drag, Item, ProfileKey},
@@ -18,6 +18,7 @@ pub fn WorkspaceCollection(
 ) -> impl IntoView {
     let name = StoredValue::new_local(name);
     let expanded = RwSignal::new_local(false);
+    let views_open = RwSignal::new_local(true);
     let menu = RwSignal::new_local(false);
     let views = StoredValue::new_local(file.with_value(|file| {
         file.collections
@@ -53,10 +54,13 @@ pub fn WorkspaceCollection(
         }
         if move ||expanded.get() {
             column(class="workspace-collection-views") {
+                TreeBranch(open=views_open,name="Views".into(),count=Signal::derive_local(move ||views.with_value(Vec::len)),depth=1,last=true,class="workspace-views-toggle")
+                if move ||views_open.get() {
                 for view in move ||views.get_value().into_iter().enumerate().collect::<Vec<_>>(),key=|view|view.0 {
-                    {{let source=crate::preset_lookup::view_key(&name.get_value(),view.0);let label=view.1.0;let mut nested=file.with_value(|file|file.as_ref().clone());nested.workspace_plots.push((source.clone(),view.1.1));let nested=StoredValue::new_local(std::sync::Arc::new(nested));let last=view.0+1==views.with_value(Vec::len);view! {column(class="profile-nested-entry") {TreeLines(depth=1,last=last)
-                        WorkspacePreset(workbench=workbench,file=nested,name=label,source_name=source)
+                    {{let source=crate::preset_lookup::view_key(&name.get_value(),view.0);let label=view.1.0;let plots=view.1.1;let last=view.0+1==views.with_value(Vec::len);view! {column(class="workspace-collection-view profile-nested-entry") {TreeLines(depth=2,last=last)
+                        WorkspacePreset(workbench=workbench,file=file,name=label,source_name=source,plots=plots)
                     }}}}
+                }
                 }
             }
         }

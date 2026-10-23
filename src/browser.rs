@@ -85,7 +85,7 @@ pub fn Browser(workbench: Workbench) -> impl IntoView {
                             FieldRow(workbench=workbench,row=Memo::new(move |_|rows.with(|rows|rows.get(index).cloned())),visible_fields=visible_fields)
                         }
                     }
-                    TreeBranch(open=workbench.profiles.open,name="Profiles".into(),count=0usize,depth=0,class="profiles-trigger browser-section")
+                    TreeBranch(open=workbench.profiles.open,name="Profiles".into(),count=0usize,depth=0,connectors=false,class="profiles-trigger browser-section")
                     column(class="profile-browser-pane",class:hidden=move ||!workbench.profiles.open.get()) {
                         ProfileLibrary(workbench=workbench)
                     }

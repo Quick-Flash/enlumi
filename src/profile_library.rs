@@ -1,3 +1,4 @@
+use crate::copyable_text::CopyableTextProps;
 use crate::sidebar_help::SidebarHelpProps;
 use crate::tree_lines::{TreeBranchProps, TreeLinesProps};
 use crate::{
@@ -493,8 +494,8 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                                 }
                                 if move || expanded.with(|expanded| expanded.contains(&path)) {
                                 if move || !compatible { text(class = "profile-compatibility muted") { {reason.get_value()} } }
-                                    text(class="profile-diagnostics muted") {{record.with_value(|file|file.path.display().to_string())}}
-                                    text(class="profile-diagnostics muted") {{record.with_value(|file|file.matched.clone())}}
+                                    CopyableText(class="profile-diagnostics muted",label="Profile file path",value=Signal::stored_local(record.with_value(|file|file.path.display().to_string())))
+                                    CopyableText(class="profile-diagnostics muted",label="Profile matching details",value=Signal::stored_local(record.with_value(|file|file.matched.clone())))
 
                                 }
                             } })
@@ -511,7 +512,7 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 column(class="profile-remove-preview") {
                     text(class="heading") { "Unload profile outputs?" }
                     text(class="muted") {{move || workbench.profiles.removal.get().and_then(|key|workbench.profiles.instances.with(|all|all.get(&key).map(|p|format!("{}: {} fields, {} geometry, {} placed lines. Plots remain.",p.name,p.fields.len(),p.geometry.len(),p.line_ids().len())))).unwrap_or_default()}}
-                    text(class="warnings") {{move ||workbench.profiles.removal.get().map(|key|workbench.profile_remove_blockers(&key).join("\n")).unwrap_or_default()}}
+                    CopyableText(class="warnings",label="Profile removal blockers",value=Signal::derive_local(move ||workbench.profiles.removal.with(|key|key.as_ref().map(|key|workbench.profile_remove_blockers(key).join("\n")).unwrap_or_default())))
                     row {
                         ActionButton(disabled=Signal::derive_local(move ||unavailable.get()||workbench.profiles.removal.get().is_none_or(|key|!workbench.profile_remove_blockers(&key).is_empty())),on:click=move |_|{if let Some(key)=workbench.profiles.removal.get_untracked(){workbench.remove_profile(key);}}) { "Unload outputs" }
                         ActionButton(class="profile-remove-cancel",on:click=move |_|workbench.profiles.removal.set(None)) { "Cancel" }
@@ -519,7 +520,7 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 }
             }
             if move || workbench.profiles.busy.get() { text(a11y:role = Role::Status) { "Preparing profile…" } }
-            text(class = "warnings", a11y:role = Role::Status) {{move || workbench.profiles.error.get()}}
+            if move ||!workbench.profiles.error.with(String::is_empty) {CopyableText(class="warnings",label="Profile error",value=workbench.profiles.error)}
             if move || !workbench.profiles.warnings.with(Vec::is_empty) {
                 ActionButton(class = "profile-warnings-toggle", on:click = move |_| warnings_open.update(|open| *open = !*open)) {
                     vector(class="profile-tree-arrow",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if warnings_open.get(){"M2 4 L6 8 L10 4"}else{"M4 2 L8 6 L4 10"}),a11y:hidden=true)
@@ -527,7 +528,7 @@ pub fn ProfileLibrary(workbench: Workbench) -> impl IntoView {
                 }
                 if move || warnings_open.get() {
                 scroll(class = "profile-warnings", a11y:label = "Skipped profile resources") {
-                    text(class = "muted") {{move || workbench.profiles.warnings.with(|warnings| format!("{} skipped items:\n{}", warnings.len(), warnings.iter().take(50).cloned().collect::<Vec<_>>().join("\n")))}}
+                    CopyableText(class="muted",label="Skipped profile resources",value=Signal::derive_local(move ||workbench.profiles.warnings.with(|warnings|format!("{} skipped items:\n{}",warnings.len(),warnings.join("\n")))))
                 }
                 }
             }

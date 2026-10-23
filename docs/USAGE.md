@@ -78,7 +78,8 @@ plot** / **Use in filter**. Text records remain readable without plot actions. S
 absent from log cannot be reconstructed.
 
 **Profiles → Folder…** chooses saved library directory. Nested folders and
-auto firmware matching use same location. **Profiles** groups saved **Views** and **Plots** directly.
+auto firmware matching use same location. **Profiles** groups saved workspaces, views, and plots.
+Expand a workspace's **Views** branch to drag an entire view into another workspace.
 Views contain plots, and plots contain fields. **Profile files** holds file edit/delete actions.
 Saved resources use the same tree connectors, disclosure arrows, and row spacing as
 raw fields. Large profile field lists build only nearby rows as you scroll in the
@@ -176,6 +177,9 @@ Automatic session recovery and multi-log comparison are not implemented yet.
 state, multiple inputs, and named outputs. Requires a Rust compiler with WASM
 target; see [setup, examples, and limits](RUST_FILTERS.md). Source is local trusted
 code, compiled on demand; failed runs preserve existing saved fields.
+Compiler diagnostics support drag selection and normal copy shortcuts. **Copy all**
+copies the complete output, including text outside the visible area. Filter errors,
+profile diagnostics, and profile file paths are also selectable and read-only.
 
 Legend gear opens line settings. Click selects one line; Ctrl-click toggles lines; Shift-click selects a range. Check marks, borders, and selection count show active lines. Width, marker shape/radius, and connection controls apply to every selected line; color editing requires one selected line. Color controls stay visible but disabled for multiple selections; at least one line remains selected. Hover info icon for selection help. **Add filters** closes settings and opens a fresh filter batch containing every field from that legend, including derived fields.
 

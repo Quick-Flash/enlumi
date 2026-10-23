@@ -17,6 +17,8 @@ use zgui_testkit_scene::CaptureRenderer;
 
 #[derive(Default, Debug)]
 struct Counts {
+    peak_shadows: usize,
+    peak_groups: usize,
     peak_marks: usize,
     peak_vertices: usize,
     glyphs: usize,
@@ -25,6 +27,7 @@ struct Counts {
     line_strokes: Vec<f32>,
     painted_boxes: Vec<([f32; 4], String)>,
     painted_radii: Vec<([f32; 4], [f32; 8])>,
+    painted_text: Vec<([f32; 4], [f32; 4])>,
 }
 struct Capture {
     renderer: CaptureRenderer,
@@ -41,6 +44,11 @@ impl Renderer for Capture {
         self.renderer.target()
     }
     fn draw(&mut self, scene: &zgui::scene::Scene, damage: &zgui::bits::DamageSet) -> FrameOutcome {
+        {
+            let mut counts = self.counts.borrow_mut();
+            counts.peak_shadows = counts.peak_shadows.max(scene.primitives.shadows.len());
+            counts.peak_groups = counts.peak_groups.max(scene.primitives.groups.len());
+        }
         // Empty damage retains previous composed frame.
         if damage.is_empty() {
             return FrameOutcome::Presented(FrameStats::default());
@@ -85,7 +93,28 @@ impl Renderer for Capture {
                 painted_radii.push((quad.bounds, quad.radii));
             }
         }
+        let peak_shadows = self.counts.borrow().peak_shadows;
+        let peak_groups = self.counts.borrow().peak_groups;
+        let mut painted_text = std::mem::take(&mut self.counts.borrow_mut().painted_text);
+        for (bounds, color) in scene
+            .primitives
+            .mono_sprites
+            .iter()
+            .map(|sprite| (sprite.bounds, sprite.color))
+            .chain(
+                scene
+                    .primitives
+                    .subpixel_sprites
+                    .iter()
+                    .map(|sprite| (sprite.bounds, sprite.color)),
+            )
+        {
+            painted_text.retain(|(previous, _)| *previous != bounds);
+            painted_text.push((bounds, color));
+        }
         *self.counts.borrow_mut() = Counts {
+            peak_shadows,
+            peak_groups,
             peak_marks,
             peak_vertices,
             seen_steps,
@@ -93,6 +122,7 @@ impl Renderer for Capture {
             line_strokes: Vec::new(),
             painted_boxes,
             painted_radii,
+            painted_text,
             glyphs: scene.primitives.mono_sprites.len() + scene.primitives.subpixel_sprites.len(),
         };
         self.renderer.draw(scene, damage);
@@ -377,19 +407,23 @@ fn compact_saved_rows_toggle_editing_delete_with_x_and_fill_window_height() {
 
 #[test]
 fn rust_filter_editor_fills_workspace_and_input_order_updates() {
-    use crate::{derived::FilterInput, filter_workspace::FilterWorkspaceProps, state::Workbench};
-    use zgui_ui_tokens::prelude::*;
+    use crate::{
+        derived::FilterInput, filter_workspace::FilterWorkspaceProps, state::Workbench,
+        theme::AppThemeProps,
+    };
     let model = Rc::new(RefCell::new(None));
     let saved = model.clone();
+    let paints = Rc::new(RefCell::new(Counts::default()));
+    let captured = paints.clone();
     let handler = app().with_size(1200.0, 800.0)
-        .with_renderer(Box::new(|_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(renderer)) }))
+        .with_renderer(Box::new(move |_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture{renderer,counts:captured.clone()})) }))
         .with_stylesheet(crate::theme::stylesheet())
         .into_handler(move || {
             let workbench = Workbench::new();
             workbench.set_filter_kind("rust".into());
             workbench.filter_inputs.set(vec![FilterInput { source: "first".into(), name: "First".into() }, FilterInput { source: "second".into(), name: "Second".into() }, FilterInput { source: "third".into(), name: "Third".into() }]);
             *saved.borrow_mut() = Some(workbench);
-            view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "workbench") { row(class = "body") { FilterWorkspace(workbench = workbench) } } } }
+            view! { AppTheme(palette=crate::theme::Palette::Slate) { column(class = "page workbench") { row(class = "body") { FilterWorkspace(workbench = workbench) } } } }
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -631,6 +665,7 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
         "Long outputs must scroll without hiding create button: {create:?}, {panel:?}"
     );
     let diagnostics = harness.app().windows()[0].nodes_with_class("script-diagnostics-panel")[0];
+    paints.borrow_mut().painted_text.clear();
     workbench.filter_error.set(
         (0..40)
             .map(|index| format!("error {index}: example diagnostic"))
@@ -638,6 +673,102 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
             .join("\n"),
     );
     harness.settle(128);
+    let full_error = workbench.filter_error.get_untracked();
+    {
+        let window = &harness.app().windows()[0];
+        let bounds = window.box_with_class("script-diagnostics").unwrap();
+        let colors: Vec<_> = paints
+            .borrow()
+            .painted_text
+            .iter()
+            .filter(|(b, _)| {
+                b[0] >= bounds.origin.x.0
+                    && b[1] >= bounds.origin.y.0
+                    && b[0] < bounds.origin.x.0 + bounds.size.width.0
+                    && b[1] < bounds.origin.y.0 + bounds.size.height.0
+            })
+            .map(|(_, color)| *color)
+            .collect();
+        assert!(
+            !colors.is_empty(),
+            "Compiler output must paint readable glyphs"
+        );
+        assert!(
+            colors
+                .iter()
+                .all(|color| color[0] > color[1] && color[0] > color[2]),
+            "Compiler output must actually paint red, not only compute a red style: {colors:?}"
+        );
+    }
+    let output = harness.app().windows()[0]
+        .box_with_class("script-diagnostics")
+        .unwrap();
+    let (x, y) = (output.origin.x.0 + 5., output.origin.y.0 + 7.);
+    harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x + 80., y));
+    harness.deliver_to_first(pointer(PointerAction::Released, x + 80., y));
+    harness.settle(128);
+    let key = |harness: &mut Harness<zgui::runtime::Runtime>, text: &str, modifiers| {
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character(text),
+            modifiers,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    };
+    key(&mut harness, "c", Modifiers::PRIMARY);
+    let selected = zgui::platform::PlatformCx::clipboard(harness.platform())
+        .read_blocking(
+            zgui::platform::ClipboardKind::Standard,
+            zgui::platform::ClipboardFormat::Text,
+        )
+        .unwrap();
+    assert!(
+        !selected.as_text().unwrap().is_empty() && selected.as_text() != Some(full_error.as_str()),
+        "Dragging highlights a copyable part of the diagnostic"
+    );
+    key(&mut harness, "a", Modifiers::PRIMARY);
+    key(&mut harness, "c", Modifiers::PRIMARY);
+    let copied = zgui::platform::PlatformCx::clipboard(harness.platform())
+        .read_blocking(
+            zgui::platform::ClipboardKind::Standard,
+            zgui::platform::ClipboardFormat::Text,
+        )
+        .unwrap();
+    assert_eq!(
+        copied.as_text(),
+        Some(full_error.as_str()),
+        "Select all copies diagnostics beyond the visible scrollport"
+    );
+    key(&mut harness, "overwrite", Modifiers::NONE);
+    assert_eq!(
+        workbench.filter_error.get_untracked(),
+        full_error,
+        "Diagnostics stay read-only"
+    );
+    let window = &harness.app().windows()[0];
+    let output = window.nodes_with_class("script-diagnostics")[0];
+    assert_eq!(
+        window.dom().text_content(output),
+        full_error,
+        "Typing must not alter the displayed compiler output"
+    );
+    zgui::platform::PlatformCx::clipboard(harness.platform())
+        .write(
+            zgui::platform::ClipboardKind::Standard,
+            "sentinel".into(),
+            Default::default(),
+        )
+        .unwrap();
+    click_class(&mut harness, "copy-script-diagnostics");
+    let copied = zgui::platform::PlatformCx::clipboard(harness.platform())
+        .read_blocking(
+            zgui::platform::ClipboardKind::Standard,
+            zgui::platform::ClipboardFormat::Text,
+        )
+        .unwrap();
+    assert_eq!(copied.as_text(), Some(full_error.as_str()));
     let window = &harness.app().windows()[0];
     assert_eq!(
         window.nodes_with_class("script-diagnostics-panel")[0],
@@ -3366,13 +3497,32 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
 }
 
 fn geometry_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workbench) {
+    let (harness, workbench, _) = geometry_harness_with_counts();
+    (harness, workbench)
+}
+
+fn geometry_harness_with_counts() -> (
+    Harness<zgui::runtime::Runtime>,
+    crate::state::Workbench,
+    Rc<RefCell<Counts>>,
+) {
+    geometry_harness_with_renderer(None)
+}
+
+fn geometry_harness_with_renderer(
+    factory: Option<zgui::runtime::RendererFactory>,
+) -> (
+    Harness<zgui::runtime::Runtime>,
+    crate::state::Workbench,
+    Rc<RefCell<Counts>>,
+) {
     use crate::{browser::BrowserProps, theme::AppThemeProps, workspace::PlotWorkspaceProps};
     let model = Rc::new(RefCell::new(None));
     let built = Rc::clone(&model);
     let counts = Rc::new(RefCell::new(Counts::default()));
     let captured = Rc::clone(&counts);
     let handler=app().with_size(1200.,800.)
-        .with_renderer(Box::new(move |_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(Capture{renderer,counts:Rc::clone(&captured)}))}))
+        .with_renderer(factory.unwrap_or_else(||Box::new(move |_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(Capture{renderer,counts:Rc::clone(&captured)}))})))
         .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
         .into_handler(move || {let workbench=crate::state::Workbench::new();*built.borrow_mut()=Some(workbench);
             view!{AppTheme(palette=crate::theme::Palette::Forest){column(class="workbench page"){row(class="body"){Browser(workbench=workbench) PlotWorkspace(workbench=workbench)}}}}
@@ -3384,7 +3534,7 @@ fn geometry_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workben
     )));
     harness.settle(256);
     let workbench = model.borrow().unwrap();
-    (harness, workbench)
+    (harness, workbench, counts)
 }
 
 fn preset_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workbench) {
@@ -5413,10 +5563,131 @@ fn plot_tab_pointer_rename_and_keyboard_commit_cancel_blur() {
         long_width > short_width + 100. && long_width > 96.,
         "Long plot names must widen their tabs: {short_width} -> {long_width}"
     );
+    click_class(&mut harness, "plot-tab-select");
+    key(&mut harness, zgui::vocab::NamedKey::F2);
+    harness.advance(Duration::from_millis(20));
+    harness.settle(128);
+    assert!(
+        harness.platform().offscreens()[0]
+            .last_text_input()
+            .is_some_and(|area| area.is_some()),
+        "Renaming enables native text input immediately"
+    );
+    text(
+        &mut harness,
+        "A long plot name that must scroll with its caret without adding any scrollbar",
+    );
+    {
+        let window = &harness.app().windows()[0];
+        let document = window.document().borrow();
+        let store = document.store();
+        let mut stack = vec![document.root_index().unwrap()];
+        let mut field = None;
+        while let Some(index) = stack.pop() {
+            if store
+                .classes_of(index)
+                .iter()
+                .any(|class| class.0.as_ref() == "plot-tab-name")
+            {
+                field = Some(store.key_of(index));
+                break;
+            }
+            let mut child = store.core(index).first_child();
+            while let Some(index) = child {
+                stack.push(index);
+                child = store.core(index).next_sibling();
+            }
+        }
+        let layout = window.layout().borrow();
+        for key in layout.boxes_of(field.expect("Rename field")) {
+            let bounds = layout.layout_of(*key).unwrap();
+            assert_eq!(
+                bounds.scrollbar_size.height.0, 0.,
+                "Renaming must not reserve a horizontal scrollbar gutter"
+            );
+            assert_eq!(
+                bounds.scrollbar_size.width.0, 0.,
+                "Single-line rename must not reserve a vertical scrollbar gutter"
+            );
+        }
+        let field = window.nodes_with_class("plot-tab-name")[0];
+        assert!(
+            zgui::view::ViewHost::scroll_position(window.host().as_ref(), field)
+                .offset
+                .x
+                .0
+                > 0.,
+            "Caret still reveals the end of a long name: {:?}, {:?}",
+            window.box_with_class("plot-tab-name"),
+            zgui::view::ViewHost::scroll_position(window.host().as_ref(), field)
+        );
+    }
+    key(&mut harness, zgui::vocab::NamedKey::Enter);
     assert!(
         harness.app().windows()[0]
             .pointer_capture(zgui::vocab::PointerId::MOUSE)
             .is_none()
+    );
+}
+
+#[test]
+fn newly_mounted_field_enables_native_text_input_after_layout() {
+    use zgui::reactive::RenderEffect;
+    use zgui_ui::prelude::*;
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler = app()
+        .with_size(400., 200.)
+        .with_renderer(Box::new(|_, target| {
+            let mut renderer = CaptureRenderer::new();
+            renderer.configure(target);
+            Ok(Box::new(renderer))
+        }))
+        .into_handler(move || {
+            let show = RwSignal::new_local(false);
+            let value = RwSignal::new_local(String::new());
+            let input = NodeRef::new();
+            let effect = RenderEffect::new(move |_| {
+                if input.get().is_some() {
+                    input.focus();
+                }
+            });
+            on_cleanup_local(move || drop(effect));
+            *captured.borrow_mut() = Some((show, value));
+            view! {column {if move ||show.get() {Input(node_ref=input,value=value)}}}
+        })
+        .unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.settle(128);
+    let (show, value) = saved.borrow().unwrap();
+    show.set(true);
+    harness.settle(128);
+    assert!(
+        harness.platform().offscreens()[0]
+            .last_text_input()
+            .is_some_and(|area| area.is_some()),
+        "A field focused before layout must enable native text input without switching windows"
+    );
+    harness.deliver_to_first(SurfaceEvent::Ime(zgui::vocab::ImeEvent::Commit(
+        "Roll PID".into(),
+    )));
+    harness.settle(128);
+    assert_eq!(value.get_untracked(), "Roll PID");
+    harness.deliver_to_first(SurfaceEvent::Focused(false));
+    harness.settle(128);
+    value.set("Updated while inactive".into());
+    harness.settle(128);
+    assert_eq!(
+        harness.platform().offscreens()[0].last_text_input(),
+        Some(None),
+        "Painting an inactive window must leave native text input disabled"
+    );
+    harness.deliver_to_first(SurfaceEvent::Focused(true));
+    harness.settle(128);
+    assert!(
+        harness.platform().offscreens()[0]
+            .last_text_input()
+            .is_some_and(|area| area.is_some())
     );
 }
 
@@ -6437,6 +6708,272 @@ fn background_picker_edits_its_plot_and_exports_the_live_color() {
     click_class(&mut harness, "plot-background-theme-all");
     assert_eq!(first.background.get_untracked(), None);
     assert_eq!(second.background.get_untracked(), None);
+}
+
+#[test]
+#[ignore = "requires a graphics device; run explicitly to check cold popup rendering"]
+fn background_picker_gpu_cold_open() {
+    let graphics = zgui_render_wgpu::SharedGraphics::new();
+    let factory = Box::new(
+        move |_: &std::sync::Arc<dyn zgui::platform::Surface>, target| {
+            let mut renderer = graphics.renderer_offscreen(
+                target,
+                zgui_render_wgpu::wgpu::TextureFormat::Bgra8Unorm,
+                false,
+            )?;
+            zgui_render_vector_vello::attach(&mut renderer, target.size);
+            Ok(Box::new(renderer) as Box<dyn Renderer>)
+        },
+    );
+    let (mut harness, _, _) = geometry_harness_with_renderer(Some(factory));
+    let before = harness.app().windows()[0].renderer().vector_status();
+    let start = Instant::now();
+    click_class(&mut harness, "plot-background-trigger");
+    harness.advance(Duration::from_millis(70));
+    harness.settle(128);
+    harness.advance(Duration::from_millis(90));
+    harness.settle(128);
+    let after = harness.app().windows()[0].renderer().vector_status();
+    eprintln!(
+        "GPU first background menu: {:?}, vectors {before:?} -> {after:?}",
+        start.elapsed()
+    );
+    assert_eq!(
+        before.initialized, after.initialized,
+        "Opening a color picker must not initialize a cold vector renderer"
+    );
+}
+
+#[test]
+fn background_picker_opens_without_animation_or_copying_plot_data() {
+    // Set ENLUMI_PROFILE_BACKGROUND=1 and run this test with --nocapture for
+    // first-open/reopen timings and frame-stage traces, without native GPU timing.
+    let profiling = std::env::var_os("ENLUMI_PROFILE_BACKGROUND").is_some();
+    if profiling {
+        zgui_profile::latency::retain(4000);
+    }
+    let (mut harness, workbench, counts) = geometry_harness_with_counts();
+    let pane = workbench.pane();
+    pane.lines.set(vec![crate::state::Line {
+        id: workbench.id(),
+        source: "large".into(),
+        name: "Large field".into(),
+        revision: 0,
+        data: plot::time_series::SeriesData::new(
+            (0..200_000)
+                .map(|i| plot::PlotPoint {
+                    x: f64::from(i) / 20_000.,
+                    y: (f64::from(i) / 100.).sin(),
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap(),
+    }]);
+    pane.plot
+        .set_view(plot::Ranges::new((0., 10.), (-1., 1.)))
+        .unwrap();
+    harness.settle(128);
+    let series = pane.series.get_untracked();
+    let baseline_shadows = counts.borrow().peak_shadows;
+    let baseline_groups = counts.borrow().peak_groups;
+    for attempt in 0..2 {
+        if profiling {
+            zgui_profile::latency::clear();
+        }
+        let start = Instant::now();
+        click_class(&mut harness, "plot-background-trigger");
+        harness.advance(Duration::from_millis(70));
+        harness.settle(128);
+        eprintln!(
+            "Background open {attempt}: {:?}, shadows {} -> {}, compositing groups {} -> {}",
+            start.elapsed(),
+            baseline_shadows,
+            counts.borrow().peak_shadows,
+            baseline_groups,
+            counts.borrow().peak_groups
+        );
+        if profiling {
+            let marks = zgui_profile::latency::recent();
+            for pair in marks.windows(2) {
+                if pair[1].at_ns - pair[0].at_ns > 5_000_000 {
+                    eprintln!("SLOW {:?}", pair);
+                }
+            }
+        }
+        let current = pane.series.get_untracked();
+        assert!(
+            std::ptr::eq(series.series(), current.series()),
+            "Opening a picker must reuse the series snapshot"
+        );
+        assert!(
+            std::ptr::eq(
+                series.series()[0].data().samples(),
+                current.series()[0].data().samples()
+            ),
+            "Opening a picker must share sample buffers"
+        );
+        assert_eq!(
+            counts.borrow().peak_groups,
+            baseline_groups,
+            "Opening the picker must not allocate animation compositing groups"
+        );
+        assert_eq!(
+            counts.borrow().peak_shadows,
+            baseline_shadows,
+            "Opening the picker must not initialize cold shadow rendering"
+        );
+        harness.advance(Duration::from_millis(160));
+        harness.settle(128);
+        assert!(
+            harness.app().windows()[0]
+                .box_with_class("plot-background-menu")
+                .is_some()
+        );
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::named(
+                zgui::vocab::NamedKey::Escape,
+                zgui::vocab::PhysicalKey::Unidentified(0),
+            ),
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.advance(Duration::from_millis(300));
+        harness.settle(128);
+    }
+    if profiling {
+        zgui_profile::latency::retain(0);
+    }
+}
+
+#[test]
+fn saved_workspace_tree_keeps_views_between_workspaces_and_plots() {
+    use crate::{
+        profile_library::ProfileFile, profile_preset_tree::ProfilePresetTreeProps,
+        tree_lines::TreeBranchProps,
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("workspace.json");
+    std::fs::write(
+        &path,
+        serde_json::json!({
+            "version":2,"name":"Saved layouts","workspace_presets":[{
+                "name":"Saved workspace","views":[{"name":"Saved view",
+                    "layout":{"kind":"plot","plot":0},"plots":[{"name":"Saved plot",
+                        "lines":[{"source":"esc_status/0/esc[5].esc_rpm","color":[255,0,0,255],
+                        "width":1.5,"radius":2.0,"marker":"circle","connection":"linear",
+                        "pattern":"solid","markers":false,"hidden":false}]}]}]}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let path = path.canonicalize().unwrap();
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler=app().with_size(700.,900.)
+        .with_renderer(Box::new(|_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n{}",crate::theme::stylesheet(),include_str!("profile.css")))
+        .into_handler(move || {
+            let workbench=crate::state::Workbench::new();
+            workbench.profiles.open.set(true);
+            workbench.log.set(Some(std::sync::Arc::new(crate::log::LogStore::read(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/fixtures/esc_status_log.ulg"))).unwrap())));
+            let file=ProfileFile{path:path.clone(),name:"Saved layouts".into(),compatible:Ok(()),auto_apply:false,matched:String::new(),
+                views:vec![],workspaces:vec![],workspace_plots:vec![],fields:vec![],geometry:vec![],
+                collections:vec![("Saved workspace".into(),vec![("Saved view".into(),vec![("Saved plot".into(),1)])])]};
+            *captured.borrow_mut()=Some(workbench);
+            view! {column(class="page profile-library") {
+                TreeBranch(open=workbench.profiles.open,name="Profiles".into(),count=0usize,depth=0,connectors=false,class="profiles-trigger")
+                ProfilePresetTree(workbench=workbench,files=Signal::stored(vec![file]),field_query=workbench.field_query.into())
+            }}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.settle(128);
+    let workbench = saved.borrow().unwrap();
+    let window = &harness.app().windows()[0];
+    let heading = window
+        .dom()
+        .parent(window.nodes_with_class("profiles-trigger")[0])
+        .unwrap();
+    assert!(
+        !window
+            .nodes_with_class("tree-connectors")
+            .iter()
+            .any(|node| window.dom().parent(*node) == Some(heading)),
+        "Profiles itself must not grow a connector under the header"
+    );
+    let toggle = |harness: &mut Harness<zgui::runtime::Runtime>, index: usize| {
+        let window = &harness.app().windows()[0];
+        let node = window.nodes_with_class("profile-members-toggle")[index];
+        let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), node).unwrap();
+        let (x, y) = (
+            rect.origin.x.0 + rect.size.width.0 / 2.,
+            rect.origin.y.0 + rect.size.height.0 / 2.,
+        );
+        harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+        harness.deliver_to_first(pointer(PointerAction::Released, x, y));
+        harness.settle(128);
+    };
+    toggle(&mut harness, 0);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("workspace-views-toggle")
+            .is_some()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("workspace-plots-toggle")
+            .is_empty(),
+        "Expanding a workspace must show views before their plots"
+    );
+    let view_source=workbench.visible_profile_sources().into_iter().filter_map(|source|crate::profile::identity::Drag::parse(&source))
+        .find(|drag|matches!(&drag.item,crate::profile::identity::Item::Workspace(name) if name=="@workspace-view/Saved workspace/0")).unwrap();
+    toggle(&mut harness, 1);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while workbench.profiles.busy.get_untracked() {
+        assert!(
+            Instant::now() < deadline,
+            "{}",
+            workbench.profiles.error.get_untracked()
+        );
+        harness.settle(128);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert!(
+        workbench.profiles.error.get_untracked().is_empty(),
+        "{}",
+        workbench.profiles.error.get_untracked()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("workspace-plots-toggle")
+            .is_some()
+    );
+    toggle(&mut harness, 2);
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("profile-view-members")
+            .len(),
+        1
+    );
+    assert!(workbench.visible_profile_sources().iter().any(|source| {
+        crate::profile::identity::Drag::parse(source)
+            .is_some_and(|drag| matches!(drag.item, crate::profile::identity::Item::Field(_)))
+    }));
+    let before = workbench.views.items.with_untracked(Vec::len);
+    workbench.use_profile_items(
+        vec![view_source],
+        crate::profile_state::Destination::Plot(None),
+    );
+    harness.settle(128);
+    assert_eq!(
+        workbench.views.items.with_untracked(Vec::len),
+        before + 1,
+        "The nested view remains usable as a whole view in the destination workspace"
+    );
+    // Preset tests cover async sample restoration; here the nested tree key must
+    // select the intended view, rather than a plot or the whole workspace.
+    assert_eq!(workbench.view().name.get_untracked(), "Saved view");
 }
 
 #[test]

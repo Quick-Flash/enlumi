@@ -32,11 +32,12 @@ pub fn TreeBranch(
     #[prop(into)] count: Signal<usize, LocalStorage>,
     #[prop(default = 1)] depth: usize,
     #[prop(default = false)] last: bool,
+    #[prop(default = true)] connectors: bool,
     #[prop(optional)] class: &'static str,
 ) -> impl IntoView {
     let label = format!("Toggle saved {name}");
     view! {row(class="tree-row profile-group-row",style:padding-left=Some(format!("{}px",depth*12))) {
-        TreeLines(depth=depth,last=last,open=Signal::derive_local(move ||open.get()))
+        if move ||connectors {TreeLines(depth=depth,last=last,open=Signal::derive_local(move ||open.get()))}
         control(class="tree-branch",class=class,class:profile-output-section=depth>0,class:tree-open=move ||open.get(),tabindex=Focus::Sequential,
             {..Attrs::new().a11y_from(A11yBinding::new(Role::Button).label(label).expanded(move ||open.get()))},
             on:click=move |_|open.update(|open|*open = !*open),

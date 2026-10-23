@@ -1,4 +1,5 @@
 use crate::band_mapping::BandMappingProps;
+use crate::copyable_text::CopyableTextProps;
 use crate::geometry_appearance::GeometryAppearanceProps;
 use crate::geometry_coordinates::GeometryCoordinatesProps;
 use crate::{
@@ -112,7 +113,7 @@ pub fn GeometryInspector(workbench: Workbench, id: u64, boundary: NodeRef) -> im
             if move ||item().is_some_and(|item|item.states.is_none()) {text(class="geometry-help muted") {"Drag arrow handle to move; squares resize. Drag background to pan, scroll to zoom."}}
         }
         }
-        if move || !workbench.geometry.error.with(String::is_empty) {text(class="warnings") {{move || workbench.geometry.error.get()}}}
+        if move || !workbench.geometry.error.with(String::is_empty) {CopyableText(class="warnings",label="Geometry error",value=workbench.geometry.error)}
         row(class="geometry-editor-footer") {
             ActionButton(class="duplicate-geometry",on:click=move |_|workbench.duplicate_geometry(id)) {"Duplicate"}
             text(class="geometry-placement-hint muted") {{move || {let count=workbench.panes().with(|panes|panes.iter().filter(|pane|pane.geometry.with(|ids|ids.contains(&id))).count());if count==0 {"Drag onto a plot to place".into()}else{format!("Shared on {count} plots")}}}}

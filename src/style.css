@@ -194,6 +194,14 @@
 .script-code-panel { min-height: 0; min-width: 0; }
 .script-diagnostics-panel { min-height: 0; min-width: 0; padding: 8px; gap: 6px; background: var(--app-background); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); }
 .script-diagnostics { flex: 1; height: 0; min-height: 0; overflow: auto; white-space: pre-wrap; font-family: monospace; font-size: var(--app-font-sm); }
+.script-diagnostics-heading { flex: none; align-items: center; justify-content: space-between; gap: 8px; }
+.copyable-text.zui-textarea { flex: none; width: 100%; height: auto; min-height: 18px; padding: 0; border: none; border-radius: 0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; line-height: 17px; white-space: pre-wrap; user-select: text; cursor: text; box-shadow: none; }
+.page .copyable-text.zui-textarea { background: transparent; }
+.page .copyable-text.zui-textarea.filter-error, .copyable-text.zui-textarea.filter-error { color: var(--app-danger-text); font-size: var(--app-font-sm); transition: none; }
+.copyable-text.zui-textarea.warnings { color: var(--app-warning); font-size: var(--app-font-xs); }
+.copyable-text.zui-textarea.muted { color: var(--app-muted); font-size: var(--app-font-xs); }
+.copyable-text.zui-textarea:focus-visible { outline: 1px solid var(--app-focus); outline-offset: 1px; }
+.script-diagnostics.copyable-text.zui-textarea { flex: 1; height: 0; min-height: 0; overflow: auto; font-family: monospace; font-size: var(--app-font-sm); }
 .script-diagnostics-resizer { background: var(--app-border); }
 .script-diagnostics-resizer, .script-diagnostics-resizer * { cursor: ns-resize; }
 .script-diagnostics-resizer:hover, .script-diagnostics-resizer:focus-visible { background: var(--app-accent); }
@@ -273,7 +281,7 @@
 .geometry-edit-hint { position: absolute; left: 12px; bottom: 26px; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--app-radius); background: var(--app-control); color: var(--app-control-text); pointer-events: auto; z-index: 2; }
 .geometry-drop-target { outline: 2px solid var(--app-accent); outline-offset: -3px; }
 .geometry-editor-layer { position: absolute; inset: 0; pointer-events: none; z-index: 60; }
-.geometry-inspector { position: absolute; left: 12px; bottom: 30px; box-sizing: border-box; width: 400px; max-width: calc(100% - 24px); max-height: calc(100% - 42px); padding: 14px; gap: 12px; min-height: 0; overflow: hidden; border: 1px solid var(--app-border-strong); border-radius: 10px; background: var(--app-surface); color: var(--app-foreground); box-shadow: 0 8px 28px var(--app-drag-shadow); pointer-events: auto; z-index: 3; }
+.geometry-inspector { position: absolute; left: 12px; bottom: 30px; box-sizing: border-box; width: 400px; max-width: calc(100% - 24px); max-height: calc(100% - 42px); padding: 14px; gap: 12px; min-height: 0; overflow: hidden; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-surface); color: var(--app-foreground); box-shadow: 0 8px 28px var(--app-drag-shadow); pointer-events: auto; z-index: 3; }
 .geometry-inspector > * { flex-shrink: 0; }
 .geometry-editor-heading { align-items: center; gap: 8px; cursor: grab; }
 .geometry-editor-heading:active { cursor: grabbing; }
@@ -355,7 +363,7 @@
 .parameter-actions { gap: 6px; }
 
 .field-label-editor { width: 290px; display: flex; flex-direction: column; gap: 5px; }
-.field-label-editor.zui-surface { --zui-surface-enter-duration: 0ms; --zui-surface-exit-duration: 0ms; animation: none; transform: none; box-shadow: none; }
+.field-label-editor.zui-surface { box-shadow: none; }
 .field-label-provenance { flex: none; max-height: 160px; overflow-y: auto; white-space: pre-wrap; }
 .field-label-editor > row { gap: 6px; }
 .selected-field-row { flex: none; min-height: 28px; align-items: center; gap: 4px; }
@@ -408,7 +416,8 @@
 .maximize-button.app-action.zui-button { flex: none; width: auto; min-width: 0; padding: 0 6px; }
 .view-select-mark, .view-remove-icon, .view-menu-icon { flex: none; width: 13px; height: 13px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.7px; pointer-events: none; }
 .zui-tooltip.zui-surface { --zui-color-tooltip: var(--app-surface); --zui-color-tooltip-foreground: var(--app-foreground); --zui-color-tooltip-border: var(--app-border-strong); --zui-surface-fill: var(--app-surface); --zui-surface-ink: var(--app-foreground); --zui-surface-border: 1px solid var(--app-border-strong); --zui-surface-shadow: 0 4px 14px rgba(0,0,0,.32); background: var(--app-surface); color: var(--app-foreground); border-color: var(--app-border-strong); }
-.view-list.zui-surface, .view-menu-content.zui-surface, .profile-menu-content.zui-surface { --zui-surface-enter-duration: 0ms; --zui-surface-exit-duration: 0ms; animation: none; transform: none; box-shadow: none; }
+.view-list.zui-surface, .view-menu-content.zui-surface, .profile-menu-content.zui-surface { box-shadow: none; }
+:root .zui-surface, :root .zui-surface[data-state], :root .zui-scrim, :root .zui-scrim[data-state] { --zui-surface-enter-duration: 0ms; --zui-surface-exit-duration: 0ms; animation: none; }
 .tree-branch.raw-section, .tree-branch.derived-section, .tree-branch.parameters-section, .profiles-trigger { border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-inset); }
 .tree-branch.raw-section:hover, .tree-branch.derived-section:hover, .tree-branch.parameters-section:hover, .profiles-trigger:hover { border-color: var(--app-accent); background: var(--app-hover); }
 .tree-branch.raw-section.tree-open, .tree-branch.derived-section.tree-open, .tree-branch.parameters-section.tree-open, .profiles-trigger[aria-expanded="true"] { border-color: var(--app-border-strong); background: var(--app-control); }

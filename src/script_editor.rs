@@ -1,4 +1,5 @@
 use crate::action_button::ActionButtonProps;
+use crate::copyable_text::CopyableTextProps;
 use crate::{script_code_editor::ScriptCodeEditorProps, state::Workbench};
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
@@ -24,9 +25,14 @@ pub fn ScriptEditor(workbench: Workbench) -> impl IntoView {
                 }
                 ResizableHandle(label = "Resize compilation diagnostics", with_handle = true, class = "script-diagnostics-resizer")
                 ResizablePanel(default_size = 30.0, min_pixels = 70.0, class = "script-diagnostics-panel") {
-                    text(class = "filter-section-title") { "Compilation / filter diagnostics" }
-                    if move || !workbench.filter_error.get().is_empty() {
-                        text(class = "filter-error script-diagnostics", a11y:role = Role::Alert) {{move || workbench.filter_error.get()}}
+                    row(class="script-diagnostics-heading") {
+                        text(class = "filter-section-title") { "Compilation / filter diagnostics" }
+                        ActionButton(class="copy-script-diagnostics",disabled=Signal::derive_local(move ||workbench.filter_error.with(String::is_empty)),on:click=move |_| {
+                            if let Some(clipboard)=try_use_clipboard() {clipboard.set_text(ClipboardKind::Standard,workbench.filter_error.get_untracked());}
+                        }) {"Copy all"}
+                    }
+                    if move || !workbench.filter_error.with(String::is_empty) {
+                        CopyableText(class="filter-error script-diagnostics",label="Compilation and filter diagnostics",value=workbench.filter_error)
                     } else {
                         text(class = "muted script-diagnostics-empty") {{move || if workbench.script_busy.get() { "Compiling / running filter..." } else if workbench.status.get() == "Rust filter compiled successfully" { "Rust filter compiled successfully" } else { "No compilation errors." }}}
                     }
