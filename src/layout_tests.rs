@@ -419,7 +419,7 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
         .with_renderer(Box::new(move |_, target| { let mut renderer = CaptureRenderer::new(); renderer.configure(target); Ok(Box::new(Capture{renderer,counts:captured.clone()})) }))
         .with_stylesheet(crate::theme::stylesheet())
         .into_handler(move || {
-            let workbench = Workbench::new();
+            let workbench = Workbench::new().bind_view();
             workbench.set_filter_kind("rust".into());
             workbench.filter_inputs.set(vec![FilterInput { source: "first".into(), name: "First".into() }, FilterInput { source: "second".into(), name: "Second".into() }, FilterInput { source: "third".into(), name: "Third".into() }]);
             *saved.borrow_mut() = Some(workbench);
@@ -635,7 +635,13 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
     );
     let builtin = window.box_with_class("builtin-filter-mode").unwrap();
     let custom = window.box_with_class("custom-rust-filter").unwrap();
-    assert!(custom.origin.x.0 - builtin.origin.x.0 - builtin.size.width.0 >= 5.0);
+    // Toggle spacing is 1.5 times the theme's 3px base. Native pixel snapping
+    // may render that 4.5px gap as either 4px or 5px.
+    let gap = custom.origin.x.0 - builtin.origin.x.0 - builtin.size.width.0;
+    assert!(
+        gap >= 4.0,
+        "Filter mode buttons must retain their themed gap: {gap}px; {builtin:?}, {custom:?}"
+    );
     assert!(
         custom.size.width.0 >= 110.0 && custom.size.width.0 > builtin.size.width.0,
         "Rust function needs room for its longer label and side padding: {custom:?}, {builtin:?}"
@@ -3141,7 +3147,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
             crate::theme::stylesheet()
         ))
         .into_handler(move || {
-            let workbench = Workbench::new();
+            let workbench = Workbench::new().bind_view();
             let first = workbench.pane();
             let second = workbench.add_plot(first.id, false, true);
             workbench.add_plot(second.id, false, false);
@@ -3170,7 +3176,15 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
             .dock()
             .nodes
             .with_value(|nodes| nodes[&(second.id, source.id)]);
-        let bounds = tab.window_bounds().unwrap();
+        // The whole tab includes its close button; its midpoint is not a stable
+        // drag handle across native font metrics. Press the label itself.
+        let window = &harness.app().windows()[0];
+        let label = window
+            .nodes_with_class("plot-tab-select")
+            .into_iter()
+            .find(|node| window.dom().parent(*node) == tab.get_untracked())
+            .expect("Tab has a label drag handle");
+        let bounds = zgui::view::ViewHost::window_box(window.host().as_ref(), label).unwrap();
         harness.deliver_to_first(pointer(
             PointerAction::Pressed,
             (bounds.origin.x.0 + bounds.size.width.0 / 2.0) / tab.scale(),
