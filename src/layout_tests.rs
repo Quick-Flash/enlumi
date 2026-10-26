@@ -3171,7 +3171,13 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
         (bounds.origin.x.0 + bounds.size.width.0 / 2.0) / scale,
         (bounds.origin.y.0 + bounds.size.height.0 / 2.0) / scale,
     );
-    for source in [first, second] {
+    for (source, offset) in [
+        (first, 0.0),
+        (second, second.dock.tab_limit.get_untracked()),
+    ] {
+        // Native font metrics can overflow the strip; reveal the source tab.
+        second.dock.tab_offset.set(offset);
+        harness.settle(128);
         let tab = workbench
             .dock()
             .nodes
@@ -3190,6 +3196,8 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
             (bounds.origin.x.0 + bounds.size.width.0 / 2.0) / tab.scale(),
             (bounds.origin.y.0 + bounds.size.height.0 / 2.0) / tab.scale(),
         ));
+        // Pointer events are queued until a frame; observe capture after dispatch.
+        harness.settle(128);
         assert!(
             workbench
                 .dock()
