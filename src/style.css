@@ -99,7 +99,7 @@
 .filter-mode-banner { flex: none; min-height: 28px; gap: 8px; align-items: center; border-bottom: 1px solid var(--app-border); padding-bottom: 4px; }
 .filter-mode-title { flex: 1; min-width: 0; font-size: var(--app-font-md); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .filter-mode-edit .filter-mode-title { color: var(--app-accent-text); }
-.filter-batch { flex: 1; min-width: 230px; min-height: 120px; }
+.filter-batch { flex: 1; height: 100%; min-width: 230px; min-height: 120px; }
 .filter-sources { flex: 1; min-height: 0; gap: 6px; padding: 6px; border: 1px dashed var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-inset); }
 .filter-sources.filter-sources-hover { border-color: var(--app-accent); background: var(--app-hover); }
 .filter-source-heading { flex: none; align-items: center; justify-content: space-between; gap: 6px; }

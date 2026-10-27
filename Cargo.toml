@@ -20,7 +20,7 @@ async-channel = "2.5"
 bbl_parser = { version = "1.1.1", default-features = false }
 flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 kurbo = "0.13.1"
-plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "e63119faabf799a8c769b29416dc6e0ec2f1d948", features = ["workspace", "raster", "clipboard"] }
+plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot", rev = "321254ad3025926647b93e92998a18d09c6f380f", features = ["workspace", "raster", "clipboard"] }
 px4-ulog = "0.6.1"
 rayon = "1.12"
 rfd = "0.17.2"

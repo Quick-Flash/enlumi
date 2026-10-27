@@ -3,7 +3,7 @@
 Direct framework dependencies remain upstream. Dependency crates
 are patched locally until upstream carries these behaviors:
 
-- `zgui-runtime`: zortax/zgui `f6badfb1af02b08ed1924687237028fb98a97bd8`.
+- `zgui-runtime`: zortax/zgui `951a0ea3b113247da6dff439fccbd9097aa3187f`.
   Reveal native field caret after keyboard edits/selection changes and scroll
   horizontally while dragging selection past either edge.
   Enable native text input after layout when a newly mounted field received focus

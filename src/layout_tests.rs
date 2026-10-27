@@ -683,6 +683,10 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
     {
         let window = &harness.app().windows()[0];
         let bounds = window.box_with_class("script-diagnostics").unwrap();
+        assert!(
+            bounds.origin.y.0 + bounds.size.height.0 <= 800.0,
+            "Compiler diagnostics must stay inside the workspace: {bounds:?}"
+        );
         let colors: Vec<_> = paints
             .borrow()
             .painted_text
@@ -697,7 +701,7 @@ fn rust_filter_editor_fills_workspace_and_input_order_updates() {
             .collect();
         assert!(
             !colors.is_empty(),
-            "Compiler output must paint readable glyphs"
+            "Compiler output must paint readable glyphs: {bounds:?}"
         );
         assert!(
             colors
