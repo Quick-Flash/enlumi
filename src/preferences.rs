@@ -39,6 +39,10 @@ impl ThemePreference {
 #[derive(Clone, Default)]
 pub struct LastLogDirectory(Option<PathBuf>);
 impl LastLogDirectory {
+    #[cfg(test)]
+    pub fn at(path: PathBuf) -> Self {
+        Self(Some(path))
+    }
     pub fn user() -> Self {
         Self(config_directory().map(|path| path.join("last-log-directory")))
     }

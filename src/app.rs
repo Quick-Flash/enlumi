@@ -1,7 +1,7 @@
 use crate::action_button::ActionButtonProps;
 use crate::analysis_workspace::AnalysisWorkspaceProps;
 use crate::github_link::GithubLinkProps;
-use crate::preferences::ThemePreference;
+use crate::preferences::{LastLogDirectory, ThemePreference};
 use crate::screenshot::ScreenshotProps;
 use crate::view_picker::ViewPickerProps;
 use crate::workspace_picker::WorkspacePickerProps;
@@ -24,6 +24,7 @@ use zgui_ui_primitives::Orientation;
 pub fn WorkbenchApp(
     initial_path: Option<PathBuf>,
     #[prop(default = ThemePreference::user())] preferences: ThemePreference,
+    #[prop(default = LastLogDirectory::user())] log_directory: LastLogDirectory,
 ) -> impl IntoView {
     let workbench = Workbench::new();
     if let Some(path) = initial_path {
@@ -31,9 +32,22 @@ pub fn WorkbenchApp(
     }
     let palette = RwSignal::new_local(preferences.load());
     let updates = UpdateState::new();
+    let drop_directory = log_directory.clone();
     view! {
         AppTheme(palette = palette) {
             column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
+                on:drop:capture = move |event| {
+                    match event.paths.as_slice() {
+                        [] => return,
+                        [path] => {
+                            let _ = drop_directory.save(path);
+                            workbench.open(path.clone());
+                        }
+                        _ => workbench.status.set("Drop one log file at a time".into()),
+                    }
+                    event.prevent_default();
+                    event.stop_propagation();
+                },
                 on:key_down:capture = move |event| {
                     if workbench.measurement_shortcut(event, event.modifiers) {
                         event.prevent_default();event.stop_propagation();return;
@@ -59,8 +73,8 @@ pub fn WorkbenchApp(
                         vector(class = "sidebar-toggle-icon", prop:viewBox = "0 0 20 20", prop:d = move || PropValue::from(if workbench.sidebar_visible.get() { "M2 3 H18 V17 H2 Z M7 3 V17 M14 7 L11 10 L14 13" } else { "M2 3 H18 V17 H2 Z M7 3 V17 M10 7 L13 10 L10 13" }), a11y:hidden = true)
                     }
                     ActionButton(class = "open-log", on:click = move |_| {
+                        let last = log_directory.clone();
                         spawn_local(async move {
-                            let last = crate::preferences::LastLogDirectory::user();
                             let start = last.load();
                             let path = blocking(move || {
                                 let supported: Vec<_> = ["ulg", "ULG"].into_iter()

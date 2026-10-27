@@ -202,7 +202,7 @@ impl Workbench {
             measurement: crate::measurement_state::MeasurementUi::new(),
             profiles: crate::profile_state::ProfileUi::new(),
             log: RwSignal::new_local(None),
-            status: RwSignal::new_local("Open a log file to begin".into()),
+            status: RwSignal::new_local("Open a log file or drop one into the window".into()),
             loading: RwSignal::new_local(false),
             field_query: RwSignal::new_local(String::new()),
             browser_fields: RwSignal::new_local(Vec::new()),

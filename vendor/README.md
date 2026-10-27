@@ -8,10 +8,13 @@ are patched locally until upstream carries these behaviors:
   horizontally while dragging selection past either edge.
   Enable native text input after layout when a newly mounted field received focus
   before it had bounds (for example, the plot tab rename input on Linux).
+  Route external file drops to the element under the drop position rather than
+  to the focused element, including when no control has focus.
 - `zgui-editor`: zortax/zgui-editor `1f7aaec6e4e2dfaee4d26b049a719d9e88d16f8f`.
   Add horizontal selection autoscroll and Shift-wheel scrolling.
 
-Focused source diffs are in `text-scrolling.patch` and `text-input-focus.patch`.
+Focused source diffs are in `text-scrolling.patch`, `text-input-focus.patch`, and
+`file-drop-routing.patch`.
 Runtime/editor sources and Apache-2.0 licenses are included. Runtime manifest is expanded from
 upstream workspace metadata; framework dependencies still resolve upstream.
 Remove these patch entries and directories after upstream fixes are adopted.

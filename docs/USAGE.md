@@ -8,6 +8,13 @@ shown. File filters include lowercase and uppercase suffixes (such as `.BBL`).
 Use **All files** for renamed or mixed-case files; their contents must still be
 a supported log format. Decoder failures and frame limits appear as load warnings.
 
+Click **Open log** or drag a single log file from your file manager into the window.
+Dropping a file opens it just like the file dialog, replacing the current log.
+Drop one file at a time; loading errors appear in the toolbar status.
+On Windows, launch Enlumi normally rather than as administrator. Windows blocks
+file drops from a normal Explorer window into an elevated application, including
+when Enlumi inherited elevation from an administrator terminal.
+
 **Workspace** dropdown beside **View** switches collections of views. Saved
 workspaces appear automatically, including before opening a log. Selecting one
 restores its views and layouts; opening a log populates its plots. Workspace menu

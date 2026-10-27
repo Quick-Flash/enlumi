@@ -80,7 +80,8 @@ to package the app with its offline filter compiler.
 
 ## First plot
 
-1. Click **Open log**, expand a field group, and drag a field onto a plot.
+1. Click **Open log** or drop a log file into the window, then expand a field group
+   and drag a field onto a plot.
 2. Ctrl/Shift-click to select multiple fields, then drag the selection together.
 3. Drag plot tabs onto docking guides to arrange panels. Use **Links** to share
    axes or pointers; double-click a tab title to rename it.

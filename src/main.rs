@@ -185,7 +185,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .run_on(
             startup::desktop_driver(),
-            move || view! { WorkbenchApp(initial_path = path.clone(), preferences = crate::preferences::ThemePreference::user()) },
+            move || view! { WorkbenchApp(initial_path = path.clone(), preferences = crate::preferences::ThemePreference::user(), log_directory = crate::preferences::LastLogDirectory::user()) },
         )?;
     Ok(())
 }
@@ -197,6 +197,9 @@ mod tests;
 mod derived_tests;
 #[cfg(test)]
 mod layout_tests;
+
+#[cfg(test)]
+mod file_drop_tests;
 
 #[cfg(test)]
 mod spectral_tests;
