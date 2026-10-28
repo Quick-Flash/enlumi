@@ -1284,6 +1284,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 name = "enlumi"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "async-channel",
  "bbl_parser",
  "flate2",
@@ -1310,7 +1311,7 @@ dependencies = [
  "zgui",
  "zgui-editor",
  "zgui-platform-headless",
- "zgui-platform-winit",
+ "zgui-platform-wayland",
  "zgui-plot",
  "zgui-profile",
  "zgui-render-vector-vello",
@@ -6717,7 +6718,6 @@ dependencies = [
 [[package]]
 name = "zgui-platform-wayland"
 version = "0.1.0"
-source = "git+https://github.com/zortax/zgui#951a0ea3b113247da6dff439fccbd9097aa3187f"
 dependencies = [
  "accesskit",
  "accesskit_unix",

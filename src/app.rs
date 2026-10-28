@@ -4,6 +4,7 @@ use crate::github_link::GithubLinkProps;
 use crate::preferences::{LastLogDirectory, ThemePreference};
 use crate::screenshot::ScreenshotProps;
 use crate::view_picker::ViewPickerProps;
+use crate::window_frame::WindowFrameProps;
 use crate::workspace_picker::WorkspacePickerProps;
 use crate::{
     browser::BrowserProps, filter_workspace::FilterWorkspaceProps, fps::FpsProps, state::Workbench,
@@ -23,6 +24,7 @@ use zgui_ui_primitives::Orientation;
 #[component]
 pub fn WorkbenchApp(
     initial_path: Option<PathBuf>,
+    #[prop(default = false)] client_frame: bool,
     #[prop(default = ThemePreference::user())] preferences: ThemePreference,
     #[prop(default = LastLogDirectory::user())] log_directory: LastLogDirectory,
 ) -> impl IntoView {
@@ -35,7 +37,7 @@ pub fn WorkbenchApp(
     let drop_directory = log_directory.clone();
     view! {
         AppTheme(palette = palette) {
-            column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
+            WindowFrame(enabled = client_frame,
                 on:drop:capture = move |event| {
                     match event.paths.as_slice() {
                         [] => return,
@@ -47,7 +49,8 @@ pub fn WorkbenchApp(
                     }
                     event.prevent_default();
                     event.stop_propagation();
-                },
+                }) {
+            column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
                 on:key_down:capture = move |event| {
                     if workbench.measurement_shortcut(event, event.modifiers) {
                         event.prevent_default();event.stop_propagation();return;
@@ -131,6 +134,7 @@ pub fn WorkbenchApp(
                     }
                     if move || workbench.filters_open.get() { FilterWorkspace(workbench = workbench) }
                 }
+            }
             }
         }
     }

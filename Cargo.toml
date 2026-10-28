@@ -12,7 +12,7 @@ publish = false
 
 [workspace]
 members = [".", "xtask"]
-exclude = ["vendor/zgui-runtime", "vendor/zgui-editor"]
+exclude = ["vendor/zgui-runtime", "vendor/zgui-editor", "vendor/zgui-platform-wayland"]
 resolver = "3"
 
 [dependencies]
@@ -41,7 +41,7 @@ zgui-ui-primitives = { git = "https://github.com/zortax/zgui" }
 zgui-ui-tokens = { git = "https://github.com/zortax/zgui" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-zgui-platform-winit = { git = "https://github.com/zortax/zgui" }
+zgui-platform-wayland = { git = "https://github.com/zortax/zgui" }
 
 [build-dependencies]
 image = { version = "0.25.10", default-features = false, features = ["png"] }
@@ -53,6 +53,7 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSData"] }
 
 [dev-dependencies]
+accesskit = "0.24"
 zgui-render-wgpu = { git = "https://github.com/zortax/zgui" }
 zgui-render-vector-vello = { git = "https://github.com/zortax/zgui" }
 zgui-profile = { git = "https://github.com/zortax/zgui" }
@@ -68,6 +69,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 # Temporary upstream UI fixes. See vendor/README.md.
 [patch."https://github.com/zortax/zgui"]
 zgui-runtime = { path = "vendor/zgui-runtime" }
+zgui-platform-wayland = { path = "vendor/zgui-platform-wayland" }
 
 [patch."https://github.com/zortax/zgui-editor"]
 zgui-editor = { path = "vendor/zgui-editor" }

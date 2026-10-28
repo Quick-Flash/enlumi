@@ -43,12 +43,18 @@ pub fn reveal_if_first_frame_stalls() {
 pub fn reveal_if_first_frame_stalls() {}
 
 pub fn desktop_driver() -> zgui::app::Driver {
-    #[cfg(target_os = "linux")]
-    if std::env::var_os("ZGUI_PLATFORM").is_none() {
-        // winit draws client-side decorations when a Wayland compositor such as GNOME
-        // does not provide a server-side title bar.
-        return zgui_platform_winit::run;
-    }
-
     zgui::app::desktop()
+}
+
+pub fn native_wayland() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        // Match zgui::app::desktop(), including its explicit backend override.
+        match std::env::var("ZGUI_PLATFORM") {
+            Ok(name) => name.trim().eq_ignore_ascii_case("wayland"),
+            Err(_) => zgui_platform_wayland::conn::is_available(),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    false
 }

@@ -1,0 +1,31 @@
+[package]
+name = "zgui-platform-wayland"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Native Wayland platform backend for zgui"
+repository = "https://github.com/zortax/zgui"
+homepage = "https://zgui.zortax.de"
+rust-version = "1.90"
+
+# Expanded from the upstream workspace. Local changes are documented in ../README.md.
+[target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
+accesskit = "0.24.1"
+accesskit_unix = "0.22.1"
+calloop = "0.14.4"
+calloop-wayland-source = "0.4.1"
+raw-window-handle = "0.6.2"
+rustix = { version = "1.1", default-features = false, features = ["std", "fs", "mm", "event", "time"] }
+smithay-client-toolkit = "0.20.0"
+tracing = "0.1.44"
+wayland-backend = { version = "0.3.16", features = ["client_system"] }
+wayland-client = "0.31.15"
+wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }
+zbus = "5.18"
+zgui-geom = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-platform = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-profile = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+zgui-vocab = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+
+[features]
+wall-clock = []

@@ -1,0 +1,44 @@
+.desktop-window {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--app-background);
+    color: var(--app-foreground);
+}
+.desktop-window > .workbench {
+    flex: 1;
+    width: 100%;
+    height: 0;
+    max-height: none;
+}
+.client-frame { padding: 5px; border: 1px solid var(--app-border); }
+.client-frame.window-maximized, .client-frame.window-fullscreen { padding: 0; border-width: 0; }
+.window-titlebar {
+    flex: none;
+    height: 34px;
+    min-width: 0;
+    align-items: center;
+    background: var(--app-surface);
+    border-bottom: 1px solid var(--app-border);
+}
+.window-title { flex: 1; min-width: 0; padding-left: 10px; font-size: 12px; }
+.window-inactive .window-title { color: var(--app-muted); }
+.window-buttons { flex: none; height: 100%; align-items: center; gap: 0; }
+.window-buttons .window-button { width: 38px; height: 32px; border-radius: 0; }
+.window-button vector { width: 16px; height: 16px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.window-buttons .window-close:hover { background: var(--app-danger); color: white; }
+.window-resize { position: absolute; }
+.window-resize-n, .window-resize-s { left: 12px; right: 12px; height: 6px; cursor: ns-resize; }
+.window-resize-n { top: 0; }
+.window-resize-s { bottom: 0; }
+.window-resize-e, .window-resize-w { top: 12px; bottom: 12px; width: 6px; cursor: ew-resize; }
+.window-resize-e { right: 0; }
+.window-resize-w { left: 0; }
+.window-resize-ne, .window-resize-nw, .window-resize-se, .window-resize-sw { width: 12px; height: 12px; }
+.window-resize-ne { top: 0; right: 0; cursor: nesw-resize; }
+.window-resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+.window-resize-se { bottom: 0; right: 0; cursor: nwse-resize; }
+.window-resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }

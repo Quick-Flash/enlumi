@@ -32,6 +32,16 @@ checks pass. Builds are unsigned; macOS builds are not notarized.
 Linux archives include Ubuntu 22.04+ (`linux-x86_64`) and rolling Arch Linux
 (`arch-linux-x86_64`) builds. Choose matching distribution.
 
+On Linux, Wayland sessions use the native Wayland backend automatically, with
+Enlumi's title bar and resize handles. Drag a log onto the title bar or anywhere
+in the workbench to open it. Double-click the title bar to maximize or restore;
+F11 toggles fullscreen and Escape exits it after any active app interaction is
+cancelled. Window buttons also support keyboard focus and activation.
+Windows, macOS, and X11 retain winit and their existing window decorations.
+For backend troubleshooting, set `ZGUI_PLATFORM=wayland` to force native Wayland
+or `ZGUI_PLATFORM=winit` to use winit. External file drops on winit's Wayland
+backend remain limited by winit's Wayland support.
+
 To receive update notices, enable **Nightly builds** under **Updates**, then restart.
 Checks run once at startup. Portable installations offer **Update & restart** when
 a newer completed build is available. Restart closes current log and unsaved work.
@@ -109,6 +119,14 @@ Run local checks before submitting changes:
 
 ```sh
 cargo xtask pre-commit
+```
+
+On Linux, test native Wayland parsing and window-state bookkeeping with
+`cargo test --locked -p zgui-platform-wayland --lib`. From a running Wayland
+desktop, also check compositor-confirmed maximize, restore, fullscreen, and close:
+
+```sh
+cargo test --locked -p enlumi native_wayland_compositor_configures_maximize_restore_and_fullscreen -- --ignored --nocapture
 ```
 
 ## License

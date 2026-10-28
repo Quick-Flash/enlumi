@@ -68,7 +68,7 @@ fn file_drop_opens_replaces_and_validates_logs() {
     let handler = app().with_size(1500.0, 850.0)
         .with_renderer(renderer())
         .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
-        .into_handler(move || view! { WorkbenchApp(initial_path=None, preferences=crate::preferences::ThemePreference::disabled(), log_directory=directory.clone()) })
+        .into_handler(move || view! { WorkbenchApp(initial_path=None, client_frame=true, preferences=crate::preferences::ThemePreference::disabled(), log_directory=directory.clone()) })
         .unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -109,7 +109,15 @@ fn file_drop_opens_replaces_and_validates_logs() {
     drop_files(&mut harness, vec![], x, y);
     assert_eq!(text(&harness, "status"), "Drop one log file at a time");
 
-    drop_files(&mut harness, vec![second], x, y);
+    let title = harness.app().windows()[0]
+        .box_with_class("window-title")
+        .unwrap();
+    drop_files(
+        &mut harness,
+        vec![second],
+        title.origin.x.0 + 20.0,
+        title.origin.y.0 + 10.0,
+    );
     wait_for(&mut harness, "file-name", "second flight.ulg");
 
     let invalid = logs.join("unsupported.data");

@@ -1,0 +1,25 @@
+--- a/zgui-runtime/src/window/frame.rs
++++ b/zgui-runtime/src/window/frame.rs
+@@ -225,6 +225,9 @@ impl Window {
+         self.note_frame_moment(timestamp);
+ 
+         self.frame_started();
++        // A Wayland configure can change maximized/fullscreen without changing extent.
++        // Refresh before input and reactive work so client decorations follow that state.
++        self.handle.refresh_window_state();
+         self.gate.begin_frame();
+         self.document.borrow().begin_frame();
+         // Both are this frame's answers about this frame's movement, and a frame that inherited
+--- a/zgui-runtime/src/windows/handle.rs
++++ b/zgui-runtime/src/windows/handle.rs
+@@ -168,8 +168,8 @@ impl WindowHandle {
+ 
+     /// Asks the surface again whether it is maximised or full screen.
+     ///
+-    /// Neither is reported as an event by any desktop, and both always resize the window — so a
+-    /// resize is where they are noticed.
++    /// Neither has its own platform event. Read at frame start as well as on resize:
++    /// a compositor can change either state while retaining the same content extent.
+     pub(crate) fn refresh_window_state(&self) {
+         if let Some(surface) = self.surface() {
+             let maximized = surface.is_maximized();

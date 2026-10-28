@@ -60,6 +60,9 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --locked --workspace
+      - name: Native Wayland backend tests
+        if: runner.os == 'Linux'
+        run: cargo test --locked -p zgui-platform-wayland --lib
       - name: Rust filter toolchain
         run: rustup target add wasm32-unknown-unknown
       - name: Rust / WASM integration tests

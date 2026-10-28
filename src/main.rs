@@ -137,6 +137,9 @@ mod view_picker;
 mod view_state;
 #[cfg(test)]
 mod view_tests;
+mod window_frame;
+#[cfg(test)]
+mod window_frame_tests;
 mod workspace;
 mod workspace_catalogue;
 mod workspace_collection;
@@ -171,11 +174,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(error) = desktop_icon::register() {
         eprintln!("Could not register Enlumi desktop icon: {error}");
     }
+    let native_wayland = startup::native_wayland();
     app()
         .with_application_id("com.tealdrones.enlumi")
         .with_icon(app_icon::window())
         .with_title("Enlumi - Log workbench")
         .with_size(1500.0, 850.0)
+        .with_min_size(640.0, 400.0)
+        .with_decorations(if native_wayland {
+            zgui::platform::Decorations::None
+        } else {
+            zgui::platform::Decorations::Full
+        })
         .with_stylesheet(format!(
             "{}\n{}\n{}\n{}",
             plot::zgui_surface::stylesheet(),
@@ -185,7 +195,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .run_on(
             startup::desktop_driver(),
-            move || view! { WorkbenchApp(initial_path = path.clone(), preferences = crate::preferences::ThemePreference::user(), log_directory = crate::preferences::LastLogDirectory::user()) },
+            move || view! { WorkbenchApp(initial_path = path.clone(), client_frame = native_wayland, preferences = crate::preferences::ThemePreference::user(), log_directory = crate::preferences::LastLogDirectory::user()) },
         )?;
     Ok(())
 }
