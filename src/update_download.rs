@@ -165,12 +165,15 @@ pub fn prepare(release: Nightly, cancel: &AtomicBool) -> Result<Prepared, String
 }
 
 fn safe_path(path: &Path) -> bool {
-    !path.to_string_lossy().contains([':', '\\'])
-        && path.components().all(|p| matches!(p, Component::Normal(_)))
-        && path
-            .components()
-            .next()
-            .is_some_and(|p| p.as_os_str() == "enlumi-portable")
+    // Check names, not the rendered path: Windows inserts backslashes between
+    // perfectly valid components when ZIP paths are converted to PathBuf.
+    path.components().all(|component| match component {
+        Component::Normal(name) => !name.to_string_lossy().contains([':', '\\', '\0']),
+        _ => false,
+    }) && path
+        .components()
+        .next()
+        .is_some_and(|p| p.as_os_str() == "enlumi-portable")
 }
 
 #[cfg(not(windows))]
@@ -213,6 +216,9 @@ fn extract(archive: &Path, destination: &Path, cancel: &AtomicBool) -> Result<()
             .ok_or("Update ZIP size overflow")?;
         if index > 100_000
             || total > MAX_UNPACKED
+            // enclosed_name normalizes away roots and parent components. Validate
+            // the original name too so those entries are rejected, not rewritten.
+            || !safe_path(Path::new(file.name()))
             || !safe_path(&path)
             || file
                 .unix_mode()
@@ -240,4 +246,112 @@ fn extract(archive: &Path, destination: &Path, cancel: &AtomicBool) -> Result<()
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundle_paths_accept_native_separators_and_reject_escapes() {
+        assert!(safe_path(
+            &Path::new("enlumi-portable")
+                .join("assets")
+                .join("enlumi.png")
+        ));
+        assert!(safe_path(Path::new(
+            "enlumi-portable/rust-toolchain/bin/rustc.exe"
+        )));
+        for name in [
+            "../enlumi-portable/enlumi.exe",
+            "enlumi-portable/../outside.exe",
+            "/enlumi-portable/enlumi.exe",
+            "C:/enlumi-portable/enlumi.exe",
+            "other/enlumi.exe",
+            "enlumi-portable/enlumi.exe:stream",
+            "enlumi-portable/bad\0name",
+        ] {
+            assert!(!safe_path(Path::new(name)), "Accepted {name:?}");
+        }
+    }
+
+    #[cfg(windows)]
+    mod windows_zip {
+        use super::*;
+        use zip::{ZipWriter, write::SimpleFileOptions};
+
+        fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
+            let mut zip = ZipWriter::new(fs::File::create(path).unwrap());
+            for (name, bytes) in entries {
+                zip.start_file(*name, SimpleFileOptions::default()).unwrap();
+                zip.write_all(bytes).unwrap();
+            }
+            zip.finish().unwrap();
+        }
+
+        #[test]
+        fn extracts_nested_portable_zip_files_on_windows() {
+            let directory = tempfile::tempdir().unwrap();
+            let archive = directory.path().join("update.zip");
+            let destination = directory.path().join("unpacked");
+            fs::create_dir(&destination).unwrap();
+            let entries: &[(&str, &[u8])] = &[
+                ("enlumi-portable/enlumi.exe", b"app"),
+                ("enlumi-portable/assets/enlumi.png", b"icon"),
+                ("enlumi-portable/rust-toolchain/bin/rustc.exe", b"compiler"),
+                (
+                    "enlumi-portable/rust-toolchain/lib/rustlib/wasm32-unknown-unknown/lib/libstd.rlib",
+                    b"std",
+                ),
+            ];
+            write_zip(&archive, entries);
+            extract(&archive, &destination, &AtomicBool::new(false)).unwrap();
+            for (name, bytes) in entries {
+                assert_eq!(fs::read(destination.join(name)).unwrap(), *bytes);
+            }
+        }
+
+        #[test]
+        fn zip_extraction_rejects_unsafe_original_paths() {
+            for name in [
+                "enlumi-portable/../outside.exe",
+                "enlumi-portable/../../outside.exe",
+                "/enlumi-portable/enlumi.exe",
+                "C:/enlumi-portable/enlumi.exe",
+                "enlumi-portable/enlumi.exe:stream",
+                "other/enlumi.exe",
+                r"enlumi-portable\..\outside.exe",
+            ] {
+                let directory = tempfile::tempdir().unwrap();
+                let archive = directory.path().join("update.zip");
+                let destination = directory.path().join("unpacked");
+                fs::create_dir(&destination).unwrap();
+                write_zip(&archive, &[(name, b"bad")]);
+                assert!(
+                    extract(&archive, &destination, &AtomicBool::new(false)).is_err(),
+                    "Accepted {name:?}"
+                );
+                assert_eq!(fs::read_dir(&destination).unwrap().count(), 0);
+                assert!(!directory.path().join("outside.exe").exists());
+            }
+        }
+
+        #[test]
+        fn zip_extraction_still_rejects_symlinks() {
+            let directory = tempfile::tempdir().unwrap();
+            let archive = directory.path().join("update.zip");
+            let destination = directory.path().join("unpacked");
+            fs::create_dir(&destination).unwrap();
+            let mut zip = ZipWriter::new(fs::File::create(&archive).unwrap());
+            zip.add_symlink(
+                "enlumi-portable/link",
+                "../outside",
+                SimpleFileOptions::default(),
+            )
+            .unwrap();
+            zip.finish().unwrap();
+            assert!(extract(&archive, &destination, &AtomicBool::new(false)).is_err());
+            assert_eq!(fs::read_dir(destination).unwrap().count(), 0);
+        }
+    }
 }

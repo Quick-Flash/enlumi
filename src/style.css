@@ -3,7 +3,8 @@
 .sidebar-toggle-icon { width: 16px; height: 16px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.5px; pointer-events: none; }
 .workbench .zui-button.setting-active { background-color: var(--app-selected); border-color: var(--app-accent); }
 .file-name { flex: 1; min-width: 0; font-size: var(--app-font-sm); color: var(--app-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.fps-readout { flex: none; width: 3ch; font-variant-numeric: tabular-nums; font-size: var(--app-font-xs); color: var(--app-muted); text-align: right; white-space: nowrap; }
+.fps-readout, .fps-label { flex: none; font-size: var(--app-font-xs); color: var(--app-muted); white-space: nowrap; }
+.fps-readout { width: 3ch; font-variant-numeric: tabular-nums; text-align: right; }
 .body { flex: 1; height: 0; min-width: 0; min-height: 0; overflow: hidden; }
 .plot-page { flex: 1; min-width: 0; min-height: 0; }
 .workbench-analysis-split, .analysis-plots-panel, .analysis-side-panel { flex: 1; min-width: 0; min-height: 0; }
