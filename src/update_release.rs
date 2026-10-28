@@ -75,6 +75,9 @@ fn json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
 }
 
 pub fn latest() -> Result<Option<Nightly>, String> {
+    if !hex(crate::updates::BUILD_COMMIT, 40) {
+        return Err("This build's revision is unknown. Download and extract a portable Enlumi bundle to enable Update & restart.".into());
+    }
     let platform = platform()?;
     let extension = if cfg!(windows) { "zip" } else { "tar.gz" };
     let name = format!("enlumi-{platform}.{extension}");
@@ -112,9 +115,6 @@ pub fn latest() -> Result<Option<Nightly>, String> {
         .filter(|s| hex(s, 64))
         .ok_or("Nightly asset has no SHA-256 digest")?;
     // A slow, older PR build may publish after a newer build. Do not downgrade.
-    if !hex(crate::updates::BUILD_COMMIT, 40) {
-        return Ok(None);
-    }
     #[derive(Deserialize)]
     struct Comparison {
         status: String,

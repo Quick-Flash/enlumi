@@ -19,12 +19,14 @@ pub struct UpdateState {
     pub message: RwSignal<String, LocalStorage>,
     pub ready: RwSignal<Option<Nightly>, LocalStorage>,
     pub busy: RwSignal<bool, LocalStorage>,
+    pub checking: RwSignal<bool, LocalStorage>,
     pub installing: RwSignal<bool, LocalStorage>,
     pub failed: RwSignal<bool, LocalStorage>,
     pub install_problem: StoredValue<Option<String>, LocalStorage>,
     download_cancel: StoredValue<Arc<AtomicBool>, LocalStorage>,
     task: StoredValue<Option<Task>, LocalStorage>,
     owner: StoredValue<Owner, LocalStorage>,
+    retry: StoredValue<Option<zgui::view::IntervalHandle>, LocalStorage>,
 }
 
 impl UpdateState {
@@ -37,6 +39,10 @@ impl UpdateState {
             Err(e) => (Preferences::default(), e),
         };
         let previous_error = update_install::take_error();
+        Self::create(preferences, message, previous_error)
+    }
+
+    fn create(preferences: Preferences, message: String, previous_error: Option<String>) -> Self {
         let failed = previous_error.is_some();
         let message = previous_error.unwrap_or(message);
         let state = Self {
@@ -45,20 +51,39 @@ impl UpdateState {
             message: RwSignal::new_local(message),
             ready: RwSignal::new_local(None),
             busy: RwSignal::new_local(false),
+            checking: RwSignal::new_local(false),
             installing: RwSignal::new_local(false),
             failed: RwSignal::new_local(failed),
             install_problem: StoredValue::new_local(update_download::installation().err()),
             download_cancel: StoredValue::new_local(Arc::new(AtomicBool::new(false))),
             task: StoredValue::new_local(None),
             owner: StoredValue::new_local(Owner::current().expect("update checker owner")),
+            retry: StoredValue::new_local(None),
         };
         on_cleanup_local(move || {
             state.cancel();
+            state.retry.set_value(None);
             state
                 .download_cancel
                 .with_value(|flag| flag.store(true, Ordering::Relaxed));
         });
-        if !failed {
+        if let Some(clock) = Timers::current() {
+            state.retry.set_value(Some(clock.set_interval(
+                std::time::Duration::from_secs(60),
+                move || {
+                    if state.preferences.with_untracked(|p| p.nightly)
+                        && state.pending.get_untracked().is_some()
+                        && state.ready.get_untracked().is_none()
+                        && !state.failed.get_untracked()
+                    {
+                        // The pending revision is already known. Poll only releases so a
+                        // long build does not spend GitHub's rate limit checking master.
+                        state.start_check(state.pending.get_untracked());
+                    }
+                },
+            )));
+        }
+        if !failed && state.preferences.with_untracked(|p| p.nightly) {
             state.check();
         }
         state
@@ -71,6 +96,7 @@ impl UpdateState {
             }
         });
         self.task.set_value(None);
+        self.checking.set(false);
     }
 
     pub fn enable(self, enabled: bool) {
@@ -96,31 +122,57 @@ impl UpdateState {
         }
     }
 
-    fn check(self) {
-        if !self.preferences.with_untracked(|p| p.nightly) {
+    pub fn check(self) {
+        self.start_check(None);
+    }
+
+    fn start_check(self, known_head: Option<String>) {
+        if self.busy.get_untracked() || self.checking.get_untracked() {
             return;
         }
+        self.checking.set(true);
         self.message
             .set("Checking master and completed nightlies…".into());
-        let task = self.owner.with_value(|owner| owner.with(|| spawn_local(async move {
-            let result = blocking(|| updates::latest().map(|head| (head, update_release::latest()))).await;
-            match result {
-                Err(error) => self.message.set(error),
-                Ok((sha, release)) => {
-                    self.receive_head(sha);
-                    match release {
-                        Ok(release) => {
-                            if let Some(release) = &release {
-                                self.message.set(format!("Nightly {} ready to install. Update & restart closes current session.", &release.commit[..8]));
-                            }
-                            self.ready.set(release);
-                        }
-                        Err(error) => self.message.set(format!("Could not find installable nightly: {error}")),
-                    }
-                }
-            }
-        })));
+        let task = self.owner.with_value(|owner| {
+            owner.with(|| {
+                spawn_local(async move {
+                    let (head, release) = blocking(move || {
+                        let head = known_head.map_or_else(updates::latest, Ok);
+                        (head, update_release::latest())
+                    })
+                    .await;
+                    self.receive_check(head, release);
+                })
+            })
+        });
         self.task.set_value(Some(task));
+    }
+
+    fn receive_check(self, head: Result<String, String>, release: Result<Option<Nightly>, String>) {
+        self.checking.set(false);
+        self.failed.set(false);
+        match &head {
+            Ok(sha) => self.receive_head(sha.clone()),
+            Err(error) => self.message.set(error.clone()),
+        }
+        match release {
+            Ok(Some(release)) => {
+                self.message.set(format!(
+                    "Nightly {} ready to install. Update & restart closes current session.",
+                    &release.commit[..8]
+                ));
+                self.ready.set(Some(release));
+            }
+            Ok(None) => {
+                self.ready.set(None);
+                self.failed.set(head.is_err());
+            }
+            Err(error) => {
+                self.failed.set(true);
+                self.message
+                    .set(format!("Could not find installable nightly: {error}"));
+            }
+        }
     }
 
     fn receive_head(self, sha: String) {
@@ -154,7 +206,7 @@ impl UpdateState {
     }
 
     pub fn install(self) {
-        if self.busy.get_untracked() {
+        if self.busy.get_untracked() || self.checking.get_untracked() {
             return;
         }
         let Some(release) = self.ready.get_untracked() else {
@@ -252,5 +304,105 @@ impl UpdateState {
                 })
             })
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::update_notice::UpdateNoticeProps;
+    use zgui_testkit_view::Window;
+
+    fn state(window: &Window) -> UpdateState {
+        window.scope.with(|| {
+            UpdateState::create(
+                Preferences {
+                    nightly: false,
+                    dismissed: Some("f".repeat(40)),
+                },
+                String::new(),
+                None,
+            )
+        })
+    }
+
+    fn release() -> Nightly {
+        Nightly {
+            tag: "nightly-test".into(),
+            commit: "a".repeat(40),
+            asset: "enlumi-linux-x86_64.tar.gz".into(),
+            digest: "b".repeat(64),
+            size: 123,
+        }
+    }
+
+    #[test]
+    fn published_nightly_shows_install_button_after_pending_build() {
+        let window = Window::open();
+        let state = state(&window);
+        state.install_problem.set_value(None);
+        let mut built = window.scope.with(|| {
+            view! { UpdateNotice(state=state) }
+                .into_view()
+                .build(&mut window.cx.cx())
+        });
+        built.mount(&window.dom_handle, window.root, None);
+
+        state.receive_check(Ok("a".repeat(40)), Ok(None));
+        window.frame();
+        let text = window.dom.tree().text_content(window.root);
+        assert!(text.contains("Check for updates"), "{text}");
+        assert!(!text.contains("Update & restart"), "{text}");
+
+        state.receive_check(Ok("a".repeat(40)), Ok(Some(release())));
+        window.frame();
+        let text = window.dom.tree().text_content(window.root);
+        assert!(text.contains("Update & restart"), "{text}");
+        assert!(!state.checking.get_untracked());
+    }
+
+    #[test]
+    fn release_check_succeeds_even_when_master_check_fails() {
+        let window = Window::open();
+        let state = state(&window);
+        state.receive_check(Err("Master unavailable".into()), Ok(Some(release())));
+        assert!(state.ready.get_untracked().is_some());
+        assert!(!state.failed.get_untracked());
+        assert!(state.message.get_untracked().contains("ready to install"));
+    }
+
+    #[test]
+    fn failed_release_check_is_visible_and_recovers_on_retry() {
+        let window = Window::open();
+        let state = state(&window);
+        state.receive_check(Ok("a".repeat(40)), Err("GitHub unavailable".into()));
+        assert!(state.failed.get_untracked());
+        assert!(state.message.get_untracked().contains("GitHub unavailable"));
+        state.receive_check(Ok("a".repeat(40)), Ok(Some(release())));
+        assert!(!state.failed.get_untracked());
+        assert!(state.ready.get_untracked().is_some());
+    }
+
+    #[test]
+    fn pending_build_rechecks_after_one_minute_and_stops_when_ready_or_disabled() {
+        use std::time::Duration;
+        let window = Window::open();
+        let state = state(&window);
+        state.preferences.update(|p| p.nightly = true);
+        state.pending.set(Some("a".repeat(40)));
+        window.host.advance(Duration::from_secs(59));
+        assert!(!state.checking.get_untracked());
+        window.host.advance(Duration::from_secs(1));
+        assert!(state.checking.get_untracked());
+        // Cancel before polling the task: this test never contacts GitHub.
+        state.cancel();
+
+        state.ready.set(Some(release()));
+        window.host.advance(Duration::from_secs(60));
+        assert!(!state.checking.get_untracked());
+        state.ready.set(None);
+        state.preferences.update(|p| p.nightly = false);
+        window.host.advance(Duration::from_secs(60));
+        assert!(!state.checking.get_untracked());
     }
 }

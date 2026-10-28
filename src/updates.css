@@ -10,6 +10,6 @@
 .updates-revision { font-size: var(--app-font-sm); color: var(--app-accent-text); }
 .updates-option { padding: 10px 0; border-top: 1px solid var(--app-border); border-bottom: 1px solid var(--app-border); }
 .updates-option-copy { flex: 1; min-width: 0; gap: 4px; }
-.updates-actions { justify-content: flex-end; }
+.updates-actions { justify-content: flex-end; flex-wrap: wrap; }
 
 .update-notice .app-action.action-prominent { width: auto; height: var(--app-control-height); min-height: var(--app-control-height); }

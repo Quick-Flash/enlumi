@@ -43,8 +43,10 @@ or `ZGUI_PLATFORM=winit` to use winit. External file drops on winit's Wayland
 backend remain limited by winit's Wayland support.
 
 To receive update notices, enable **Nightly builds** under **Updates**, then restart.
-Checks run once at startup. Portable installations offer **Update & restart** when
-a newer completed build is available. Restart closes current log and unsaved work.
+Checks run at startup and retry every minute while a new build is in progress.
+Use **Check for updates** to retry manually. Portable installations offer
+**Update & restart** when a newer completed build is available. Restart closes
+current log and unsaved work.
 
 ## Build and run
 
