@@ -10,6 +10,11 @@ a supported log format. Decoder failures and frame limits appear as load warning
 
 Click **Open log** or drag a single log file from your file manager into the window.
 Dropping a file opens it just like the file dialog, replacing the current log.
+Opening another log keeps the current workspaces, views, plot layout, active
+selections, and appearance. Compatible fields, filters, state bands, and analysis
+plots refresh from the new file, and axes fit the new data. Unavailable inputs
+are skipped with diagnostics in Profiles; their plots remain open. A failed
+load leaves the current log and setup intact.
 Drop one file at a time; loading errors appear in the toolbar status.
 On Windows, launch Enlumi normally rather than as administrator. Windows blocks
 file drops from a normal Explorer window into an elevated application, including
@@ -27,7 +32,7 @@ Each view retains its plots, docking layout, zoom, links,
 active/maximized plot, and analysis settings/results. Log, derived fields, and
 profile resources remain shared. Links stay within their view; background
 work finishes in its originating view without switching visible workspace.
-Closing final view leaves one blank Untitled view. Open views last for current
+Closing final view leaves one blank View 1. Open views last for current
 application session. View menu offers **Rename**, **Save**, **Save as...**, and **Duplicate**.
 Drag presets from Profiles to open views or plots. **Save** overwrites the linked
 preset directly; a first save asks for a destination. **Save as...** opens the

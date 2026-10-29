@@ -69,6 +69,7 @@ mod github_link;
 mod legend_drag;
 mod line_colors;
 mod log;
+mod log_session;
 mod measurement_background;
 mod measurement_overlay;
 mod measurement_state;

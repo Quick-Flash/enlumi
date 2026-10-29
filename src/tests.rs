@@ -582,7 +582,7 @@ fn filtering_and_plot_state_survive_transient_settings_owner() {
 }
 
 #[test]
-fn latest_load_wins_and_reload_clears_lines_and_field_selection() {
+fn latest_load_wins_and_reload_preserves_compatible_lines() {
     let window = Window::open();
     let workbench = window.scope.with(Workbench::new);
     window.scope.with(|| {
@@ -598,14 +598,16 @@ fn latest_load_wins_and_reload_clears_lines_and_field_selection() {
     settle(&window, || {
         !workbench.pane().lines.get_untracked().is_empty()
     });
+    let before = workbench.pane().lines.get_untracked()[0].clone();
     workbench.selected_field.set(Some("old field".into()));
     load(&window, workbench);
-    assert!(
-        workbench
-            .panes()
-            .get_untracked()
-            .iter()
-            .all(|pane| pane.lines.get_untracked().is_empty())
+    let lines = workbench.pane().lines.get_untracked();
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].id, before.id);
+    assert_eq!(lines[0].source, before.source);
+    assert_ne!(
+        lines[0].data.samples().as_ptr(),
+        before.data.samples().as_ptr()
     );
     assert!(workbench.selected_field.get_untracked().is_none());
 }

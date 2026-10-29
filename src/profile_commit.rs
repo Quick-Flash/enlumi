@@ -284,7 +284,7 @@ impl Workbench {
     pub fn rebuild_profile_metadata(self) {
         let mut metadata = MetadataMap::new();
         let mut groups = BTreeMap::new();
-        let mut warnings = Vec::new();
+        let mut warnings = self.profiles.log_warnings.get_untracked();
         for instance in self.profiles.instances.get_untracked().values() {
             metadata.extend(instance.metadata.clone());
             groups.extend(instance.groups.clone());

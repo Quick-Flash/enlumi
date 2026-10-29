@@ -43,6 +43,7 @@ pub struct ProfileUi {
     pub error: RwSignal<String, LocalStorage>,
     pub failures: RwSignal<BTreeMap<ProfileKey, String>, LocalStorage>,
     pub warnings: RwSignal<Vec<String>, LocalStorage>,
+    pub(crate) log_warnings: RwSignal<Vec<String>, LocalStorage>,
     pub metadata: RwSignal<MetadataMap, LocalStorage>,
     pub titles: RwSignal<BTreeMap<u64, String>, LocalStorage>,
     pub instances: RwSignal<BTreeMap<ProfileKey, AppliedProfile>, LocalStorage>,
@@ -67,6 +68,7 @@ impl ProfileUi {
             error: RwSignal::new_local(String::new()),
             failures: RwSignal::new_local(BTreeMap::new()),
             warnings: RwSignal::new_local(Vec::new()),
+            log_warnings: RwSignal::new_local(Vec::new()),
             metadata: RwSignal::new_local(BTreeMap::new()),
             titles: RwSignal::new_local(BTreeMap::new()),
             instances: RwSignal::new_local(BTreeMap::new()),
@@ -95,6 +97,7 @@ impl ProfileUi {
         self.error.set(String::new());
         self.failures.set(BTreeMap::new());
         self.warnings.set(Vec::new());
+        self.log_warnings.set(Vec::new());
         self.metadata.set(BTreeMap::new());
         self.groups.set(BTreeMap::new());
         self.titles.set(BTreeMap::new());

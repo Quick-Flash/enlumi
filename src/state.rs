@@ -185,6 +185,7 @@ pub struct Workbench {
     pub(crate) owner: StoredValue<zgui::reactive::Owner, LocalStorage>,
     pub(crate) next_plot: RwSignal<u64, LocalStorage>,
     pub(crate) generation: RwSignal<u64, LocalStorage>,
+    pub(crate) loaded_generation: RwSignal<u64, LocalStorage>,
     next_id: RwSignal<u64, LocalStorage>,
     pub(crate) cache: RwSignal<BTreeMap<String, SeriesData>, LocalStorage>,
 }
@@ -250,6 +251,7 @@ impl Workbench {
             ),
             next_plot: RwSignal::new_local(2),
             generation: RwSignal::new_local(0),
+            loaded_generation: RwSignal::new_local(0),
             next_id: RwSignal::new_local(0),
             cache: RwSignal::new_local(BTreeMap::new()),
         }
@@ -270,10 +272,14 @@ impl Workbench {
         pane.selected.set(Some(id));
     }
     pub fn open(self, path: PathBuf) {
+        let unfinished = self
+            .authoring
+            .workspace_load
+            .with_value(|load| load.as_ref().map(|load| load.workspace));
         self.clear_workspace_load();
         self.profiles.cancel();
         for view in self.all_views() {
-            view.analysis.reset();
+            view.analysis.cancel();
         }
         self.cancel_band_source();
         self.bands.jobs.update_value(BTreeMap::clear);
@@ -286,18 +292,38 @@ impl Workbench {
             if self.generation.get_untracked() != generation {
                 return;
             }
-            self.loading.set(false);
             match result {
                 Ok(log) => {
+                    let log = Arc::new(log);
+                    let session = if let Some(session) =
+                        crate::log_session::Session::capture(self, unfinished)
+                    {
+                        self.status.set("Refreshing workspace data…".into());
+                        let replacement = log.clone();
+                        Some(blocking(move || session.refresh(replacement)).await)
+                    } else {
+                        None
+                    };
+                    if self.generation.get_untracked() != generation {
+                        return;
+                    }
+                    self.finish_view_gestures();
+                    self.loaded_generation.set(generation);
+                    self.loading.set(false);
                     self.measurement.clear();
-                    self.profiles.reset();
+                    if session.is_none() {
+                        self.profiles.reset();
+                    }
                     self.authoring.pending.set_value(None);
                     self.authoring.saved.set_value(None);
                     self.authoring.browse.set(None);
                     self.authoring.restoring.set_value(Default::default());
                     self.authoring.open.set(false);
-                    for view in self.all_views() {
-                        view.preset.set(None);
+                    if session.is_none() {
+                        for view in self.all_views() {
+                            view.preset.set(None);
+                            view.analysis.reset();
+                        }
                     }
 
                     self.cancel_filter_run();
@@ -307,22 +333,36 @@ impl Workbench {
                         log.duration,
                         log.warnings.len()
                     ));
-                    self.cache.set(BTreeMap::new());
-                    self.derived.set(Vec::new());
                     self.filters_open.set(false);
                     self.filter_mode.set(crate::filter_mode::FilterMode::New);
                     self.filter_inputs.set(Vec::new());
                     self.filter_outputs.set(Vec::new());
                     self.filter_drop_active.set(false);
                     self.filter_error.set(String::new());
+                    self.line_drag.cancel();
+                    self.drag.state.set(None);
+                    self.drop_target.set(None);
+                    if let Some(session) = session {
+                        if !log
+                            .settings
+                            .contains_key(&self.profiles.flight.get_untracked())
+                        {
+                            self.profiles
+                                .flight
+                                .set(log.settings.keys().next().copied().unwrap_or(1));
+                        }
+                        self.log.set(Some(log));
+                        self.restore_log_session(session);
+                        self.apply_default_profiles();
+                        return;
+                    }
+                    self.cache.set(BTreeMap::new());
+                    self.derived.set(Vec::new());
                     self.field_query.set(String::new());
                     self.selected_field.set(None);
                     self.selected_fields.set(BTreeSet::new());
                     self.selection_anchor.set(None);
                     self.expanded.set(BTreeSet::new());
-                    self.line_drag.cancel();
-                    self.drag.state.set(None);
-                    self.drop_target.set(None);
                     for pane in self.all_panes() {
                         if pane.analysis.get_untracked().is_some() {
                             self.close_plot(pane.id);
@@ -343,7 +383,7 @@ impl Workbench {
                     self.profiles
                         .flight
                         .set(log.settings.keys().next().copied().unwrap_or(1));
-                    self.log.set(Some(Arc::new(log)));
+                    self.log.set(Some(log));
                     if let Some(source) = self.workspace().source.get_untracked() {
                         self.authoring
                             .pending
@@ -359,7 +399,10 @@ impl Workbench {
                     }
                     self.apply_default_profiles();
                 }
-                Err(error) => self.status.set(error),
+                Err(error) => {
+                    self.loading.set(false);
+                    self.status.set(error);
+                }
             }
         });
     }

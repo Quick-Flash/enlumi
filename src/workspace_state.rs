@@ -155,7 +155,7 @@ impl Workbench {
                 views: vec![view],
                 active_view: view.id,
                 mounted: BTreeSet::from([view.id]),
-                generation: self.generation.get_untracked(),
+                generation: self.loaded_generation.get_untracked(),
             })
         });
         self.workspaces.items.update(|items| items.push(workspace));
@@ -210,7 +210,7 @@ impl Workbench {
     pub fn select_workspace(self, id: u64) {
         self.switch_workspace(id);
         let workspace = self.workspace();
-        if (workspace.generation != self.generation.get_untracked()
+        if (workspace.generation != self.loaded_generation.get_untracked()
             || workspace.loading.with_untracked(|loading| {
                 loading
                     .as_ref()
@@ -358,7 +358,7 @@ impl Workbench {
         }));
         root.workspaces.items.update(|items| {
             if let Some(item) = items.iter_mut().find(|item| item.id == workspace.id) {
-                item.generation = root.generation.get_untracked();
+                item.generation = root.loaded_generation.get_untracked();
             }
         });
         Ok(())

@@ -601,7 +601,13 @@ fn latest_filter_edit_wins_and_reload_discards_old_chain_workers() {
     for _ in 0..10 {
         window.frame();
     }
-    assert!(workbench.derived.get_untracked().is_empty());
+    let restored = workbench.derived.get_untracked();
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].id, id);
+    same(
+        restored[0].data.as_ref().unwrap(),
+        &FilterSpec::LowPass(2.0).apply(&raw).unwrap(),
+    );
     assert!(!workbench.derived_busy.get_untracked());
 }
 #[test]

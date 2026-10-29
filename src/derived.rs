@@ -336,7 +336,7 @@ pub(crate) fn compute_cached(
     Ok(fields)
 }
 
-fn evaluate_field(
+pub(crate) fn evaluate_field(
     field: &mut DerivedField,
     evaluation: &mut EvaluationCache,
     cancel: Arc<AtomicBool>,

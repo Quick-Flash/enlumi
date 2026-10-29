@@ -129,7 +129,11 @@ impl LogStore {
         Ok(store)
     }
 
-    fn from_parsed(name: String, origin: u64, parsed: ParsedData) -> Result<Self, String> {
+    pub(crate) fn from_parsed(
+        name: String,
+        origin: u64,
+        parsed: ParsedData,
+    ) -> Result<Self, String> {
         let mut signals = BTreeMap::new();
         let mut warnings = Vec::new();
         if parsed.completeness.is_incomplete() {

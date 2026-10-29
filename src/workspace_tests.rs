@@ -546,6 +546,33 @@ fn closing_loading_workspace_discards_late_previews_and_profile_results() {
             .instances
             .with_untracked(|instances| instances.is_empty())
     );
+    workbench.open_saved_workspace(SavedWorkspace {
+        path: path.clone(),
+        name: "Cancel".into(),
+        views: 5,
+        definition: Arc::new(crate::profile::load(&path).unwrap()),
+    });
+    let interrupted = workbench.workspace_id();
+    assert!(workbench.authoring.workspace_load.get_value().is_some());
+    workbench.open(fixture());
+    settle(&window, workbench, || {
+        !workbench.loading.get_untracked() && !workbench.profiles.busy.get_untracked()
+    });
+    // The interrupted recipe can still be selected and populated against the new log.
+    workbench.select_workspace(interrupted);
+    settle(&window, workbench, || {
+        !workbench.profiles.busy.get_untracked()
+            && workbench.views.items.with_untracked(|views| {
+                views.len() == 5
+                    && views.iter().all(|view| {
+                        view.panes.with_untracked(|panes| {
+                            panes
+                                .iter()
+                                .all(|pane| pane.lines.with_untracked(|lines| lines.len() == 1))
+                        })
+                    })
+            })
+    });
 }
 
 #[test]
@@ -608,6 +635,88 @@ fn saved_workspace_restores_five_views_before_log_and_populates_after_log_open()
     );
     let nested = crate::preset_lookup::plot_key(&crate::preset_lookup::view_key("Tools", 1), 0);
     assert!(crate::preset_lookup::plot(&definition, &nested).is_some());
+
+    // Reloading a log keeps the live workspace, including edits absent from its preset.
+    let extra = workbench.new_view();
+    workbench.rename_view("Session edits".into());
+    let plot = workbench.add_plot(workbench.pane().id, false, true);
+    let view_ids = workbench
+        .views
+        .items
+        .with_untracked(|views| views.iter().map(|view| view.id).collect::<Vec<_>>());
+    let layout = workbench.layout().get_untracked();
+    workbench.open(fixture());
+    settle(&window, workbench, || {
+        !workbench.loading.get_untracked() && !workbench.profiles.busy.get_untracked()
+    });
+    assert_eq!(workbench.workspace_id(), id);
+    assert_eq!(workbench.views.active.get_untracked(), extra);
+    assert_eq!(workbench.active().get_untracked(), plot.id);
+    assert_eq!(workbench.layout().get_untracked(), layout);
+    assert_eq!(
+        workbench
+            .views
+            .items
+            .with_untracked(|views| views.iter().map(|view| view.id).collect::<Vec<_>>()),
+        view_ids
+    );
+    assert_eq!(workbench.view().name.get_untracked(), "Session edits");
+    let other = workbench
+        .workspaces
+        .items
+        .with_untracked(|items| items.iter().find(|item| item.id != id).unwrap().id);
+    workbench.select_workspace(other);
+    workbench.select_workspace(id);
+    assert_eq!(workbench.views.active.get_untracked(), extra);
+    assert!(!workbench.profiles.busy.get_untracked());
+}
+
+#[test]
+fn unopened_saved_workspace_still_loads_after_replacing_the_log() {
+    let window = Window::open();
+    let source = window.scope.with(Workbench::new);
+    five_views(&window, source);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("deferred.json");
+    crate::preset_store::save(
+        preset_capture::capture(source, &CaptureKind::Workspace, "Deferred").unwrap(),
+        &path,
+        false,
+        None,
+    )
+    .unwrap();
+    let workbench = window.scope.with(Workbench::new);
+    let initial = workbench.workspace_id();
+    workbench.open_saved_workspace(SavedWorkspace {
+        path: path.clone(),
+        name: "Deferred".into(),
+        views: 5,
+        definition: Arc::new(crate::profile::load(&path).unwrap()),
+    });
+    let deferred = workbench.workspace_id();
+    workbench.select_workspace(initial);
+    for _ in 0..2 {
+        workbench.open(fixture());
+        settle(&window, workbench, || {
+            !workbench.loading.get_untracked() && !workbench.profiles.busy.get_untracked()
+        });
+        assert_eq!(workbench.workspace_id(), initial);
+    }
+    workbench.select_workspace(deferred);
+    settle(&window, workbench, || {
+        !workbench.profiles.busy.get_untracked()
+            && workbench.views.items.with_untracked(|views| {
+                views.len() == 5
+                    && views.iter().all(|view| {
+                        view.panes.with_untracked(|panes| {
+                            panes
+                                .iter()
+                                .all(|pane| pane.lines.with_untracked(|lines| lines.len() == 1))
+                        })
+                    })
+            })
+    });
+    assert_eq!(workbench.view().name.get_untracked(), "View 3");
 }
 
 #[test]
