@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 mod action_button;
 mod analysis_heatmap;
 mod analysis_plot;
