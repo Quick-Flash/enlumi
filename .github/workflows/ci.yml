@@ -54,6 +54,13 @@ jobs:
           add-job-id-key: "false"
           cache-bin: "false"
           cache-on-failure: "true"
+      - name: Fetch Rust dependencies
+        timeout-minutes: 10
+        shell: bash
+        env:
+          CARGO_HTTP_TIMEOUT: "120"
+          CARGO_NET_RETRY: "5"
+        run: bash .github/scripts/fetch-dependencies.sh
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
