@@ -54,7 +54,7 @@ pub fn WorkspacePicker(workbench: Workbench) -> impl IntoView {
                             }}}
                         }
                     }
-                    ActionButton(class="view-new-choice workspace-new",on:click=move |_|{open.set(false);workbench.new_workspace("New workspace".into());}) {"+ New workspace"}
+                    ActionButton(class="view-new-choice workspace-new",on:click=move |_|{open.set(false);workbench.new_blank_workspace();}) {"+ New workspace"}
                 }
             }
             Popover(open=actions,on_open_change=UnsyncCallback::new(move |is_open|if is_open{name.set(workbench.workspace().name.get_untracked());})) {

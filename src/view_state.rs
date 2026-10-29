@@ -52,7 +52,7 @@ pub struct Views {
 impl Views {
     pub fn new() -> Self {
         Self {
-            items: RwSignal::new_local(vec![WorkspaceView::new(1, 1, "Untitled".into())]),
+            items: RwSignal::new_local(vec![WorkspaceView::new(1, 1, "View 1".into())]),
             active: RwSignal::new_local(1),
             mounted: RwSignal::new_local(std::collections::BTreeSet::from([1])),
             next: RwSignal::new_local(2),
@@ -168,7 +168,10 @@ impl Workbench {
         id
     }
     pub(crate) fn create_view(self) -> u64 {
-        let view = self.create_detached_view();
+        let name = self.views.items.with_untracked(|views| {
+            next_numbered_name("View", views.iter().map(|view| view.name.get_untracked()))
+        });
+        let view = self.create_detached_view(name);
         let id = view.id;
         self.views.items.update(|views| views.push(view));
         self.views.mounted.update(|mounted| {
@@ -176,13 +179,13 @@ impl Workbench {
         });
         id
     }
-    pub(crate) fn create_detached_view(self) -> WorkspaceView {
+    pub(crate) fn create_detached_view(self, name: String) -> WorkspaceView {
         let id = self.views.next.get_untracked();
         self.views.next.set(id + 1);
         let plot = self.next_plot.get_untracked();
         self.next_plot.set(plot + 1);
         self.owner
-            .with_value(|owner| owner.with(|| WorkspaceView::new(id, plot, format!("View {id}"))))
+            .with_value(|owner| owner.with(|| WorkspaceView::new(id, plot, name)))
     }
     pub fn rename_view(self, name: String) {
         let name = name.trim();
@@ -276,18 +279,21 @@ impl Workbench {
             mounted.remove(&id);
         });
         if self.views.items.with_untracked(Vec::is_empty) {
-            let new = self.new_view();
-            self.for_view(new)
-                .unwrap()
-                .view()
-                .name
-                .set("Untitled".into());
+            self.new_view();
         } else if self.views.active.get_untracked() == id {
             self.views
                 .active
                 .set(self.views.items.with_untracked(|views| views[0].id));
         }
     }
+}
+
+pub(crate) fn next_numbered_name(prefix: &str, names: impl Iterator<Item = String>) -> String {
+    let names: std::collections::HashSet<_> = names.collect();
+    (1..=names.len() + 1)
+        .map(|number| format!("{prefix} {number}"))
+        .find(|name| !names.contains(name))
+        .expect("There is an unused numbered name")
 }
 
 fn remap_layout(layout: Layout, ids: &std::collections::BTreeMap<u64, u64>) -> Layout {

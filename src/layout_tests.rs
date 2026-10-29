@@ -4014,7 +4014,7 @@ fn view_picker_creates_renames_duplicates_switches_and_closes_views() {
         harness.deliver_to_first(pointer(PointerAction::Released, x, y));
         harness.settle(128);
     };
-    select(&mut harness, "Untitled");
+    select(&mut harness, "View 1");
     assert_eq!(workbench.views.active.get_untracked(), 1);
     select(&mut harness, "Comparison");
     assert_eq!(workbench.views.active.get_untracked(), copy);
@@ -4025,7 +4025,7 @@ fn view_picker_creates_renames_duplicates_switches_and_closes_views() {
             .text_content(window.nodes_with_class("view-caption")[0]),
         "View: Comparison"
     );
-    select(&mut harness, "Untitled");
+    select(&mut harness, "View 1");
     click_class(&mut harness, "view-select");
     let window = &harness.app().windows()[0];
     let choice = window

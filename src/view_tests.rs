@@ -94,6 +94,46 @@ fn views_restore_bounds_and_duplicate_independent_plot_state() {
     workbench.close_view(other);
     workbench.close_view(first.view().id);
     assert_eq!(workbench.views.items.with_untracked(Vec::len), 1);
-    assert_eq!(workbench.view().name.get_untracked(), "Untitled");
+    assert_eq!(workbench.view().name.get_untracked(), "View 1");
     assert!(workbench.pane().lines.with_untracked(Vec::is_empty));
+}
+
+#[test]
+fn blank_workspaces_and_views_use_numbered_names() {
+    let window = zgui_testkit_view::Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    let first_workspace = workbench.workspace_id();
+    assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 1");
+    assert_eq!(workbench.view().name.get_untracked(), "View 1");
+    workbench.new_view();
+    assert_eq!(workbench.view().name.get_untracked(), "View 2");
+    workbench.new_view();
+    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+
+    workbench.new_blank_workspace();
+    assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 2");
+    assert_eq!(workbench.view().name.get_untracked(), "View 1");
+    workbench.new_view();
+    assert_eq!(workbench.view().name.get_untracked(), "View 2");
+    workbench.new_blank_workspace();
+    assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 3");
+
+    workbench.switch_workspace(first_workspace);
+    workbench.new_view();
+    assert_eq!(workbench.view().name.get_untracked(), "View 4");
+}
+
+#[test]
+fn numbered_names_skip_existing_custom_names() {
+    let window = zgui_testkit_view::Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    workbench.rename_view("View 2".into());
+    workbench.new_view();
+    assert_eq!(workbench.view().name.get_untracked(), "View 1");
+    workbench.new_view();
+    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+
+    workbench.new_workspace("Workspace 2".into());
+    workbench.new_blank_workspace();
+    assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 3");
 }

@@ -539,7 +539,7 @@ fn closing_loading_workspace_discards_late_previews_and_profile_results() {
         window.frame();
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert_eq!(workbench.workspace().name.get_untracked(), "Untitled");
+    assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 1");
     assert!(
         workbench
             .profiles

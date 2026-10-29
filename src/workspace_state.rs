@@ -1,7 +1,7 @@
 use crate::{
     preset::PresetSource,
     state::Workbench,
-    view_state::{Views, WorkspaceView},
+    view_state::{Views, WorkspaceView, next_numbered_name},
 };
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
 use zgui::prelude::*;
@@ -39,7 +39,7 @@ impl Workspaces {
         Self {
             items: RwSignal::new_local(vec![Workspace {
                 id: 1,
-                name: RwSignal::new_local("Untitled".into()),
+                name: RwSignal::new_local("Workspace 1".into()),
                 loading: RwSignal::new_local(None),
                 source: RwSignal::new_local(None),
                 views: views.items.get_untracked(),
@@ -133,8 +133,17 @@ impl Workbench {
         self.views.active.set(target.active_view);
         self.views.mounted.set(target.mounted);
     }
+    pub fn new_blank_workspace(self) -> u64 {
+        let name = self.workspaces.items.with_untracked(|items| {
+            next_numbered_name(
+                "Workspace",
+                items.iter().map(|item| item.name.get_untracked()),
+            )
+        });
+        self.new_workspace(name)
+    }
     pub fn new_workspace(self, name: String) -> u64 {
-        let view = self.create_detached_view();
+        let view = self.create_detached_view("View 1".into());
         let id = self.workspaces.next.get_untracked();
         self.workspaces.next.set(id + 1);
         let workspace = self.owner.with_value(|owner| {
@@ -314,7 +323,7 @@ impl Workbench {
         if let Some(id) = existing {
             root.switch_workspace(id);
             root.finish_view_gestures();
-            let first = root.create_detached_view();
+            let first = root.create_detached_view("View 1".into());
             root.views.items.set(vec![first]);
             root.views.active.set(first.id);
             root.views.mounted.set(BTreeSet::from([first.id]));
