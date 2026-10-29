@@ -2,6 +2,8 @@
 mod icon;
 #[path = "build/revision.rs"]
 mod revision;
+#[path = "build/tlog.rs"]
+mod tlog;
 
 use std::{
     path::{Path, PathBuf},
@@ -18,6 +20,7 @@ fn git(args: &[&str]) -> Option<String> {
 
 fn main() {
     icon::build();
+    tlog::build();
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=build/revision.rs");
     println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_PLATFORM");

@@ -7,5 +7,7 @@
 *.yml text eol=lf
 *.ps1 text eol=crlf
 *.sh text eol=lf
+*.xml text eol=lf
 *.ulg binary
+*.tlog binary
 LICENSE* text eol=lf

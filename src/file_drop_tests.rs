@@ -126,6 +126,20 @@ fn file_drop_opens_replaces_and_validates_logs() {
     drop_files(&mut harness, vec![invalid], x, y);
     wait_for(&mut harness, "status", &error);
     assert_eq!(text(&harness, "file-name"), "second flight.ulg");
+
+    let telemetry = logs.join("telemetry.TLOG");
+    std::fs::write(
+        &telemetry,
+        include_bytes!("../tests/fixtures/synthetic-telemetry.tlog"),
+    )
+    .unwrap();
+    drop_files(&mut harness, vec![telemetry], x, y);
+    wait_for(&mut harness, "file-name", "telemetry.TLOG");
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("raw-section")
+            .is_empty()
+    );
 }
 
 #[test]

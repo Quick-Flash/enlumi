@@ -1,7 +1,8 @@
 # Enlumi
 
-Native desktop viewer for time-series logs. Open ULog (`.ulg`) or Betaflight
-Blackbox (`.bbl`, `.bfl`, `.cfl`, `.txt`, `.log`) files, browse signals, and drag
+Native desktop viewer for time-series logs. Open ULog (`.ulg`), Betaflight
+Blackbox (`.bbl`, `.bfl`, `.cfl`, `.txt`, `.log`), or MAVLink telemetry (`.tlog`)
+files from Mission Planner or QGroundControl, browse signals, and drag
 fields onto docked plots.
 
 ## Features
@@ -122,6 +123,21 @@ Run local checks before submitting changes:
 ```sh
 cargo xtask pre-commit
 ```
+
+Update MAVLink definitions and their matching Rust dependencies with one command:
+
+```sh
+cargo xtask update-mavlink
+```
+
+You can also select **update-mavlink** from the interactive `cargo xtask` menu.
+This selects the latest stable, non-yanked `mavlink` release. To pin a particular
+release, use `cargo xtask update-mavlink 0.19.1`. The command verifies the archive
+against its crates.io SHA-256 checksum, copies ArduPilotMega's recursive XML
+includes and upstream license, records provenance, updates `Cargo.toml` and
+`Cargo.lock`, and runs importer tests. A failed update restores the previous files.
+Review and commit the resulting diff. Ordinary builds use the checked-in files
+without downloading definitions.
 
 On Linux, test native Wayland parsing and window-state bookkeeping with
 `cargo test --locked -p zgui-platform-wayland --lib`. From a running Wayland

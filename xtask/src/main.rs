@@ -1,4 +1,5 @@
 mod bundle;
+mod mavlink;
 #[path = "../../build/revision.rs"]
 mod revision;
 
@@ -43,6 +44,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
         "build" => cargo(&["build", "--locked", "--workspace"], args),
         "build-release" => cargo(&["build", "--locked", "--release", "--workspace"], args),
         "bundle" if args.is_empty() => bundle::build(),
+        "update-mavlink" if args.len() <= 1 => mavlink::update(args.first().map(String::as_str)),
         "test" => cargo(&["test", "--locked", "--workspace"], args),
         "check" => cargo(&["check", "--locked", "--workspace"], args),
         "pre-commit" if args.is_empty() => {
@@ -64,7 +66,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
         }
         "help" | "-h" | "--help" => {
             println!(
-                "cargo xtask [run-gui | run-gui-release | build | build-release | bundle | test | check | pre-commit]"
+                "cargo xtask [run-gui | run-gui-release | build | build-release | bundle | test | check | pre-commit | update-mavlink [version]]"
             );
             println!("No command: interactive menu. GUI commands accept log path after --.");
             Ok(())
@@ -103,6 +105,7 @@ fn menu() -> Result<(), String> {
         "test",
         "check",
         "pre-commit",
+        "update-mavlink",
     ];
     println!("Enlumi xtask");
     for (index, command) in commands.iter().enumerate() {

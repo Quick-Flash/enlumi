@@ -1,4 +1,5 @@
 mod blackbox;
+mod tlog;
 mod ulog_settings;
 
 use plot::{PlotPoint, time_series::SeriesData};
@@ -9,6 +10,7 @@ use std::{collections::BTreeMap, io::Read, path::Path, sync::Arc};
 pub const BLACKBOX_EXTENSIONS: &[&str] = &[
     "bbl", "BBL", "bfl", "BFL", "cfl", "CFL", "txt", "TXT", "log", "LOG",
 ];
+pub const TLOG_EXTENSIONS: &[&str] = &["tlog", "TLOG"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SignalInfo {
@@ -89,6 +91,9 @@ impl LogStore {
             return Self::read_ulog(path, name);
         }
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+        if extension.eq_ignore_ascii_case("tlog") || tlog::has_header(&prefix[..length]) {
+            return Self::read_tlog(path, name);
+        }
         if prefix[..length].starts_with(b"H Product:Blackbox")
             || BLACKBOX_EXTENSIONS
                 .iter()
@@ -97,7 +102,7 @@ impl LogStore {
             return Self::read_blackbox(path, name);
         }
         Err(
-            "Unsupported log format; open ULog (.ulg) or Blackbox (.bbl, .bfl, .cfl, .txt, .log)"
+            "Unsupported log format; open ULog (.ulg), Blackbox (.bbl, .bfl, .cfl, .txt, .log), or MAVLink telemetry (.tlog)"
                 .into(),
         )
     }

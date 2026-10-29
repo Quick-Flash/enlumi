@@ -81,6 +81,7 @@ pub fn WorkbenchApp(
                             let start = last.load();
                             let path = blocking(move || {
                                 let supported: Vec<_> = ["ulg", "ULG"].into_iter()
+                                    .chain(crate::log::TLOG_EXTENSIONS.iter().copied())
                                     .chain(crate::log::BLACKBOX_EXTENSIONS.iter().copied()).collect();
                                 let dialog = rfd::FileDialog::new();
                                 let dialog = if let Some(start) = start { dialog.set_directory(start) } else { dialog };
@@ -88,6 +89,7 @@ pub fn WorkbenchApp(
                                     .add_filter("Supported logs", &supported)
                                     .add_filter("ULog", &["ulg", "ULG"])
                                     .add_filter("Blackbox", crate::log::BLACKBOX_EXTENSIONS)
+                                    .add_filter("MAVLink telemetry", crate::log::TLOG_EXTENSIONS)
                                     .add_filter("All files", &["*"])
                                     .pick_file()
                             }).await;

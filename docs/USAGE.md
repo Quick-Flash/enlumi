@@ -1,12 +1,29 @@
 # Using Enlumi
 
-Open ULog (`.ulg`) or Betaflight Blackbox (`.bbl`, `.bfl`, `.cfl`, `.txt`, `.log`) files. Embedded
+Open ULog (`.ulg`), Betaflight Blackbox (`.bbl`, `.bfl`, `.cfl`, `.txt`, `.log`),
+or MAVLink telemetry (`.tlog`) files from Mission Planner or QGroundControl. Embedded
 Blackbox flights have separate field groups and independent elapsed-time origins.
 Blackbox values use raw log units. Main I/P fields and merged slow fields support
 the same plots and filters as ULog fields; GPS/home records and events are not
 shown. File filters include lowercase and uppercase suffixes (such as `.BBL`).
 Use **All files** for renamed or mixed-case files; their contents must still be
 a supported log format. Decoder failures and frame limits appear as load warnings.
+
+MAVLink telemetry supports mixed MAVLink 1/2 packets, the common and ArduPilotMega
+dialects and their included vendor definitions, and modern binary or legacy
+Mission Planner timestamps. Signals appear under `mavlink/<system>.<component>/`,
+for example `mavlink/1.1/ATTITUDE.roll`. Sensor instances and named values remain
+separate, such as `BATTERY_STATUS[0].voltages[0]` and `NAMED_VALUE_FLOAT[roll].value`.
+The plot timeline uses elapsed ground-station record time; payload boot/Unix
+timestamps remain ordinary fields. Numeric values use their raw MAVLink wire
+units and sentinel values, without automatic unit or parameter-encoding conversion.
+Text fields are not plotted. Parameter replies are grouped by name as numeric
+telemetry, not treated as a complete parameter snapshot. Telemetry covers only
+the messages and rates recorded over the link, so high-rate onboard signals may
+be absent. Unknown dialect messages, corrupt packets, clock regressions, and
+truncated tails produce warnings while recoverable samples remain available.
+Signed packets are decoded with CRC checks; cryptographic signatures are not
+authenticated. Decoder limits bound packet, channel, sample, and recovery counts.
 
 Click **Open log** or drag a single log file from your file manager into the window.
 Dropping a file opens it just like the file dialog, replacing the current log.
