@@ -1,5 +1,7 @@
 mod bundle;
 mod mavlink;
+mod perf;
+mod perf_trace;
 #[path = "../../build/revision.rs"]
 mod revision;
 
@@ -44,6 +46,8 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
         "build" => cargo(&["build", "--locked", "--workspace"], args),
         "build-release" => cargo(&["build", "--locked", "--release", "--workspace"], args),
         "bundle" if args.is_empty() => bundle::build(),
+        "perf-summary" if args.len() == 1 => perf::summarize(Path::new(&args[0])),
+        "perf-trace" if args.len() == 1 => perf_trace::summarize(Path::new(&args[0])),
         "update-mavlink" if args.len() <= 1 => mavlink::update(args.first().map(String::as_str)),
         "test" => cargo(&["test", "--locked", "--workspace"], args),
         "check" => cargo(&["check", "--locked", "--workspace"], args),
@@ -66,7 +70,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
         }
         "help" | "-h" | "--help" => {
             println!(
-                "cargo xtask [run-gui | run-gui-release | build | build-release | bundle | test | check | pre-commit | update-mavlink [version]]"
+                "cargo xtask [run-gui | run-gui-release | build | build-release | bundle | test | check | pre-commit | update-mavlink [version] | perf-summary <frames.csv> | perf-trace <latency.jsonl>]"
             );
             println!("No command: interactive menu. GUI commands accept log path after --.");
             Ok(())

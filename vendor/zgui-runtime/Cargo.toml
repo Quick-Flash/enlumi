@@ -55,3 +55,9 @@ zgui-text-style = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
 zgui-view = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
 zgui-view-dom = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
 zgui-vocab = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+
+[dev-dependencies]
+zgui-arena = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+
+[workspace]
+resolver = "3"

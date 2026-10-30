@@ -3,6 +3,7 @@ use crate::analysis_workspace::AnalysisWorkspaceProps;
 use crate::github_link::GithubLinkProps;
 use crate::preferences::{LastLogDirectory, ThemePreference};
 use crate::screenshot::ScreenshotProps;
+use crate::trajectory_axes::TrajectoryWorkspaceProps;
 use crate::view_picker::ViewPickerProps;
 use crate::window_frame::WindowFrameProps;
 use crate::workspace_picker::WorkspacePickerProps;
@@ -33,6 +34,9 @@ pub fn WorkbenchApp(
         workbench.open(path);
     }
     let palette = RwSignal::new_local(preferences.load());
+    #[cfg(test)]
+    let updates = use_local_context::<UpdateState>().unwrap_or_else(UpdateState::new);
+    #[cfg(not(test))]
     let updates = UpdateState::new();
     let drop_directory = log_directory.clone();
     view! {
@@ -52,6 +56,7 @@ pub fn WorkbenchApp(
                 }) {
             column(class = "page workbench", class:workbench-dragging = move || workbench.drag.state.get().is_some_and(|drag| drag.3) || workbench.line_drag.state.get().is_some_and(|drag| drag.moving) || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.moving),
                 on:key_down:capture = move |event| {
+                    if workbench.timeline_shortcut(event,event.modifiers) {event.prevent_default();event.stop_propagation();return;}
                     if workbench.measurement_shortcut(event, event.modifiers) {
                         event.prevent_default();event.stop_propagation();return;
                     }
@@ -108,8 +113,9 @@ pub fn WorkbenchApp(
                     ActionButton(class="analyze-toggle",class:setting-active=move ||workbench.analysis().open.get(),on:click=move |_|{
                         if workbench.analysis().open.get_untracked() {workbench.analysis().open.set(false);workbench.analysis().picking_range.set(false);}
                         else {workbench.new_analysis();}
-                        workbench.filters_open.set(false);
+                        workbench.filters_open.set(false);workbench.trajectory_builder().open.set(false);
                     }) {"Analyze"}
+                    ActionButton(class="create-2d-plot",class:setting-active=move ||workbench.trajectory_builder().open.get(),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked(){workbench.trajectory_builder().open.set(false);}else{workbench.new_trajectory(false);}}) {"2D plot"}
                     ThemePicker(palette = palette, preferences = preferences.clone())
                     row(class="toolbar-brand") {
                         GithubLink(workbench = workbench)
@@ -125,6 +131,12 @@ pub fn WorkbenchApp(
                         ResizablePanelGroup(direction = Orientation::Horizontal, label = "Plots and frequency analysis", class = "workbench-analysis-split") {
                             ResizablePanel(default_size = 75.0, min_size = 35.0, min_pixels = 350.0, label = "Plots", class = "analysis-plots-panel") {
                                 column(class = "plot-page") { PlotWorkspace(workbench = workbench) }
+                            }
+                            if move ||workbench.trajectory_builder().open.get(){
+                                ResizableHandle(label="Resize plot and 2D builder panels",class="workspace-divider")
+                                ResizablePanel(default_size=26.0,min_size=20.0,min_pixels=300.0,label="2D plot builder",class="trajectory-side-panel"){
+                                    TrajectoryWorkspace(workbench=workbench)
+                                }
                             }
                             if move || workbench.analysis().open.get() {
                                 ResizableHandle(label = "Resize plot and analysis panels", class = "workspace-divider")

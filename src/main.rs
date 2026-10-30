@@ -80,6 +80,7 @@ mod plot_actions;
 mod plot_appearance;
 mod plot_bounds;
 mod plot_cursor;
+mod plot_links;
 mod plot_menu;
 mod preferences;
 mod preset;
@@ -127,6 +128,11 @@ mod theme;
 mod theme_picker;
 #[cfg(test)]
 mod theme_tests;
+mod timeline;
+mod trajectory;
+mod trajectory_axes;
+mod trajectory_plot;
+mod trajectory_render;
 mod tree_lines;
 mod update_controls;
 mod update_download;
@@ -178,6 +184,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let native_wayland = startup::native_wayland();
     app()
+        .with_probe(crate::fps::probe())
         .with_application_id("com.tealdrones.enlumi")
         .with_icon(app_icon::window())
         .with_title("Enlumi - Log workbench")

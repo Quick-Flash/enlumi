@@ -105,6 +105,7 @@ impl AnalysisUi {
 }
 impl Workbench {
     pub fn new_analysis(self) {
+        self.trajectory_builder().open.set(false);
         self.analysis().cancel();
         self.analysis().run_selection.set(false);
         self.analysis().picking_range.set(false);
@@ -161,6 +162,7 @@ impl Workbench {
         }
     }
     pub fn edit_analysis(self, pane: Pane) {
+        self.trajectory_builder().open.set(false);
         let Some(result) = pane.analysis.get_untracked() else {
             return;
         };

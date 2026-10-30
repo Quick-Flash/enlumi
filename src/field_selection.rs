@@ -106,6 +106,21 @@ impl Workbench {
         }
     }
     pub fn field_drag_move(self, x: f32, y: f32) {
+        self.update_trajectory_drop(x, y);
+        if self.builder_slot_at(x, y).is_some() {
+            self.drop_target.set(None);
+            self.analysis().hover.set(false);
+            return;
+        }
+        if self
+            .drag
+            .state
+            .get_untracked()
+            .is_some_and(|drag| drag.0.starts_with("@trajectory/"))
+        {
+            self.drop_target.set(self.hit_any_plot(x, y));
+            return;
+        }
         self.analysis().condition_hover.set(
             self.analysis().open.get_untracked()
                 && self.analysis().mode.get_untracked() == "heatmap"
@@ -172,6 +187,10 @@ impl Workbench {
         self.drop_target.set(self.hit_plot(x, y));
     }
     pub fn finish_field_drag(self) {
+        self.trajectory_builder().pane.trajectory_drop.set(None);
+        for pane in self.panes().get_untracked() {
+            pane.trajectory_drop.set(None);
+        }
         self.analysis().condition_hover.set(false);
         self.analysis().hover.set(false);
         self.bands.hover.set(false);
@@ -180,6 +199,25 @@ impl Workbench {
         self.drop_target.set(None);
     }
     pub fn drop_fields(self, source: String, x: f32, y: f32) {
+        if let Some(index) = source
+            .strip_prefix("@trajectory/pair/")
+            .and_then(|index| index.parse::<usize>().ok())
+        {
+            if let Some(target) = self.hit_any_plot(x, y) {
+                self.drop_trajectory_pair(index, target);
+            }
+            self.finish_field_drag();
+            return;
+        }
+        if let Some((index, axis)) = self.builder_slot_at(x, y) {
+            self.queue_field_sources(
+                self.drag_fields(source),
+                crate::profile_state::Destination::TrajectoryAxis(index, axis),
+                None,
+            );
+            self.finish_field_drag();
+            return;
+        }
         if source.starts_with("@analysis/") {
             let sources = self
                 .drag_fields(source)
@@ -240,7 +278,13 @@ impl Workbench {
             .map(|id| Destination::Plot(Some(id)))
         };
         if let Some(target) = target {
-            self.queue_field_sources(sources, target, slot);
+            let axis = if let Destination::Plot(Some(id)) = target {
+                self.find(id)
+                    .and_then(|pane| self.trajectory_slot_at(pane, x, y))
+            } else {
+                None
+            };
+            self.queue_field_sources_at_axis(sources, target, slot, axis);
         } else {
             self.status
                 .set("Drop outside plots or filter source area cancelled".into());

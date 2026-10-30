@@ -10,10 +10,13 @@ use zgui_ui::prelude::*;
 pub fn PlotActions(workbench: Workbench, pane: Pane) -> impl IntoView {
     view! {
         row(class="plot-actions") {
+        if move ||pane.trajectory.with(Option::is_some) {
+            ActionButton(class="trajectory-open-setup",on:click=move |_|workbench.edit_trajectory(pane)){"Edit X/Y"}
+        }
         Screenshot(workbench=workbench,pane=pane)
         PlotPresetMenu(workbench=workbench,pane=pane)
         PlotAppearance(workbench=workbench,pane=pane)
-            Popover {
+            if move ||pane.trajectory.with(Option::is_none) {Popover {
                 PopoverTrigger(size = ButtonSize::Xs, variant = ButtonVariant::Ghost,
                     class="plot-units",a11y:label = "Plot units options") { "Units" }
                 PopoverContent {
@@ -21,7 +24,7 @@ pub fn PlotActions(workbench: Workbench, pane: Pane) -> impl IntoView {
                     ActionButton(disabled=Signal::derive_local(move ||workbench.plot_units(pane).len()<2),on:click = move |_| workbench.separate_plot_units(pane)) { "Separate plots" }
                     if move ||workbench.plot_units(pane).len()<2 {text(class="muted") {"Separate plots becomes available when unit labels differ."}}
                 }
-            }
+            }}
 
         ActionButton(class = "duplicate-plot-button", a11y:label = "Duplicate plot",
             on:click = move |_| workbench.duplicate_plot(pane)) { "Duplicate" }

@@ -16,6 +16,7 @@ pub struct WorkspaceView {
     pub maximized: RwSignal<Option<u64>, LocalStorage>,
     pub dock: DockState,
     pub analysis: AnalysisUi,
+    pub trajectory_builder: crate::trajectory_axes::Builder,
 }
 
 impl WorkspaceView {
@@ -31,6 +32,7 @@ impl WorkspaceView {
             active: RwSignal::new_local(plot),
             maximized: RwSignal::new_local(None),
             analysis: AnalysisUi::new(),
+            trajectory_builder: crate::trajectory_axes::Builder::new(),
             dock: DockState::new(
                 layout,
                 Signal::derive_local(move || {
@@ -266,6 +268,8 @@ impl Workbench {
         for pane in workbench.panes().get_untracked() {
             pane.lines.set(Vec::new());
             pane.analysis.set(None);
+            pane.trajectory.set(None);
+            pane.trajectory_data.set(None);
             pane.snapshot.set_value(None);
             self.profiles.titles.update(|titles| {
                 titles.remove(&pane.id);

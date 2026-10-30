@@ -1,5 +1,8 @@
 use super::{Operation, Profile, Scalar, Shape, Source};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -58,6 +61,41 @@ impl Drag {
 pub struct ResourceIds {
     pub fields: BTreeMap<String, u64>,
     pub geometry: BTreeMap<String, u64>,
+}
+
+impl ResourceIds {
+    /// Preparation omits unavailable geometry and can merge identical resources.
+    /// Reserve a complete, distinct set before trying the definition again.
+    pub fn reconcile(&mut self, profile: &Profile, mut next: impl FnMut() -> u64) {
+        for (ids, names) in [
+            (
+                &mut self.fields,
+                profile
+                    .filters
+                    .iter()
+                    .map(|field| &field.id)
+                    .collect::<Vec<_>>(),
+            ),
+            (
+                &mut self.geometry,
+                profile
+                    .geometry
+                    .iter()
+                    .map(|geometry| &geometry.id)
+                    .collect::<Vec<_>>(),
+            ),
+        ] {
+            ids.retain(|name, _| names.contains(&name));
+            let mut assigned = BTreeSet::new();
+            for name in names {
+                let id = ids.entry(name.clone()).or_insert_with(&mut next);
+                if !assigned.insert(*id) {
+                    *id = next();
+                    assigned.insert(*id);
+                }
+            }
+        }
+    }
 }
 
 impl Profile {

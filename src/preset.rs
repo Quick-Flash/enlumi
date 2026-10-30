@@ -18,6 +18,8 @@ pub struct PlotPreset {
     #[serde(default)]
     pub links: Links,
     pub analysis: Option<Analysis>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trajectory: Option<crate::trajectory::Spec>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -42,12 +44,28 @@ pub struct GeometryStyle {
     pub labels: bool,
     pub hidden: bool,
 }
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Links {
+    #[serde(default = "default_link")]
+    pub timeline: bool,
     pub x: bool,
     pub y: bool,
+    #[serde(default = "default_link")]
     pub pointer: bool,
+}
+fn default_link() -> bool {
+    true
+}
+impl Default for Links {
+    fn default() -> Self {
+        Self {
+            x: false,
+            y: false,
+            pointer: true,
+            timeline: true,
+        }
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -172,6 +190,12 @@ pub fn validate(profile: &crate::profile::Profile) -> Result<(), String> {
     Ok(())
 }
 fn validate_plot(plot: &PlotPreset) -> Result<(), String> {
+    if let Some(spec) = &plot.trajectory {
+        spec.validate()?;
+        if plot.analysis.is_some() {
+            return Err("A plot cannot be both trajectory and frequency analysis".into());
+        }
+    }
     if plot.name.trim().is_empty() || plot.lines.len() > 4096 {
         return Err("Invalid plot preset".into());
     }

@@ -1,4 +1,6 @@
+use crate::plot_links::PlotLinksMenuProps;
 use crate::plot_menu::{PlotContextProps, PlotTabContextProps};
+use crate::trajectory_plot::TrajectoryPlotProps;
 use crate::{
     analysis_plot::AnalysisPlotProps,
     plot_actions::PlotActionsProps,
@@ -12,14 +14,20 @@ use plot::{
 };
 use zgui::{prelude::*, reactive::UnsyncCallback};
 
+#[derive(Clone, Copy)]
+pub struct PlotGroups {
+    pub time: LinkGroup,
+    pub frequency: LinkGroup,
+    pub spatial: LinkGroup,
+}
+
 #[component]
 pub fn Panel(
     workbench: Workbench,
     pane: Pane,
     dock: DockState,
     geometry: WorkspaceGeometry,
-    group: LinkGroup,
-    frequency_group: LinkGroup,
+    groups: PlotGroups,
     cursor: RwSignal<Option<(u64, plot::PlotPoint)>, LocalStorage>,
 ) -> impl IntoView {
     let group = if pane.analysis.with_untracked(|result| {
@@ -27,9 +35,9 @@ pub fn Panel(
             .as_ref()
             .is_some_and(|result| result.mode != crate::spectral::Mode::Spectrogram)
     }) {
-        frequency_group
+        groups.frequency
     } else {
-        group
+        groups.time
     };
     provide_local_context(PlotLinks::with_options(pane.id, group, pane.links));
     let visible = Signal::derive_local(move || {
@@ -54,7 +62,7 @@ pub fn Panel(
                     on_close = UnsyncCallback::new(move |id| workbench.close_plot(id)),
                     on_add = UnsyncCallback::new(move |id| { workbench.add_plot(id, false, true); }))
                 }
-                PlotLinksMenu(options = pane.links)
+                PlotLinksMenu(pane=pane)
                 PlotActions(workbench = workbench, pane = pane)
                 if move || pane.loading.with(Option::is_some) {
                     text(class="plot-loading",a11y:role=Role::Status) {{move ||pane.loading.get().unwrap_or_default()}}
@@ -62,12 +70,15 @@ pub fn Panel(
             }
             PlotContext(workbench=workbench,pane=pane) {
             column(class = "plot-content", class:legend-drop-active = move || workbench.line_drag.target.get().is_some_and(|target| target.pane == pane.id)) {
-                if move || pane.analysis.with(|result| result.as_ref().is_some_and(|result| result.heatmap.is_some())) {
-                    {move || pane.analysis.get().map(|result| AnyView::new(view! {AnalysisPlot(result=result,state=pane.plot,visible=visible,snapshot=pane.snapshot,background=pane.background)}))}
+                if move || pane.trajectory.with(Option::is_some) {
+                    TrajectoryPlot(workbench=workbench,pane=pane,visible=visible,group=groups.spatial)
+                } else { if move || pane.analysis.with(|result| result.as_ref().is_some_and(|result| result.heatmap.is_some())) {
+                    {move || pane.analysis.get().map(|result| AnyView::new(view! {AnalysisPlot(result=result,state=pane.plot,visible=visible,snapshot=pane.snapshot,background=pane.background,timeline=(workbench,pane))}))}
                 } else {
                     CursorPlot(workbench = workbench, pane = pane, visible = visible, linked = cursor)
                 }
-                if move || pane.analysis.get().is_none() && pane.lines.with(|lines| lines.is_empty()) {
+                }
+                if move || pane.trajectory.with(Option::is_none) && pane.analysis.get().is_none() && pane.lines.with(|lines| lines.is_empty()) {
                     column(class = "plot-empty", a11y:label = "Empty plot") {
                         text(class = "empty-title") {{move ||pane.loading.get().unwrap_or_else(||"Drag fields or views here".into())}}
                         text(class = "muted") {{move ||if pane.loading.with(Option::is_some){"Available data appears while remaining fields prepare."}else{"Choose Fields or Profiles in sidebar, then drag an item onto this plot."}}}
@@ -76,9 +87,9 @@ pub fn Panel(
 
             }
             }
-            if move || workbench.drag.state.get().is_some_and(|drag| drag.3 && (pane.analysis.get().is_none() || drag.0.starts_with("@analysis/") || crate::profile::identity::Drag::parse(&drag.0).is_some_and(|drag|drag.item.is_workspace_item()))) {
+            if move || (pane.trajectory.with(Option::is_none) || workbench.drag.state.get().is_some_and(|drag|drag.0.starts_with("@trajectory/pair/"))) && workbench.drag.state.get().is_some_and(|drag| drag.3 && (pane.analysis.get().is_none() || drag.0.starts_with("@trajectory/pair/") || drag.0.starts_with("@analysis/") || crate::profile::identity::Drag::parse(&drag.0).is_some_and(|drag|drag.item.is_workspace_item()))) {
                 column(class = "signal-drop-overlay", class:signal-drop-active = move || workbench.drop_target.get() == Some(pane.id)) {
-                    text(class = "drop-title") {{move || if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@analysis/")) { if pane.analysis.get().is_some() { "Drop to add compatible spectrum or create analysis plot" } else { "Drop to create separate analysis plot" } } else if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@profile/")) { if workbench.drop_target.get() == Some(pane.id) { "Release to add view" } else { "Drop view here" } } else if workbench.drop_target.get() == Some(pane.id) { "Release to add line" } else { "Drop field here" }}}
+                    text(class = "drop-title") {{move || if workbench.drag.state.get().is_some_and(|drag|drag.0.starts_with("@trajectory/pair/")){ if pane.trajectory.with(Option::is_some) {"Add X/Y pair"}else{"Create 2D plot"} }else if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@analysis/")) { if pane.analysis.get().is_some() { "Drop to add compatible spectrum or create analysis plot" } else { "Drop to create separate analysis plot" } } else if workbench.drag.state.get().is_some_and(|drag| drag.0.starts_with("@profile/")) { if workbench.drop_target.get() == Some(pane.id) { "Release to add view" } else { "Drop view here" } } else if workbench.drop_target.get() == Some(pane.id) { "Release to add line" } else { "Drop field here" }}}
                     text(class = "drop-name") {{move || workbench.drag.state.get().map(|drag| workbench.field_name(&drag.0)).unwrap_or_default()}}
                 }
             }

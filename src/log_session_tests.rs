@@ -84,6 +84,129 @@ fn replace(workbench: Workbench, log: Arc<LogStore>) {
 }
 
 #[test]
+fn switching_log_formats_retries_unavailable_profile_geometry_without_panicking() {
+    use crate::profile::identity::{ProfileKey, ResourceIds};
+    let ulog = Arc::new(
+        LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    let tlog = Arc::new(
+        LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/synthetic-telemetry.tlog"
+        )))
+        .unwrap(),
+    );
+    for (initial, other, source) in [
+        (ulog.clone(), tlog.clone(), "esc_status/0/esc[5].esc_rpm"),
+        (
+            tlog.clone(),
+            ulog.clone(),
+            "mavlink/1.1/HEARTBEAT.custom_mode",
+        ),
+    ] {
+        // Load a workspace for the other format first, then open its matching log.
+        let window = Window::open();
+        let workbench = window.scope.with(Workbench::new);
+        workbench.log.set(Some(other.clone()));
+        let definition: crate::profile::Profile = serde_json::from_value(serde_json::json!({
+            "version": 2, "name": "Format-specific workspace",
+            "geometry": [{"id":"mode", "name":"Mode", "shape":{"kind":"states", "source":source, "rules":[]}}]
+        })).unwrap();
+        let key = ProfileKey::new("format-specific.json".into(), 1);
+        let ids = ResourceIds {
+            fields: BTreeMap::new(),
+            geometry: BTreeMap::from([("mode".into(), workbench.id())]),
+        };
+        let prepared = crate::profile::prepare::prepare_with_ids(
+            definition.clone(),
+            &other,
+            std::path::Path::new("."),
+            ids,
+            Arc::new(AtomicBool::new(false)),
+        )
+        .unwrap();
+        assert!(!prepared.ids.geometry.contains_key("mode"));
+        workbench.profiles.instances.update(|instances| {
+            instances.insert(
+                key.clone(),
+                AppliedProfile::from_prepared(key.clone(), definition, prepared),
+            );
+        });
+        for (next, available) in [
+            (initial.clone(), true),
+            (other.clone(), false),
+            (initial.clone(), true),
+        ] {
+            replace(workbench, next);
+            let instance = workbench
+                .profiles
+                .instances
+                .with_untracked(|instances| instances[&key].clone());
+            assert_eq!(instance.ids.geometry.contains_key("mode"), available);
+            assert_eq!(instance.diagnostics.is_empty(), available);
+        }
+    }
+}
+
+#[test]
+fn trajectory_inputs_and_mode_survive_log_replacement_and_global_time_resets() {
+    let window = Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    let old = log(1., true, false);
+    workbench.log.set(Some(old.clone()));
+    let pane = workbench.pane();
+    add_line(pane, 100, "sensor/0/value", &old);
+    add_line(pane, 101, "other/0/value", &old);
+    let spec = crate::trajectory::Spec {
+        x: "sensor/0/value".into(),
+        y: "other/0/value".into(),
+        extra: vec![crate::trajectory::Pair {
+            x: "other/0/value".into(),
+            y: "sensor/0/value".into(),
+            gps_scale: None,
+            fix: String::new(),
+        }],
+        ..Default::default()
+    };
+    pane.trajectory.set(Some(spec.clone()));
+    workbench.edit_trajectory(pane);
+    assert!(
+        !workbench
+            .trajectory_builder()
+            .pane
+            .lines
+            .with_untracked(Vec::is_empty)
+    );
+    workbench.timeline.pin(0.1).unwrap();
+    replace(workbench, log(3., true, false));
+    assert_eq!(pane.trajectory.get_untracked(), Some(spec.clone()));
+    assert!(
+        workbench
+            .trajectory_builder()
+            .pane
+            .lines
+            .with_untracked(Vec::is_empty)
+    );
+    assert_eq!(
+        workbench
+            .trajectory_builder()
+            .pane
+            .trajectory
+            .get_untracked(),
+        Some(spec)
+    );
+    assert_eq!(workbench.timeline.time.get_untracked(), Some(0.));
+    assert_eq!(pane.lines.get_untracked()[0].data.samples()[0].y, 3.);
+    replace(workbench, log(4., false, false));
+    assert_eq!(pane.trajectory.get_untracked().unwrap().y, "other/0/value");
+    assert_eq!(pane.lines.with_untracked(Vec::len), 1);
+}
+
+#[test]
 fn replacement_preserves_workspaces_views_plots_and_appearance_with_new_data() {
     let window = Window::open();
     let workbench = window.scope.with(Workbench::new);

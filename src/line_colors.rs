@@ -18,7 +18,7 @@ pub const PALETTE: [[u8; 4]; 12] = [
     [255, 237, 111, 255],
 ];
 
-fn next_color(local: &[[u8; 4]]) -> [u8; 4] {
+pub(crate) fn next_color(local: &[[u8; 4]]) -> [u8; 4] {
     *PALETTE
         .iter()
         .min_by_key(|color| local.iter().filter(|used| used[..3] == color[..3]).count())

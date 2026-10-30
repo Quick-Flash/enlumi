@@ -1,0 +1,3 @@
+.plot-screenshot-icon { width: 16px; height: 16px; color: transparent; --zgui-stroke: var(--zui-color-foreground); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.zui-surface.plot-screenshot-menu { box-shadow: none; animation: none; transform: none; }
+.zui-surface.plot-screenshot-menu[data-state="closed"] { animation: none; }

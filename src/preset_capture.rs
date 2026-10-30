@@ -457,6 +457,18 @@ impl Capture {
             })
             .transpose()?;
         let links = pane.links.get_untracked();
+        let trajectory = pane
+            .trajectory
+            .get_untracked()
+            .map(|mut spec| {
+                for source in spec.sources_mut() {
+                    if !source.is_empty() {
+                        *source = self.source(source)?;
+                    }
+                }
+                Ok::<_, String>(spec)
+            })
+            .transpose()?;
         Ok(PlotPreset {
             name: name.into(),
             background: pane.background.get_untracked(),
@@ -464,7 +476,9 @@ impl Capture {
             geometry,
             geometry_style,
             analysis,
+            trajectory,
             links: Links {
+                timeline: pane.timeline_link.get_untracked(),
                 x: links.x,
                 y: links.y,
                 pointer: links.pointer,

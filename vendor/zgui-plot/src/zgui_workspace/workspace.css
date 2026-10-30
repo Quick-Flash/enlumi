@@ -1,0 +1,89 @@
+    .plot-grid { flex: 1; min-width: 0; min-height: 0; gap: 0; overflow: auto; padding: 0; position: relative; }
+    .split-canvas { position: relative; flex: none; }
+    .split-canvas .workbench-plot { position: absolute; box-sizing: border-box; }
+    .split-grip { position: absolute; cursor: ew-resize; background: #304339; z-index: 5; }
+    .split-grip.split-grip-stacked { cursor: ns-resize; }
+    .split-grip:hover { background: #75a77b; }
+    .split-grip:focus-visible { background: #77b9e8; outline: 2px solid #b9ddf5; outline-offset: -2px; }
+    .workbench-plot { position: relative; flex: 1; min-width: 220px; min-height: 160px; gap: 0; padding: 0; border: 1px solid #304339; background: #12181c; }
+    .plot-strip { align-items: flex-end; gap: 2px; flex: none; height: 28px; min-height: 28px; max-height: 28px; min-width: 0; padding: 0; margin: 0; background: #090e10; border-bottom: none; }
+    .plot-tab-navigation { flex: 1; min-width: 100px; height: 28px; align-items: flex-end; gap: 1px; }
+    .plot-tabs { flex: none; min-width: 0; height: 28px; align-items: flex-end; overflow: hidden; }
+    .plot-tab-track { flex: none; width: max-content; height: 28px; align-items: flex-end; gap: 1px; }
+    .plot-tabs .plot-tab { flex: none; gap: 0; align-items: center; transition: transform 140ms ease, background-color 120ms ease, box-shadow 120ms ease; }
+    .plot-tabs .plot-tab { color: #adbbb1; background: #24312b; border: 1px solid #304339; border-bottom-color: #304339; border-radius: 5px 5px 0 0; }
+    .plot-tabs .plot-tab:hover { color: #e2eee6; background: #2a3a31; border-color: #607c69; }
+    .plot-tabs .plot-tab-active { position: relative; z-index: 1; color: #e6f1e9; background: #12181c; border: 1px solid #506457; border-bottom: none; border-radius: 7px 7px 0 0; box-shadow: none; }
+    .plot-tabs .plot-tab-active:hover { background: #12181c; border-color: #75a77b; }
+    .plot-strip .plot-tabs .plot-tab { height: 26px; min-height: 26px; padding: 0 2px 0 0; margin: 0; align-self: flex-end; }
+    .plot-strip .plot-tabs .zui-button.plot-tab-select { max-width: 96px; height: 24px; min-height: 24px; padding: 2px 5px; margin: 0; border: none; background: transparent; color: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .plot-strip .plot-tabs .zui-button.plot-tab-close { width: 16px; min-width: 16px; height: 18px; min-height: 18px; padding: 0; margin: 0; border: none; border-radius: 3px; background: transparent; color: #a8b6ad; font-size: 12px; line-height: 16px; }
+    .plot-strip .plot-tabs .zui-button.plot-tab-close:hover { background: #42554a; color: #eef5f0; }
+    .plot-strip .plot-tab-navigation .plot-tab-add { display: flex; align-items: center; justify-content: center; align-self: center; width: 24px; min-width: 24px; height: 24px; min-height: 24px; line-height: 20px; margin: 0; padding: 0; color: #a8b6ad; background: transparent; border: 1px solid transparent; border-radius: 4px; font-size: 16px; }
+    .plot-tab-add-icon { width: 12px; height: 12px; flex: none; color: transparent; --zgui-stroke: #a8b6ad; --zgui-stroke-width: 1.5px; pointer-events: none; }
+    .plot-tab-add:hover .plot-tab-add-icon { --zgui-stroke: #e6f1e9; }
+    .plot-tab-navigation .plot-tab-add:hover { color: #e6f1e9; background: #2a3a31; border-color: #42554a; }
+    .plot-tab-arrow-guard { position: relative; z-index: 4; flex: none; width: 24px; height: 28px; align-items: center; justify-content: center; background: #090e10; }
+    .plot-strip .plot-tab-navigation .plot-tab-arrow { display: flex; align-items: center; justify-content: center; align-self: center; width: 24px; min-width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; background: transparent; border: 1px solid transparent; border-radius: 4px; }
+    .plot-strip .plot-tab-navigation .plot-tab-arrow:hover { background: #24312b; border-color: #42554a; }
+    .plot-tab-arrow-icon { width: 12px; height: 12px; flex: none; color: transparent; --zgui-stroke: #c5d2c9; --zgui-stroke-width: 1.75px; pointer-events: none; }
+    .plot-tab-arrow:hover .plot-tab-arrow-icon { --zgui-stroke: #e6f1e9; }
+    .plot-strip .plot-tab-navigation .plot-tab-arrow:disabled { background: transparent; border-color: transparent; }
+    .plot-tab-arrow:disabled .plot-tab-arrow-icon { --zgui-stroke: #506457; }
+    .plot-tabs .tab-drop-before { box-shadow: inset 3px 0 0 #8be3a3; }
+    .plot-tabs .tab-drop-after { box-shadow: inset -3px 0 0 #8be3a3; }
+    .plot-tabs .tab-drag-source { position: relative; z-index: 3; opacity: 0.78; transition: none; }
+    .plot-tabs .tab-rebase { transition: none; }
+    .plot-tab-count { flex: none; padding: 1px 4px; color: #95a89a; font-size: 10px; }
+    .workbench-plot.tab-drop-target { outline: 3px solid #8be3a3; outline-offset: -3px; }
+    .dock-drop-overlay { position: absolute; inset: 34px 0 0; z-index: 40; pointer-events: none; }
+    .dock-drop-zone { position: absolute; display: flex; align-items: center; justify-content: center; color: #d7e9df; font-size: 12px; background: #17221edb; border: 1px dashed #75a77b; border-radius: 5px; }
+    .dock-zone-left { left: 8px; top: 30%; width: 21%; height: 40%; }
+    .dock-zone-right { right: 8px; top: 30%; width: 21%; height: 40%; }
+    .dock-zone-top { left: 30%; top: 8px; width: 40%; height: 20%; }
+    .dock-zone-bottom { left: 30%; bottom: 8px; width: 40%; height: 20%; }
+    .dock-zone-center { left: 31%; top: 31%; width: 38%; height: 38%; }
+    .dock-drop-zone.dock-zone-active { color: #effff2; background: #39744dcc; border: 2px solid #a5f2b5; }
+    .plot-strip .zui-button { min-height: 22px; padding: 1px 5px; margin: 1px; }
+    .plot-settings-header { flex: none; align-items: center; }
+    .plot-settings-trigger { min-height: 28px; padding: 4px 10px; font-weight: 600; }
+    .plot-settings-surface { width: 360px; max-width: 90vw; max-height: 75vh; overflow: auto; background: #17221e; color: #d7e1d9; border: 1px solid #52715d; padding: 12px; }
+    .plot-settings-content { gap: 8px; }
+    .settings-title { font-size: 14px; font-weight: 600; color: #ebf2ec; }
+    .settings-label { font-size: 11px; font-weight: 600; color: #b2c3b7; padding-top: 10px; border-top: 1px solid #304339; }
+    .settings-footer { align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid #304339; }
+    .settings-value { font-size: 11px; color: #b2c3b7; overflow-wrap: anywhere; }
+    .signal-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .metric-option { display: flex; flex-direction: row; align-items: center; justify-content: space-between; align-self: stretch; gap: 10px; flex: none; height: 38px; padding: 2px 6px; text-align: left; background: transparent; color: #d7e1d9; border: none; border-radius: 0; cursor: pointer; }
+    .metric-option > * { pointer-events: none; }
+    .metric-option-count { color: #95a89a; font-size: 11px; flex: none; width: 60px; text-align: right; }
+    .metric-option:hover { background: #202e27; }
+    .metric-option.metric-option-selected { background: #294635; color: #ebf2ec; }
+    .metric-option:focus-visible { outline: 2px solid #77b9e8; }
+    .workbench-plot.hidden, .dock-drop-overlay.hidden { display: none; }
+    .workbench-plot.workbench-plot-active { border-color: #75a77b; }
+.time-series-settings { gap: 6px; }
+.time-series-settings .plot-toolbar { gap: 6px; flex-wrap: wrap; }
+.time-series-settings .bounds-field { gap: 6px; align-items: center; }
+.time-series-settings .bounds-field > text { width: 100px; flex: none; }
+.time-series-settings .settings-error { color: #ee9988; }
+.data-plot-settings, .series-controls, .series-control { gap: 6px; }
+.data-plot-settings .plot-toolbar, .series-control .plot-toolbar { gap: 4px; flex-wrap: wrap; align-items: center; }
+.series-control { padding: 6px 0; border-top: 1px solid #304339; }
+.series-control .zui-button.setting-active, .data-plot-settings .zui-button.setting-active { background: #35553e; border-color: #75a77b; color: #ebf2ec; }
+
+.workspace-dock-overlay { position: absolute; inset: 0; z-index: 50; pointer-events: none; }
+
+.dock-group-guide { position: absolute; z-index: 3; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: #17221eed; color: #d7e9df; border: 1px solid #75a77b; border-radius: 3px; font-size: 14px; }
+.dock-group-label { position: absolute; z-index: 3; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; background: #17221eed; color: #a8b6ad; border-radius: 3px; }
+.dock-group-guide.dock-group-active { background: #39744d; border-color: #a5f2b5; }
+
+.dock-group-set { position: absolute; inset: 0; pointer-events: none; }
+.dock-group-scope { position: absolute; z-index: 0; border: 1px dashed #a5f2b5; }
+.dock-group-set.hidden, .dock-group-scope.hidden { display: none; }
+
+.dock-layout-preview { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.dock-preview-pane { position: absolute; box-sizing: border-box; border: 1px dashed #77b9e8; background: #24394a44; overflow: hidden; }
+.dock-preview-pane.dock-preview-source { border: 2px solid #a5f2b5; background: #39744d55; }
+.dock-preview-label { position: absolute; left: 4px; top: 3px; padding: 2px 4px; border-radius: 3px; background: #12181ce6; color: #d7e9df; font-size: 11px; }
+.plot-tab .plot-tab-name.zui-input { flex: 1; width: 140px; min-width: 60px; height: 24px; min-height: 24px; padding: 1px 5px; font-size: 12px; }

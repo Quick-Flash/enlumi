@@ -49,6 +49,9 @@ impl Workbench {
         }
     }
     pub fn field_name(self, source: &str) -> String {
+        if source.starts_with("@trajectory/pair/") {
+            return "X/Y pair".into();
+        }
         let source = source.strip_prefix("@analysis/").unwrap_or(source);
         if let Some(drag) = crate::profile::identity::Drag::parse(source) {
             return drag.item.name().into();

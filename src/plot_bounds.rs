@@ -4,6 +4,15 @@ use zgui::prelude::*;
 
 impl Pane {
     pub fn fit_axes(self, axes: Axes) {
+        if self.trajectory.with_untracked(Option::is_some) {
+            if let Some(track) = self.trajectory_data.get_untracked() {
+                self.plot.fit_axes(
+                    &plot::plot_data::PlotData::Scatter(track.scatter.clone()),
+                    axes,
+                );
+            }
+            return;
+        }
         if let Some(map) = self
             .analysis
             .with_untracked(|result| result.as_ref().and_then(|result| result.heatmap.clone()))

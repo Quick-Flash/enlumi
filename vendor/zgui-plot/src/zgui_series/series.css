@@ -1,0 +1,79 @@
+.cursor-plot { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.cursor-plot .plot-tick { z-index: 2; }
+.workbench-legend { position: absolute; top: 4px; right: 6px; max-width: calc(100% - 12px); gap: 0; padding: 4px 6px; background: #0e171bcc; border: 1px solid #46565b; border-radius: 3px; z-index: 2; }
+.legend-heading { align-items: center; justify-content: space-between; gap: 12px; }
+.legend-entry { min-width: 0; align-items: center; gap: 4px; }
+.legend-drag-source { flex: 1; min-width: 0; cursor: grab; }
+.legend-entry.legend-dragging { opacity: 0.45; }
+.legend-entry.legend-insert-before { box-shadow: 0 -2px 0 0 #8be3a3; }
+.legend-entry.legend-insert-after { box-shadow: 0 2px 0 0 #8be3a3; }
+.workbench-legend .plot-legend-item { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workbench-legend .legend-remove.zui-button { flex: none; width: 18px; min-width: 18px; height: 18px; min-height: 18px; padding: 0; border: none; background: transparent; color: #a8b6ad; }
+.workbench-legend .legend-remove.zui-button:hover { color: #ed9186; background: #24312b; }
+.workbench-legend .plot-gear.zui-button { flex: none; width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 2px; border: none; background: transparent; }
+.gear-icon { width: 18px; height: 18px; pointer-events: none; }
+.snapped-linked-pointer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+.snapped-cursor-values { position: absolute; z-index: 2; right: 6px; left: 64px; height: 18px; font-size: 11px; line-height: 16px; color: #d7e1d9; text-align: right; overflow: hidden; white-space: nowrap; pointer-events: none; }
+.plot-settings-surface { max-height: 80vh; max-width: 480px; overflow-y: auto; padding: 8px; background: #17221e; color: #d7e1d9; border: 1px solid #52715d; }
+.plot-editor-surface { width: 680px; max-width: 90vw; max-height: 90vh; padding: 18px; --zui-surface-enter-scale: 1; --zui-surface-exit-scale: 1; }
+.plot-editor-surface .zui-dialog__dismiss { color: #d7e1d9; }
+.appearance-row { gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.appearance-controls { flex: 1; min-width: 200px; gap: 8px; }
+.appearance-controls .zui-slider { width: auto; }
+.color-picker { flex: none; width: 180px; gap: 6px; }
+.color-square { overflow: hidden; position: relative; width: 180px; height: 180px; flex: none; cursor: crosshair; }
+.color-square:focus-visible { outline: 1px solid #77b9e8; }
+.color-square-image { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.color-picker .zui-slider { flex: 1; width: auto; min-width: 0; }
+.color-value { padding: 6px; border-radius: 4px; font-size: 12px; font-weight: 600; text-align: center; }
+.settings-title { font-size: 14px; font-weight: 600; }
+.plot-settings-surface .zui-button { min-height: 28px; height: auto; padding: 4px 8px; background: #25322f; color: #d7e1d9; }
+.plot-settings-surface .zui-button:hover { background: #375239; color: #ffffff; border-color: #75a77b; }
+.editor { min-width: 0; gap: 8px; }
+.line-list { max-height: 160px; overflow-y: auto; gap: 1px; }
+.line-button { display: flex; flex: none; align-items: center; justify-content: flex-start; min-width: 0; height: 24px; padding: 2px 5px; gap: 6px; border: none; border-left: 3px solid transparent; border-radius: 0; cursor: pointer; overflow: hidden; font-size: 12px; }
+.line-button { opacity: 0.4; }
+.line-button.selected { opacity: 0.85; border-left-color: currentColor; font-weight: 600; }
+.line-button:hover { outline: 1px solid #6c8676; outline-offset: -1px; }
+.line-button:focus-visible { outline: 1px solid #b9ddf5; outline-offset: -1px; }
+.line-selection-heading { align-items: center; justify-content: space-between; gap: 8px; }
+.line-selection-mark { flex: none; width: 14px; font-weight: 700; }
+.line-selection-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.info-icon { width: 16px; height: 16px; color: transparent; --zgui-stroke: #a8b6ad; --zgui-stroke-width: 1.5px; pointer-events: none; }
+.plot-settings-surface .line-selection-info.zui-button, .plot-settings-surface .line-selection-info.zui-button:hover { width: 22px; height: 22px; min-height: 22px; padding: 3px; border: none; background: transparent; box-shadow: none; }
+.line-selection-info:hover .info-icon { --zgui-stroke: #ebf2ec; }
+.line-selection-help { max-width: 360px; white-space: normal; }
+.line-color-swatch { flex: none; width: 22px; height: 4px; border: none; border-radius: 1px; }
+.color-picker-disabled { cursor: not-allowed; color: #68736e; }
+.color-picker-disabled .color-hue.zui-slider { opacity: 1; }
+.color-picker-disabled .color-hue.zui-slider > .zui-slider__track { background: #4a524e; }
+.color-picker-disabled .color-hue.zui-slider > .zui-slider__thumb { background: #707874; }
+.appearance-controls > .heading { height: 16px; min-height: 16px; white-space: nowrap; }
+.line-style { gap: 8px; padding-top: 8px; border-top: 1px solid #304339; }
+.plot-editor-surface .line-pattern.chosen, .plot-editor-surface .line-marker.chosen, .plot-editor-surface .line-connection.chosen { background: #35553e; border-color: #75a77b; }
+.editor-empty { padding: 12px 0; }
+.color-hue.zui-slider { height: 24px; }
+.color-hue.zui-slider > .zui-slider__track { height: 14px; background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000); }
+.color-hue.zui-slider > .zui-slider__track > .zui-slider__range { background: transparent; }
+.color-hue.zui-slider > .zui-slider__thumb { height: 22px; width: 10px; margin-left: -5px; border: 2px solid #ffffff; border-radius: 3px; background: var(--picker-hue); box-shadow: 0 0 0 1px #12181c; }
+.color-hex-row { align-items: center; gap: 8px; }
+.color-hex-label { font-size: 12px; color: #a8b6ad; }
+.color-hex-row .color-hex { flex: 1; min-width: 0; background: #12181c; color: #d7e1d9; }
+.color-square { border: 1px solid #52715d; border-radius: 4px; }
+.color-hue { cursor: pointer; }
+.editor .muted { color: #a8b6ad; font-size: 11px; }
+.editor .heading { font-weight: 600; font-size: 12px; }
+.editor .plot-toolbar { gap: 6px; flex-wrap: wrap; }
+.cursor-plot .plot-hover-layer { z-index: 1; }
+.cursor-plot .plot-tick { z-index: 2; }
+.marker-radius-controls { gap: 8px; min-width: 0; }
+.marker-radius-disabled { cursor: not-allowed; }
+.marker-radius-disabled > .heading { color: #68736e; }
+.marker-radius-disabled .line-radius.zui-slider > .zui-slider__track { background: #303a35; }
+.marker-radius-disabled .line-radius.zui-slider > .zui-slider__track > .zui-slider__range { background: #4a524e; }
+.marker-radius-disabled .line-radius.zui-slider > .zui-slider__thumb { background: #707874; border-color: #4a524e; box-shadow: none; }
+.marker-radius-controls > .heading { height: 16px; min-height: 16px; white-space: nowrap; }
+
+.workbench-legend .legend-collapse.zui-button { min-height: 22px; height: 22px; padding: 0 3px; border: none; background: transparent; color: inherit; }
+.workbench-legend .legend-collapse.zui-button:hover { background: #24312b; }
+.legend-chevron { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: #d7e1d9; --zgui-stroke-width: 1.5px; pointer-events: none; }

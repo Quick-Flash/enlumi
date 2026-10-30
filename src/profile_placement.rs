@@ -74,7 +74,10 @@ impl Workbench {
         }
         let pane = match target {
             Destination::Plot(pane) => pane,
-            Destination::Analysis | Destination::AnalysisCondition | Destination::SaveSelection => {
+            Destination::Analysis
+            | Destination::AnalysisCondition
+            | Destination::SaveSelection
+            | Destination::TrajectoryAxis(_, _) => {
                 self.use_profile_items(
                     vec![profile::identity::Drag { profile: key, item }],
                     target,

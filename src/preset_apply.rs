@@ -148,7 +148,10 @@ impl Workbench {
                 .analysis
                 .as_ref()
                 .map(|analysis| mode_of(&analysis.mode));
-            if mode != wanted || wanted.is_some_and(|mode| mode.windowed()) {
+            if mode != wanted
+                || pane.trajectory.with_untracked(Option::is_some) != recipe.trajectory.is_some()
+                || wanted.is_some_and(|mode| mode.windowed())
+            {
                 return Err("Choose matching time/FFT/PSD plot; maps need a new plot".into());
             }
             pane
@@ -230,6 +233,19 @@ impl Workbench {
             return;
         };
         let options = recipe.analysis.clone();
+        if !fields_only {
+            pane.trajectory
+                .set(recipe.trajectory.clone().map(|mut spec| {
+                    for source in spec.sources_mut() {
+                        if !source.is_empty() {
+                            *source = instance
+                                .resolve(source)
+                                .unwrap_or_else(|| format!("@unavailable/{source}"));
+                        }
+                    }
+                    spec
+                }));
+        }
         let mut inputs = Vec::new();
         let mut warnings = Vec::new();
         for line in &recipe.lines {
@@ -605,6 +621,11 @@ impl Workbench {
             .into_iter()
             .filter(|existing| existing.id != pane.id)
         {
+            if existing.trajectory.with_untracked(Option::is_some)
+                != pane.trajectory.with_untracked(Option::is_some)
+            {
+                continue;
+            }
             if existing
                 .analysis
                 .with_untracked(|result| result.as_ref().map(|result| result.mode))
@@ -622,6 +643,7 @@ impl Workbench {
             }
         }
         let _ = pane.plot.set_view(ranges);
+        pane.timeline_link.set(recipe.links.timeline);
         pane.links.set(plot::zgui_link::LinkOptions {
             x: recipe.links.x,
             y: recipe.links.y,
@@ -780,6 +802,7 @@ pub fn available_plots(instance: &crate::profile_instance::AppliedProfile) -> Ve
             legend_order: Vec::new(),
             links: Links::default(),
             analysis: None,
+            trajectory: None,
         });
     }
     plots

@@ -6,7 +6,7 @@ impl Workbench {
     // Field IDs grow from zero; complemented geometry IDs occupy upper half.
     pub fn legend_keys(self, pane: Pane) -> Vec<u64> {
         let mut keys = pane
-            .lines
+            .view_lines
             .with(|lines| lines.iter().map(|line| line.id).collect::<Vec<_>>());
         keys.extend(
             pane.geometry
@@ -46,6 +46,16 @@ impl Workbench {
     }
 
     pub fn can_place_line(self, source: u64, id: u64, target: u64) -> bool {
+        if target == 0 {
+            return self.trajectory_builder().open.get_untracked()
+                && id < (1_u64 << 63)
+                && self.find(source).is_some_and(|pane| {
+                    pane.analysis.with_untracked(Option::is_none)
+                        && pane
+                            .lines
+                            .with_untracked(|lines| lines.iter().any(|line| line.id == id))
+                });
+        }
         if source != target
             && self
                 .find(source)
@@ -66,7 +76,9 @@ impl Workbench {
                 .find(source)
                 .zip(self.find(target))
                 .is_some_and(|(source, target)| {
-                    source.geometry.with_untracked(|ids| ids.contains(&!id))
+                    source.trajectory.with_untracked(Option::is_none)
+                        && target.trajectory.with_untracked(Option::is_none)
+                        && source.geometry.with_untracked(|ids| ids.contains(&!id))
                         && (source.id == target.id
                             || !target.geometry.with_untracked(|ids| ids.contains(&!id)))
                 });
@@ -79,7 +91,8 @@ impl Workbench {
                     source.lines.with_untracked(|lines| {
                         lines.iter().find(|line| line.id == id).is_some_and(|line| {
                             target.lines.with_untracked(|lines| {
-                                !lines.iter().any(|other| other.source == line.source)
+                                target.trajectory.with_untracked(Option::is_some)
+                                    || !lines.iter().any(|other| other.source == line.source)
                             })
                         })
                     })
@@ -118,20 +131,36 @@ impl Workbench {
                     .map_or_else(Vec::new, |pane| self.legend_keys(pane))
             })),
             panes: Signal::derive_local(move || {
-                self.panes()
+                let mut panes = self
+                    .panes()
                     .get()
                     .iter()
                     .map(|pane| pane.display())
-                    .collect()
+                    .collect::<Vec<_>>();
+                let builder = self.trajectory_builder();
+                if builder.open.get() {
+                    panes.push(builder.pane.display());
+                }
+                panes
             }),
             visible: UnsyncCallback::new(move |id| {
+                if id == 0 {
+                    return self.trajectory_builder().open.get_untracked();
+                }
                 plot::workspace::plot_visible(
                     id,
                     self.maximized().get_untracked(),
                     self.layout().get_untracked(),
                 )
             }),
-            hit_plot: UnsyncCallback::new(move |(x, y)| self.hit_any_plot(x, y)),
+            hit_plot: UnsyncCallback::new(move |(x, y)| {
+                self.update_trajectory_drop(x, y);
+                if self.builder_slot_at(x, y).is_some() {
+                    Some(0)
+                } else {
+                    self.hit_any_plot(x, y)
+                }
+            }),
             accepts: UnsyncCallback::new(move |(source, id, target)| {
                 self.can_place_line(source, id, target)
             }),
@@ -139,11 +168,46 @@ impl Workbench {
         }
     }
     pub fn place_line(self, source: u64, id: u64, target: u64, before: Option<u64>) {
-        let (Some(source), Some(target)) = (self.find(source), self.find(target)) else {
+        if target == 0 {
+            let builder = self.trajectory_builder();
+            if let Some((index, y)) = builder.pane.trajectory_drop.get_untracked()
+                && let Some(from) = self.find(source)
+                && let Some(line) = from
+                    .lines
+                    .with_untracked(|lines| lines.iter().find(|line| line.id == id).cloned())
+            {
+                if let Err(error) = crate::trajectory_axes::assign(
+                    builder.pane,
+                    index,
+                    y,
+                    std::slice::from_ref(&line.source),
+                ) {
+                    self.status.set(error);
+                    return;
+                }
+                if !builder
+                    .pane
+                    .lines
+                    .with_untracked(|lines| lines.iter().any(|other| other.source == line.source))
+                {
+                    builder.pane.lines.update(|lines| lines.push(line));
+                }
+            }
+            builder.pane.trajectory_drop.set(None);
+            return;
+        }
+        let (Some(source), Some(mut target)) = (self.find(source), self.find(target)) else {
             return;
         };
         if !self.can_place_line(source.id, id, target.id) {
             return;
+        }
+        if source.id != target.id
+            && id < (1_u64 << 63)
+            && target.trajectory.with_untracked(Option::is_some)
+            && target.trajectory_drop.get_untracked().is_none()
+        {
+            target = self.add_plot(target.id, false, false);
         }
         if id >= (1_u64 << 63) {
             if source.id != target.id {
@@ -180,11 +244,70 @@ impl Workbench {
         else {
             return;
         };
+        if target.trajectory.with_untracked(Option::is_some) {
+            let (index, y) = target.trajectory_drop.get_untracked().unwrap_or_else(|| {
+                let spec = target.trajectory.get_untracked().unwrap();
+                (
+                    spec.pairs()
+                        .iter()
+                        .position(|pair| pair.y.is_empty())
+                        .unwrap_or(spec.pairs().len()),
+                    true,
+                )
+            });
+            if source.id != target.id || !y {
+                if let Err(error) =
+                    crate::trajectory_axes::assign(target, index, y, &[line.source.clone()])
+                {
+                    self.status.set(error);
+                    return;
+                }
+                target.trajectory_drop.set(None);
+                if target.trajectory.with_untracked(|spec| {
+                    spec.as_ref().is_some_and(|spec| {
+                        spec.pairs()
+                            .get(index)
+                            .is_some_and(|pair| pair.x.is_empty() || pair.y.is_empty())
+                    })
+                }) {
+                    self.edit_trajectory(target);
+                }
+                if source.id == target.id {
+                    return;
+                }
+            }
+        }
         if source.id != target.id
-            && target
-                .lines
-                .with_untracked(|lines| lines.iter().any(|other| other.source == line.source))
+            && let Some(existing) = target.lines.with_untracked(|lines| {
+                lines
+                    .iter()
+                    .find(|other| other.source == line.source)
+                    .map(|line| line.id)
+            })
         {
+            let hidden = source
+                .plot
+                .hidden
+                .with_untracked(|hidden| hidden.contains(&id.to_string()));
+            target.plot.hidden.update(|entries| {
+                if hidden {
+                    entries.insert(existing.to_string());
+                } else {
+                    entries.remove(&existing.to_string());
+                }
+            });
+            let style = source.plot.style(&id.to_string());
+            let draw = source
+                .drawing
+                .with_untracked(|draw| draw.get(&id).copied().unwrap_or_default());
+            target.plot.styles.update(|styles| {
+                styles.insert(existing.to_string(), style);
+            });
+            target.drawing.update(|draws| {
+                draws.insert(existing, draw);
+            });
+            source.remove_line(id);
+            self.select(target.id, existing);
             return;
         }
         source.plot.auto_fit.set(false);

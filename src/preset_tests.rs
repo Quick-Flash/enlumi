@@ -13,6 +13,111 @@ use std::{
 use zgui::prelude::*;
 
 const SOURCE: &str = "esc_status/0/esc[5].esc_rpm";
+
+#[test]
+fn trajectory_recipe_preserves_axes_and_display_mode_through_capture_and_restore() {
+    let window = zgui_testkit_view::Window::open();
+    let workbench = window.scope.with(Workbench::new);
+    workbench.log.set(Some(log()));
+    add_line(workbench, SOURCE, log().prepare(SOURCE).unwrap());
+    let other = log()
+        .catalogue
+        .iter()
+        .find(|signal| signal.id.ends_with("esc_rpm") && signal.id != SOURCE)
+        .unwrap()
+        .id
+        .clone();
+    add_line(workbench, &other, log().prepare(&other).unwrap());
+    let pane = workbench.pane();
+    pane.trajectory.set(Some(crate::trajectory::Spec {
+        x: SOURCE.into(),
+        y: SOURCE.into(),
+        points: true,
+        equal: false,
+        extra: vec![crate::trajectory::Pair {
+            x: SOURCE.into(),
+            y: other.clone(),
+            gps_scale: None,
+            fix: String::new(),
+        }],
+        ..Default::default()
+    }));
+    pane.timeline_link.set(true);
+    let styled = pane
+        .lines
+        .with_untracked(|lines| lines.iter().find(|line| line.source == other).unwrap().id);
+    let mut style = pane.plot.style(&styled.to_string());
+    style.color = [12, 45, 200, 255];
+    style.width = 4.5;
+    style.radius = 6.;
+    pane.plot.styles.update(|styles| {
+        styles.insert(styled.to_string(), style);
+    });
+    pane.drawing.update(|drawing| {
+        drawing.insert(
+            styled,
+            plot::line_draw::LineDraw {
+                markers: true,
+                pattern: plot::line_draw::LinePattern::Dashed,
+                ..Default::default()
+            },
+        );
+    });
+    let definition: profile::Profile = serde_json::from_value(
+        capture(workbench, &CaptureKind::Plot(pane.id), "XY recipe")
+            .unwrap()
+            .document,
+    )
+    .unwrap();
+    let recipe = definition.plot_presets[0].clone();
+    assert_eq!(
+        recipe.trajectory.as_ref().unwrap().x,
+        recipe.lines[0].source
+    );
+    assert_eq!(
+        recipe.trajectory.as_ref().unwrap().y,
+        recipe.lines[0].source
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let key = prepare(workbench, definition, &directory.path().join("xy.json"));
+    workbench.apply_plot_preset(&key, &recipe, None).unwrap();
+    let restored = workbench.pane();
+    settle(&window, || restored.lines.with_untracked(Vec::len) == 2);
+    assert!(restored.timeline_link.get_untracked());
+    let spec = restored.trajectory.get_untracked().unwrap();
+    assert_eq!(spec.x, SOURCE);
+    assert_eq!(spec.y, SOURCE);
+    assert!(spec.points);
+    assert!(!spec.equal);
+    assert_eq!(spec.extra[0].x, SOURCE);
+    assert_eq!(spec.extra[0].y, other);
+    let restored_id = restored
+        .lines
+        .with_untracked(|lines| lines.iter().find(|line| line.source == other).unwrap().id);
+    assert_eq!(restored.plot.style(&restored_id.to_string()), style);
+    assert_eq!(
+        restored.drawing.get_untracked()[&restored_id].pattern,
+        plot::line_draw::LinePattern::Dashed
+    );
+    assert!(restored.drawing.get_untracked()[&restored_id].markers);
+    workbench.duplicate_plot(restored);
+    assert_eq!(workbench.pane().trajectory.get_untracked(), Some(spec));
+    assert!(workbench.pane().timeline_link.get_untracked());
+}
+#[test]
+fn link_defaults_enable_pointer_and_timeline_but_preserve_explicit_choices() {
+    let defaults = crate::preset::Links::default();
+    assert!(defaults.pointer && defaults.timeline);
+    assert!(!defaults.x && !defaults.y);
+    let legacy: crate::preset::Links =
+        serde_json::from_str(r#"{"x":false,"y":false,"pointer":false}"#).unwrap();
+    assert!(legacy.timeline);
+    assert!(!legacy.pointer);
+    let explicit: crate::preset::Links =
+        serde_json::from_str(r#"{"x":false,"y":false,"pointer":false,"timeline":false}"#).unwrap();
+    assert!(!explicit.timeline && !explicit.pointer);
+}
+
 fn log() -> Arc<crate::log::LogStore> {
     Arc::new(
         crate::log::LogStore::read(Path::new(concat!(

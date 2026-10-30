@@ -6869,12 +6869,12 @@ dependencies = [
 [[package]]
 name = "zgui-plot"
 version = "0.1.0"
-source = "git+https://github.com/Quick-Flash/zgui-plot?rev=321254ad3025926647b93e92998a18d09c6f380f#321254ad3025926647b93e92998a18d09c6f380f"
 dependencies = [
  "arboard",
  "kurbo",
  "resvg",
  "zgui",
+ "zgui-profile",
  "zgui-ui",
 ]
 
@@ -6953,7 +6953,6 @@ dependencies = [
 [[package]]
 name = "zgui-render-wgpu"
 version = "0.1.0"
-source = "git+https://github.com/zortax/zgui#951a0ea3b113247da6dff439fccbd9097aa3187f"
 dependencies = [
  "bincode",
  "bytemuck",

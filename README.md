@@ -88,6 +88,7 @@ cargo run --locked --release -p enlumi -- /path/to/flight.BBL
 ```
 
 A desktop session and GPU supported by wgpu are required.
+For frame-cost recording and Linux backend comparisons, see [performance measurements](docs/PERFORMANCE.md).
 See [portable build instructions](docs/RUST_FILTERS.md#build-portable-distribution)
 to package the app with its offline filter compiler.
 

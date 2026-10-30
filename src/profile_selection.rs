@@ -62,6 +62,15 @@ impl Workbench {
         target: Destination,
         filter_slot: Option<usize>,
     ) {
+        self.queue_field_sources_at_axis(sources, target, filter_slot, None);
+    }
+    pub(crate) fn queue_field_sources_at_axis(
+        self,
+        sources: Vec<String>,
+        target: Destination,
+        filter_slot: Option<usize>,
+        trajectory_axis: Option<(usize, bool)>,
+    ) {
         if self.profiles.busy.get_untracked()
             || self.derived_busy.get_untracked()
             || self.loading.get_untracked()
@@ -109,6 +118,7 @@ impl Workbench {
                 sources,
                 target,
                 filter_slot,
+                trajectory_axis,
             }));
         self.resume_profile_drop();
     }
@@ -143,6 +153,16 @@ impl Workbench {
         self.profiles.pending_drop.set_value(None);
         let sources = self.resolve_field_sources(&pending.sources);
         match pending.target {
+            Destination::TrajectoryAxis(index, y) => {
+                if let Err(error) = crate::trajectory_axes::assign(
+                    self.trajectory_builder().pane,
+                    index,
+                    y,
+                    &sources,
+                ) {
+                    self.status.set(error);
+                }
+            }
             Destination::SaveSelection => {
                 self.begin_save(crate::preset_capture::CaptureKind::Selection(sources))
             }
@@ -161,16 +181,36 @@ impl Workbench {
                 }
             }
             Destination::Plot(pane) => {
+                let mut destination = pending.target;
                 if let Some(id) = pane {
-                    if self.find(id).is_none() {
+                    let Some(target) = self.find(id) else {
                         self.status.set("Destination plot was closed".into());
                         return;
-                    }
+                    };
+                    let id = if pending.trajectory_axis.is_none()
+                        && target.trajectory.with_untracked(Option::is_some)
+                        && !sources.is_empty()
+                        && pending.sources.iter().all(|source| {
+                            Drag::parse(source)
+                                .is_none_or(|drag| matches!(drag.item, Item::Field(_)))
+                        }) {
+                        self.add_plot(id, false, false).id
+                    } else {
+                        id
+                    };
                     self.activate(id);
+                    destination = Destination::Plot(Some(id));
+                }
+                if let Some((index, y)) = pending.trajectory_axis {
+                    let pane = self.pane();
+                    if let Err(error) = crate::trajectory_axes::assign(pane, index, y, &sources) {
+                        self.status.set(error);
+                        return;
+                    }
                 }
                 for source in pending.sources {
                     if let Some(drag) = Drag::parse(&source) {
-                        self.place_prepared_item(drag.profile, drag.item, pending.target);
+                        self.place_prepared_item(drag.profile, drag.item, destination);
                     } else {
                         self.add(source);
                     }

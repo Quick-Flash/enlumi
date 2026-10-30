@@ -19,6 +19,7 @@
 .analysis-result .time-series-host { flex: 1; min-height: 0; }
 .analysis-summary { white-space: pre-wrap; font-size: var(--app-font-xs); }
 .analysis-heatmap, .analysis-heatmap-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.analysis-heatmap { overflow: hidden; }
 .analysis-color-key { align-items: center; gap: 8px; }
 .analysis-color-gradient { flex: none; width: 120px; height: 10px; background: linear-gradient(to right, #0000ff, #00bf40, #80bf00, #ff0000); }
 .analysis-modes, .analysis-range-actions { flex-wrap: wrap; gap: 4px; }

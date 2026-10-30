@@ -132,6 +132,9 @@ fn PlotAreaMenuEntries(
         MenuItem(class="plot-fit-y",on_select=UnsyncCallback::new(move |()|fit(pane,plot::interaction::Axes{x:false,y:true}))) {"Fit Y axis"}
         MenuItem(class="plot-fit-both",on_select=UnsyncCallback::new(move |()|fit(pane,plot::interaction::Axes::BOTH))) {"Fit both axes"}
         MenuItem(class="plot-line-settings",disabled=Signal::derive_local(move ||pane.lines.with(Vec::is_empty)),on_select=UnsyncCallback::new(move |()|settings.set(true))) {"Line settings"}
+        if move ||pane.analysis.with(Option::is_none) && pane.trajectory.with(Option::is_none) {
+            MenuItem(class="convert-2d-plot",on_select=UnsyncCallback::new(move |()|workbench.convert_to_trajectory(pane))) {"Convert to 2D"}
+        }
         MenuSeparator {}
         MenuItem(class="preset-duplicate-plot",on_select=UnsyncCallback::new(move |()|workbench.duplicate_plot(pane))) {"Duplicate plot"}
         MenuItem(on_select=UnsyncCallback::new(move |()|workbench.save_screenshot(Some(pane),plot::zgui_svg::ScreenshotFormat::Png))) {"Save PNG…"}
@@ -142,6 +145,10 @@ fn PlotAreaMenuEntries(
 }
 
 fn fit(pane: Pane, axes: plot::interaction::Axes) {
+    if pane.trajectory.with_untracked(Option::is_some) {
+        pane.fit_axes(axes);
+        return;
+    }
     if !axes.y
         || axes.x
         || pane.analysis.with_untracked(|result| {
@@ -172,20 +179,48 @@ fn fit(pane: Pane, axes: plot::interaction::Axes) {
 }
 
 #[component]
-fn PlotMenuEditor(
+pub fn PlotMenuEditor(
     workbench: Workbench,
     pane: Pane,
     open: RwSignal<bool, LocalStorage>,
+    #[prop(optional)] legend_trigger: bool,
 ) -> impl IntoView {
+    let gear = || {
+        zgui::elements::canvas().class("gear-icon").draw(|cx| {
+            let mut path = kurbo::BezPath::new();
+            for index in 0..32 {
+                let angle = f64::from(index) * std::f64::consts::TAU / 32.;
+                let radius = if index % 4 < 2 { 8. } else { 6. };
+                let point = (9. + radius * angle.cos(), 9. + radius * angle.sin());
+                if index == 0 {
+                    path.move_to(point);
+                } else {
+                    path.line_to(point);
+                }
+            }
+            path.close_path();
+            plot::append_circle(&mut path, (9., 9.), 2.5);
+            plot::zgui_renderer::push_stroke(
+                cx.scene,
+                path,
+                zgui::canvas::zgui_color::Color::srgb_u8(215, 225, 217, 255),
+                1.25,
+            );
+        })
+    };
     let mut actions = workbench.legend_host().actions;
     if pane.analysis.with_untracked(Option::is_some) {
         actions.extra = Some(UnsyncCallback::new(move |_| workbench.edit_analysis(pane)));
         actions.extra_label = "FFT / PSD settings";
     }
-    view! {Dialog(open=open) {DialogContent(class="plot-settings-surface plot-editor-surface") {
+    view! {Dialog(open=open,on_open_change=UnsyncCallback::new(move |opened|{
+        if opened && !pane.view_lines.with_untracked(|lines|lines.iter().any(|line|Some(line.id)==pane.selected.get_untracked())) && let Some(id)=pane.view_lines.with_untracked(|lines|lines.first().map(|line|line.id)){pane.selected.set(Some(id));}
+    })) {
+        if move ||legend_trigger {DialogTrigger(size=ButtonSize::Xs,variant=ButtonVariant::Ghost,class="plot-settings-trigger plot-gear",a11y:label="Plot line settings") {{gear().into_view()}}}
+        DialogContent(class="plot-settings-surface plot-editor-surface") {
         column(class="plot-settings-content") {
             DialogTitle(class="settings-title") {{format!("Plot {} line settings",pane.id)}}
-            SeriesEditor(actions=actions,pane=pane.display(),on_extra=UnsyncCallback::new(move |()|open.set(false)))
+            {move ||if pane.trajectory.with(Option::is_some) {AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),fixed_connection=plot::line_draw::Connection::Linear,on_extra=UnsyncCallback::new(move |()|open.set(false)))})}else{AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),on_extra=UnsyncCallback::new(move |()|open.set(false)))})}}
             DialogClose(class="settings-done",size=ButtonSize::Sm,variant=ButtonVariant::Outline) {"Done"}
         }
     }}}

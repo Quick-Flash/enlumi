@@ -1,0 +1,68 @@
+.timeline-readout { font-variant-numeric: tabular-nums; }
+.trajectory-pane { flex: 1; min-height: 0; min-width: 0; gap: 0; }
+.trajectory-chart { flex: 1; min-height: 0; min-width: 0; position: relative; }
+.trajectory-chart > .time-series-host { flex: 1; min-height: 0; }
+.trajectory-overlay, .trajectory-canvas, .trajectory-marker-canvas, .time-marker, .time-marker-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.trajectory-status { position: absolute; bottom: 6px; left: 6px; max-width: 75%; padding: 4px 8px; font-size: var(--app-font-xs); background: var(--app-inset); pointer-events: none; }
+.time-cursor-host { flex: 1; min-height: 0; min-width: 0; position: relative; }
+
+.trajectory-plot-controls { position: absolute; top: 6px; right: 6px; max-width: 75%; max-height: 75%; min-height: 0; gap: 4px; align-items: flex-end; z-index: 2; }
+.trajectory-plot-controls .trajectory-legend { position: relative; top: auto; right: auto; max-width: 100%; min-height: 0; overflow-y: auto; }
+.timeline-drag-handle { position: absolute; top: 0; bottom: 0; width: 10px; pointer-events: auto; cursor: col-resize; z-index: 4; }
+.timeline-drag-handle:focus-visible { outline: 1px solid var(--app-focus); outline-offset: -1px; }
+.trajectory-axis-headings { flex: none; gap: 0; border-bottom: 1px solid var(--app-border); background: var(--app-surface); }
+.trajectory-axis-headings > text { flex: 1; padding: 6px 8px; text-align: center; color: var(--app-accent-text); font-size: var(--app-font-xs); font-weight: 600; }
+.trajectory-axis-headings > text:first-child { border-right: 1px solid var(--app-border); }
+.trajectory-axis-pair { position: relative; flex: none; gap: 0; min-height: 0; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); overflow: hidden; background: var(--app-surface); }
+.trajectory-pair-inputs { position: relative; flex: none; min-height: 40px; gap: 0; align-items: stretch; }
+.trajectory-axis-slot { flex: 1; min-width: 0; padding: 6px 6px 6px 14px; justify-content: center; border: 1px solid transparent; }
+.trajectory-axis-slot:first-child { padding: 6px 14px 6px 6px; }
+.trajectory-axis-slot:hover { background: var(--app-hover); }
+.trajectory-axis-slot.axis-drop-active { background: var(--app-selected); border-color: var(--app-accent); border-style: solid; }
+.trajectory-drop-label { text-align: center; color: var(--app-muted); font-size: var(--app-font-xs); pointer-events: none; }
+.trajectory-input-chip { align-items: center; gap: 2px; min-width: 0; padding: 1px 2px; background: var(--app-control); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius-sm); }
+.trajectory-input-chip .metric-option { flex: 1; min-width: 0; height: 20px; min-height: 20px; padding: 1px; }
+.trajectory-input-chip .metric-option-count { display: none; }
+.trajectory-input-chip .signal-name { font-size: var(--app-font-xs); }
+.trajectory-setup-page .trajectory-remove-input.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"], .trajectory-setup-page .trajectory-close-builder.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"] { flex: none; width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 2px; border-color: transparent; background: transparent; color: var(--app-muted); }
+.trajectory-setup-page .trajectory-remove-input.app-action.zui-button[data-variant="ghost"]:hover { background: var(--app-danger); color: var(--app-danger-text); border-color: var(--app-danger-border); }
+.trajectory-setup-page .trajectory-close-builder.app-action.zui-button[data-variant="ghost"]:hover { background: var(--app-hover); color: var(--app-foreground); border-color: var(--app-border-strong); }
+.trajectory-control-icon { width: 14px; height: 14px; color: transparent; --zgui-stroke: var(--app-muted); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.trajectory-remove-input:hover .trajectory-control-icon { --zgui-stroke: var(--app-danger-text); }
+.trajectory-close-builder:hover .trajectory-control-icon { --zgui-stroke: var(--app-foreground); }
+.trajectory-pair-actions { position: absolute; left: calc(50% - 11px); top: calc(50% - 11px); width: 22px; align-items: center; }
+.trajectory-pair-drag { position: relative; flex: none; min-height: 22px; height: 22px; background: var(--app-control); border-top: 1px solid var(--app-border); }
+.trajectory-pair-drag:hover, .trajectory-pair-drag.pair-dragging { background: var(--app-selected); border-color: var(--app-accent); }
+.trajectory-pair-drag .metric-option { width: 100%; height: 22px; min-height: 22px; padding: 0; cursor: grab; min-width: 0; }
+.trajectory-pair-drag.pair-dragging .metric-option { cursor: grabbing; }
+.trajectory-pair-drag .signal-name, .trajectory-pair-drag .metric-option-count { display: none; }
+.trajectory-pair-drag-label { position: absolute; top: 0; left: 24px; right: 24px; height: 22px; line-height: 22px; text-align: center; font-size: var(--app-font-xs); color: var(--app-accent-text); pointer-events: none; }
+.trajectory-grip-icon { position: absolute; top: 3px; left: 7px; width: 12px; height: 16px; color: transparent; --zgui-stroke: var(--app-accent-text); --zgui-stroke-width: 2px; pointer-events: none; }
+.trajectory-pair-arrow { position: absolute; top: 4px; right: 7px; width: 14px; height: 14px; color: transparent; --zgui-stroke: var(--app-accent-text); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.trajectory-swap-axes.app-action.zui-button[data-variant="ghost"][data-size="icon-xs"] { flex: none; width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 3px; background: var(--app-surface); border-color: var(--app-border-strong); }
+.trajectory-swap-axes.app-action.zui-button[data-variant="ghost"]:hover { background: var(--app-selected); border-color: var(--app-accent); }
+.trajectory-swap-icon { width: 14px; height: 14px; color: transparent; --zgui-stroke: var(--app-accent-text); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.trajectory-legend-row { gap: 3px; align-items: center; }
+.trajectory-legend-row > .legend-entry { flex: 1; min-width: 0; }
+.trajectory-setup-page { box-sizing: border-box; flex: 1; min-height: 0; min-width: 0; gap: 0; background: var(--app-surface); color: var(--app-foreground); }
+.trajectory-setup-heading { flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--app-border); }
+.trajectory-heading-copy { min-width: 0; gap: 2px; }
+.trajectory-setup-caption { color: var(--app-muted); font-size: var(--app-font-xs); }
+.trajectory-setup-pairs { display: flex; flex-direction: column; position: relative; flex: 1; min-height: 0; padding: 6px; gap: 4px; overflow-y: auto; overflow-x: hidden; background: var(--app-inset); }
+.trajectory-column-divider { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--app-border); pointer-events: none; }
+.trajectory-side-panel { min-height: 0; min-width: 0; overflow: hidden; background: var(--app-surface); }
+.trajectory-side-panel .trajectory-setup-page { height: 100%; }
+.trajectory-setup-hint { flex: none; padding: 6px 8px; border-top: 1px solid var(--app-border); color: var(--app-muted); font-size: var(--app-font-xs); white-space: normal; }
+.trajectory-plot-tools { flex: none; }
+.timeline-strip { position: relative; box-sizing: border-box; flex: none; min-width: 0; min-height: 30px; padding: 5px 8px 2px; border-top: 1px solid var(--app-border); background: var(--app-surface); overflow: hidden; }
+.timeline-resize-handle { position: absolute; top: 0; left: 0; right: 0; height: 4px; cursor: row-resize; z-index: 2; }
+.timeline-resize-handle:hover { background: var(--app-accent); }
+.timeline-fields { flex: 1; min-height: 0; min-width: 0; gap: 5px; align-items: center; overflow-x: auto; }
+.timeline-fields > * { flex-shrink: 0; }
+.timeline-fields .zui-input.timeline-time-input { box-sizing: border-box; width: 62px; min-width: 48px; height: 22px; min-height: 22px; font-size: var(--app-font-xs); line-height: 16px; padding: 1px 4px; }
+.timeline-fields .app-action.zui-button[data-variant="ghost"] { box-sizing: border-box; height: 22px; min-height: 22px; padding: 1px 5px; font-size: var(--app-font-xs); }
+.timeline-fields .timeline-scrubber { flex: 1; min-width: 60px; width: auto; height: 18px; min-height: 18px; margin: 0 12px; }
+.timeline-label { color: var(--app-muted); font-size: var(--app-font-xs); }
+.timeline-readout { min-width: 84px; font-size: var(--app-font-xs); }
+
+.timeline-time-input { width: 62px; min-width: 48px; max-width: 62px; }

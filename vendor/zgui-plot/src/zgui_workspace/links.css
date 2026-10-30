@@ -1,0 +1,17 @@
+.link-controls { gap: 0; }
+.link-check { align-items: center; gap: 8px; }
+.plot-links-trigger.zui-button { align-self: center; align-items: center; flex: none; width: 156px; min-width: 156px; height: 20px; min-height: 20px; padding: 0 4px; margin: 0; font-size: 11px; line-height: 16px; justify-content: space-between; gap: 3px; }
+.plot-links-trigger.zui-button.links-open { background: #35553e; border-color: #75a77b; }
+.plot-links-label { min-width: 0; white-space: nowrap; }
+.plot-links-chevron { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: #d7e1d9; --zgui-stroke-width: 1.5px; pointer-events: none; }
+.plot-links-trigger.links-open .plot-links-chevron { transform: rotate(180deg); }
+.zui-surface.plot-links-surface { width: 156px; min-width: 0; max-width: 90vw; min-height: 0; max-height: 55vh; overflow-y: auto; overflow-x: hidden; padding: 3px; background: #17221e; color: #d7e1d9; border: 1px solid #52715d; border-radius: 4px; font-size: 11px; animation: none; transform: none; }
+.zui-surface.plot-links-surface[data-state="closed"] { animation: none; }
+.plot-links-surface .zui-menu__item { flex: none; height: 24px; min-height: 24px; padding: 2px 6px 2px 24px; gap: 5px; font-size: 11px; line-height: 16px; border-radius: 2px; color: #d7e1d9; }
+.plot-links-surface .zui-menu__item[data-state="checked"] { background: #243b2c; }
+.plot-links-surface .zui-menu__item:hover, .plot-links-surface .zui-menu__item:focus { background: #35553e; color: #ebf2ec; }
+.plot-links-surface .zui-menu__indicator { left: 6px; width: 14px; height: 14px; border: 1px solid #6c8676; border-radius: 3px; background: #121b17; color: #a5f2b5; }
+.plot-links-surface .link-option[data-state="checked"] .zui-menu__indicator { background: #35553e; border-color: #8be3a3; }
+.plot-links-surface .zui-menu__indicator .zui-icon { width: 12px; height: 12px; }
+.plot-links-trigger.zui-button.links-active { background: #243b2c; border-color: #75a77b; }
+.plot-links-trigger.zui-button.links-open { background: #35553e; }

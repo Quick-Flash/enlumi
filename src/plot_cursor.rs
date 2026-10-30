@@ -6,6 +6,7 @@ use crate::measurement_background::MeasurementBackgroundProps;
 use crate::measurement_overlay::MeasurementOverlayProps;
 use crate::plot_appearance::PlotBackgroundProps;
 use crate::state::{Pane, Workbench};
+use crate::timeline::{TimeMarkerProps, TimeSurfaceProps};
 use plot::{PlotPoint, zgui_series::SeriesPlotProps};
 use zgui::prelude::*;
 #[component]
@@ -15,6 +16,7 @@ pub fn CursorPlot(
     visible: Signal<bool, LocalStorage>,
     linked: RwSignal<Option<(u64, PlotPoint)>, LocalStorage>,
 ) -> impl IntoView {
+    install_stylesheet("enlumi-trajectory", include_str!("trajectory.css"));
     // Register before child layers so the default series legend can be replaced
     // before band labels and measurement readouts are added to the description.
     plot::zgui_svg::SnapshotLayers::current_or_new();
@@ -63,6 +65,7 @@ pub fn CursorPlot(
             AnyView::new((
             (!spectral).then(|| AnyView::new((view! { GeometryOverlay(workbench=workbench,pane=pane,visible=visible) }.into_view(), view! { AnalysisRange(workbench=workbench,pane=pane,visible=visible) }.into_view()))).into_view(),
             view! {MeasurementOverlay(workbench=workbench,pane=pane,visible=visible)}.into_view()
+            ,(!spectral).then(||AnyView::new(view! {TimeMarker(workbench=workbench,pane=pane,visible=visible)})).into_view()
         ))
         })),
         legend_extra_visible: Signal::derive_local(move || {
@@ -70,9 +73,9 @@ pub fn CursorPlot(
         }),
         ..Default::default()
     };
-    view! { SeriesPlot(pane = pane.display(),
+    view! { TimeSurface(workbench=workbench,pane=pane,visible=visible,spectral=spectral) {SeriesPlot(pane = pane.display(),
     host_actions = host,
     visible = visible,
     linked = linked,
-    options = plot_options) {GeometryLegend(workbench=workbench,pane=pane)} }
+    options = plot_options) {GeometryLegend(workbench=workbench,pane=pane)} } }
 }

@@ -30,6 +30,11 @@ pub struct UpdateState {
 }
 
 impl UpdateState {
+    #[cfg(test)]
+    pub fn isolated() -> Self {
+        Self::create(Preferences::default(), String::new(), None)
+    }
+
     pub fn new() -> Self {
         let (preferences, message) = match Preferences::load() {
             Ok(p) => (

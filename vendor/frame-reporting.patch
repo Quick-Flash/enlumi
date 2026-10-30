@@ -1,0 +1,184 @@
+diff --git a/vendor/zgui-runtime/Cargo.toml b/vendor/zgui-runtime/Cargo.toml
+index 86d5233..835aded 100644
+--- a/vendor/zgui-runtime/Cargo.toml
++++ b/vendor/zgui-runtime/Cargo.toml
+@@ -55,3 +55,9 @@ zgui-text-style = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+ zgui-view = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+ zgui-view-dom = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
+ zgui-vocab = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
++
++[dev-dependencies]
++zgui-arena = { git = "https://github.com/zortax/zgui", version = "0.1.0" }
++
++[workspace]
++resolver = "3"
+diff --git a/vendor/zgui-runtime/src/probe.rs b/vendor/zgui-runtime/src/probe.rs
+index 7ba8fcd..37f660b 100644
+--- a/vendor/zgui-runtime/src/probe.rs
++++ b/vendor/zgui-runtime/src/probe.rs
+@@ -53,6 +53,11 @@ pub trait FrameProbe {
+     /// A frame has finished on `window`.
+     fn frame_ended(&self, window: &Window);
+ 
++    /// Completed-frame timings and renderer counters, without requesting another frame.
++    fn frame_reported(&self, window: &Window, _report: &crate::window::frame::FrameReport) {
++        self.frame_ended(window);
++    }
++
+     /// What to call this probe in a diagnostic rendering of the window's options.
+     ///
+     /// Defaulted, because a probe is identified by what it does rather than by what it is called,
+diff --git a/vendor/zgui-runtime/src/window/frame.rs b/vendor/zgui-runtime/src/window/frame.rs
+index 3002db7..f1a32c3 100644
+--- a/vendor/zgui-runtime/src/window/frame.rs
++++ b/vendor/zgui-runtime/src/window/frame.rs
+@@ -42,6 +42,10 @@ use crate::window::Window;
+ /// What one frame did.
+ #[derive(Clone, Copy, Debug, PartialEq)]
+ pub struct FrameReport {
++    /// Wall time spent processing the frame; excludes waiting for its scheduled start.
++    pub elapsed: std::time::Duration,
++    /// Paint and renderer submission wall time, including any driver wait. Not GPU execution time.
++    pub paint_elapsed: std::time::Duration,
+     /// What the renderer made of it.
+     pub outcome: FrameOutcome,
+     /// Whether anything asked for another frame from inside this one.
+@@ -217,6 +221,7 @@ impl Window {
+ 
+     /// The frame itself, with the window's scope already current.
+     fn run_frame(&mut self, clock: &dyn Clock) -> FrameReport {
++        let measured_start = Instant::now();
+         use zgui_profile::latency::mark;
+         mark("f.begin");
+         let now = clock.now();
+@@ -434,7 +439,9 @@ impl Window {
+ 
+         self.binding.before_paint(timestamp);
+         mark("f.paint");
++        let paint_start = Instant::now();
+         let outcome = self.paint_and_draw();
++        let paint_elapsed = paint_start.elapsed();
+         mark("f.painted");
+         // Immediately after the frame that produced them, and against the output this window is
+         // actually on: what the acquisition made this frame wait for is how much earlier than
+@@ -614,8 +621,17 @@ impl Window {
+         // Last, with everything this frame produced still standing: the scene it emitted, the
+         // damage it answered, the layout it computed. The handle is cloned out first because the
+         // probe is handed the window it is stored on.
++        let report = FrameReport {
++            elapsed: measured_start.elapsed(),
++            paint_elapsed,
++            outcome,
++            needs_another_frame,
++            restyled,
++            timers_fired,
++            animated,
++        };
+         if let Some(probe) = self.probe.clone() {
+-            probe.frame_ended(self);
++            probe.frame_reported(self, &report);
+         }
+ 
+         zgui_profile::latency::note_with("f.end", || {
+@@ -626,13 +642,7 @@ impl Window {
+             )
+             .replace('"', "'")
+         });
+-        FrameReport {
+-            outcome,
+-            needs_another_frame,
+-            restyled,
+-            timers_fired,
+-            animated,
+-        }
++        report
+     }
+ 
+     /// When this window next wants to be woken, if it wants to be woken at all.
+@@ -1432,6 +1442,11 @@ impl Window {
+             });
+             mark("p.expand");
+             zgui_paint::expand(&layout, &mut self.damage, viewport, self.scale);
++            if super::damage_coalesce::coalesce(&mut self.damage) {
++                // The larger region must be expanded and emitted too; merging
++                // only at renderer submission would omit its stationary content.
++                zgui_paint::expand(&layout, &mut self.damage, viewport, self.scale);
++            }
+             self.scene.begin_frame(viewport);
+             // What this frame's application effects are told about it. Nothing the framework draws
+             // reads any of it, so a document with no effect in it pays three floats.
+diff --git a/vendor/zgui-runtime/src/window/mod.rs b/vendor/zgui-runtime/src/window/mod.rs
+index bb80e79..db17b7b 100644
+--- a/vendor/zgui-runtime/src/window/mod.rs
++++ b/vendor/zgui-runtime/src/window/mod.rs
+@@ -13,6 +13,7 @@ pub mod caret;
+ mod clicks;
+ mod crossing;
+ mod cursor;
++mod damage_coalesce;
+ pub mod frame;
+ pub mod input;
+ pub mod observe;
+diff --git a/vendor/zgui-runtime/src/window/damage_coalesce.rs b/vendor/zgui-runtime/src/window/damage_coalesce.rs
+new file mode 100644
+--- /dev/null
++++ b/vendor/zgui-runtime/src/window/damage_coalesce.rs
+@@ -0,0 +1,58 @@
++//! Avoid replaying a large scene separately for several densely packed dirty regions.
++use zgui_bits::DamageSet;
++
++pub(super) fn coalesce(damage: &mut DamageSet) -> bool {
++    if damage.len() < 3 {
++        return false;
++    }
++    let Some(bounds) = damage.bounds() else {
++        return false;
++    };
++    let covered = damage.area().unwrap_or(0);
++    let bounding = i64::from(bounds.size.width) * i64::from(bounds.size.height);
++    // Keep sparse caret/cursor damage sparse. At most 50% extra pixels buys one
++    // batch-stream replay instead of three or more, independent of plot count.
++    if covered <= 0 || bounding > covered.saturating_add(covered / 2) {
++        return false;
++    }
++    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    if !*ENABLED.get_or_init(|| std::env::var("ZGUI_COALESCE_DAMAGE").as_deref() != Ok("0")) {
++        return false;
++    }
++    damage.clear();
++    damage.absorb(bounds);
++    true
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use zgui_geom::{Device, Point, Rect, Size};
++    fn rect(x: i32, y: i32, w: i32, h: i32) -> Rect<i32, Device> {
++        Rect::new(Point::new(x, y), Size::new(w, h))
++    }
++    #[test]
++    fn joins_dense_panels_and_keeps_sparse_cursors_and_small_updates_separate() {
++        let mut damage = DamageSet::new();
++        for y in [0, 110, 220] {
++            damage.absorb(rect(0, y, 900, 100));
++        }
++        let bounds = damage.bounds();
++        assert!(coalesce(&mut damage));
++        assert_eq!(damage.len(), 1);
++        assert_eq!(damage.bounds(), bounds);
++        let mut sparse = DamageSet::new();
++        for x in [0, 400, 800] {
++            sparse.absorb(rect(x, 0, 1, 10));
++        }
++        assert!(!coalesce(&mut sparse));
++        assert_eq!(sparse.len(), 3);
++        let mut small = DamageSet::new();
++        small.absorb(rect(0, 0, 10, 10));
++        small.absorb(rect(11, 0, 10, 10));
++        assert!(!coalesce(&mut small));
++        assert_eq!(small.len(), 2);
++        assert!(!coalesce(&mut DamageSet::full()));
++        assert!(!coalesce(&mut DamageSet::new()));
++    }
++}

@@ -123,6 +123,13 @@ impl Data {
 
 impl Session {
     pub(crate) fn capture(workbench: Workbench, unfinished: Option<u64>) -> Option<Self> {
+        let old_log = workbench.log.get_untracked()?;
+        let mut profiles = workbench.profiles.instances.get_untracked();
+        for profile in profiles.values_mut() {
+            profile
+                .ids
+                .reconcile(&profile.definition, || workbench.id());
+        }
         Some(Self {
             ready_workspaces: workbench.workspaces.items.with_untracked(|items| {
                 items
@@ -136,10 +143,10 @@ impl Session {
                     .map(|workspace| workspace.id)
                     .collect()
             }),
-            old_log: workbench.log.get_untracked()?,
+            old_log,
             fields: workbench.derived.get_untracked(),
             geometry: workbench.geometry.items.get_untracked(),
-            profiles: workbench.profiles.instances.get_untracked(),
+            profiles,
             plots: workbench
                 .all_panes()
                 .into_iter()
@@ -464,6 +471,7 @@ impl Session {
 
 impl Workbench {
     pub(crate) fn restore_log_session(self, session: Refreshed) {
+        self.timeline.time.set(Some(0.));
         self.profiles.cancel();
         self.profiles.error.set(String::new());
         self.profiles.failures.set(BTreeMap::new());
@@ -542,6 +550,19 @@ impl Workbench {
             let Some(pane) = self.find(plot.id) else {
                 continue;
             };
+            pane.trajectory.update(|spec| {
+                if let Some(spec) = spec {
+                    for source in spec.sources_mut() {
+                        if source.is_empty() {
+                            continue;
+                        }
+                        let mapped = remap(source);
+                        if !mapped.is_empty() {
+                            *source = mapped;
+                        }
+                    }
+                }
+            });
             let current = pane
                 .lines
                 .with_untracked(|lines| lines.iter().map(|line| line.id).collect::<BTreeSet<_>>());
@@ -584,6 +605,20 @@ impl Workbench {
             pane.fit_axes(plot::interaction::Axes::BOTH);
         }
         for view in self.all_views() {
+            let builder = view.trajectory_builder;
+            builder.pane.lines.set(Vec::new());
+            builder.pane.trajectory.update(|spec| {
+                if let Some(spec) = spec {
+                    for source in spec.sources_mut() {
+                        let mapped = remap(source);
+                        *source = if valid(&mapped) {
+                            mapped
+                        } else {
+                            String::new()
+                        };
+                    }
+                }
+            });
             let ui = view.analysis;
             let results = view.panes.with_untracked(|panes| {
                 panes

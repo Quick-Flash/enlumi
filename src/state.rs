@@ -39,6 +39,12 @@ pub struct Pane {
     pub background: RwSignal<Option<[u8; 3]>, LocalStorage>,
     pub menu_area: RwSignal<Option<NodeRef>, LocalStorage>,
     pub analysis: RwSignal<Option<crate::analysis_state::AnalysisResult>, LocalStorage>,
+    pub trajectory: RwSignal<Option<crate::trajectory::Spec>, LocalStorage>,
+    pub trajectory_setup: RwSignal<bool, LocalStorage>,
+    pub trajectory_data: RwSignal<Option<Arc<crate::trajectory::Tracks>>, LocalStorage>,
+    pub timeline_link: RwSignal<bool, LocalStorage>,
+    pub trajectory_slots: StoredValue<BTreeMap<(usize, bool), NodeRef>, LocalStorage>,
+    pub trajectory_drop: RwSignal<Option<(usize, bool)>, LocalStorage>,
     pub snapshot: plot::zgui_svg::PlotSnapshotSource,
     pub links: RwSignal<LinkOptions, LocalStorage>,
     pub lines: RwSignal<Vec<Line>, LocalStorage>,
@@ -54,13 +60,20 @@ pub struct Pane {
 impl Pane {
     pub(crate) fn new(id: u64) -> Self {
         let lines = RwSignal::new_local(Vec::<Line>::new());
+        let trajectory = RwSignal::new_local(None::<crate::trajectory::Spec>);
         let view_lines = Signal::derive_local(move || {
+            let pairs = trajectory.get().map(|spec| spec.pairs());
             lines
                 .get()
                 .into_iter()
+                .filter(|line| {
+                    pairs
+                        .as_ref()
+                        .is_none_or(|pairs| pairs.iter().any(|pair| pair.y == line.source))
+                })
                 .map(|line| plot::zgui_series::SeriesLine {
                     id: line.id,
-                    name: line.name,
+                    name: line.name.clone(),
                     data: line.data,
                     revision: line.revision,
                 })
@@ -89,6 +102,12 @@ impl Pane {
             background: RwSignal::new_local(None),
             menu_area: RwSignal::new_local(None),
             analysis: RwSignal::new_local(None),
+            trajectory,
+            trajectory_setup: RwSignal::new_local(false),
+            trajectory_data: RwSignal::new_local(None),
+            timeline_link: RwSignal::new_local(true),
+            trajectory_slots: StoredValue::new_local(BTreeMap::new()),
+            trajectory_drop: RwSignal::new_local(None),
             snapshot: StoredValue::new_local(None),
             links: RwSignal::new_local(LinkOptions {
                 x: false,
@@ -124,15 +143,47 @@ impl Pane {
             .with_untracked(|lines| lines.iter().find(|line| line.id == id).cloned())
     }
     pub fn remove_line(self, id: u64) {
+        let source = self.lines.with_untracked(|lines| {
+            lines
+                .iter()
+                .find(|line| line.id == id)
+                .map(|line| line.source.clone())
+        });
+        let mut keep_input = false;
+        if let Some(source) = source {
+            self.trajectory.update(|spec| {
+                if let Some(spec) = spec {
+                    spec.extra.retain(|pair| pair.y != source);
+                    if spec.y == source {
+                        if spec.extra.is_empty() {
+                            spec.y.clear();
+                        } else {
+                            let pair = spec.extra.remove(0);
+                            spec.x = pair.x;
+                            spec.y = pair.y;
+                            spec.fix = pair.fix;
+                            spec.gps_scale = pair.gps_scale;
+                        }
+                    }
+                    keep_input = spec
+                        .pairs()
+                        .iter()
+                        .any(|pair| pair.x == source || pair.fix == source);
+                }
+            });
+        }
         self.plot.auto_fit.set(false);
-        self.lines
-            .update(|lines| lines.retain(|line| line.id != id));
+        if !keep_input {
+            self.lines
+                .update(|lines| lines.retain(|line| line.id != id));
+        }
         self.display().remove_appearance(id);
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct Workbench {
+    pub timeline: crate::timeline::Timeline,
     pub authoring: crate::preset_ui::Authoring,
     pub views: crate::view_state::Views,
     pub workspaces: crate::workspace_state::Workspaces,
@@ -193,6 +244,7 @@ impl Workbench {
     pub fn new() -> Self {
         let views = crate::view_state::Views::new();
         Self {
+            timeline: crate::timeline::Timeline::new(),
             authoring: crate::preset_ui::Authoring::new(),
             views,
             workspaces: crate::workspace_state::Workspaces::new(views),
@@ -384,6 +436,7 @@ impl Workbench {
                         .flight
                         .set(log.settings.keys().next().copied().unwrap_or(1));
                     self.log.set(Some(log));
+                    self.timeline.time.set(None);
                     if let Some(source) = self.workspace().source.get_untracked() {
                         self.authoring
                             .pending
@@ -429,6 +482,11 @@ impl Workbench {
         } else {
             active
         };
+        pane.trajectory.update(|spec| {
+            if let Some(spec) = spec {
+                spec.add_source(&source);
+            }
+        });
         if let Some(id) = pane.lines.with_untracked(|lines| {
             lines
                 .iter()
@@ -586,6 +644,9 @@ impl Workbench {
             })
             .collect();
         copy.analysis.set(source.analysis.get_untracked());
+        copy.trajectory.set(source.trajectory.get_untracked());
+        copy.trajectory_setup
+            .set(source.trajectory_setup.get_untracked());
         copy.background.set(source.background.get_untracked());
         if let Some(title) = self
             .profiles
@@ -603,6 +664,7 @@ impl Workbench {
         copy.plot.ranges.set(source.plot.ranges.get_untracked());
         copy.plot.auto_fit.set(source.plot.auto_fit.get_untracked());
         copy.links.set(source.links.get_untracked());
+        copy.timeline_link.set(source.timeline_link.get_untracked());
         copy.geometry.set(source.geometry.get_untracked());
         copy.legend_order
             .set(source.legend_order.with_untracked(|order| {

@@ -33,6 +33,44 @@ plots refresh from the new file, and axes fit the new data. Unavailable inputs
 are skipped with diagnostics in Profiles; their plots remain open. A failed
 load leaves the current log and setup intact.
 Drop one file at a time; loading errors appear in the toolbar status.
+
+**2D plot** opens a resizable builder on the right. Its left column is X and its
+right column is Y. Drop fields or ordinary legend entries into either column;
+new rows appear automatically. Each row pairs its X and Y. Drag assigned fields
+between rows or columns to rearrange pairs; the small **x** removes an input.
+Drag a completed row using its **Drag pair to a plot** bar. An empty pane becomes a 2D
+plot, an existing 2D pane gains the pair, and an occupied ordinary pane gets a
+neighboring 2D pane. Other unfinished rows do not prevent dragging a ready pair.
+New pairs avoid colors already used by other traces in the destination plot.
+**Edit X/Y** reopens a plot's pairs in the builder; drag an edited pair back onto
+that plot to apply it.
+
+The chart keeps its ordinary legend and gear for per-trace color, width, line
+pattern, dots, marker shape and size. Axis controls stay in the side builder.
+Legend entries can move between ordinary and 2D plots. Axis assignments,
+appearance and visibility survive saved plots/views, duplication and compatible
+log changes. **Equal scale** inside the chart keeps one unit the same size on both axes and
+constrains the Shift-zoom box to the viewport aspect. With it off, the zoom box
+is free. **Links**
+supports bounds and pointers between 2D plots; spatial bounds stay separate from
+time plots. Samples retain recording order, including loops. Alignment does not
+extrapolate or connect paths through invalid values or gaps. Dashed, dotted and
+dash-dot lines use retained GPU segments with width-relative spacing.
+
+The shared **Time** strip below the plotting workspace controls one time cursor
+across all workspaces and views. It is independent of the plotted series and
+legend styling. Drag its upper edge to adjust its height. The compact time box
+accepts seconds; press **Enter** or **Set** to apply. Pointer and timeline links
+are enabled by default; **Links** can disable either independently. Linked time plots
+show a draggable gold vertical line; linked 2D traces show their corresponding
+interpolated positions. Plots without this link do not display or publish the
+shared timeline. Drag the line, **Alt-click/drag** anywhere
+on a time plot, click a 2D sample, scrub the bottom timeline slider, or enter seconds and
+choose **Set time**. These actions pin the time without panning the plot.
+**Previous sample / Next sample**, or **[ / ]** outside text inputs, step through
+the active plot's sample times. **Follow pointer** enables hover tracking (off by default);
+Markers are absent outside a trace's recorded range or
+inside gaps. Frequency-domain plots keep their frequency pointers.
 On Windows, launch Enlumi normally rather than as administrator. Windows blocks
 file drops from a normal Explorer window into an elevated application, including
 when Enlumi inherited elevation from an administrator terminal.
@@ -106,7 +144,7 @@ names and values. Select a parameter to read/copy its full value, or use **Add t
 plot** / **Use in filter**. Text records remain readable without plot actions. Settings
 absent from log cannot be reconstructed.
 
-**Profiles → Folder…** chooses saved library directory. Nested folders and
+**Profiles â†’ Folderâ€¦** chooses saved library directory. Nested folders and
 auto firmware matching use same location. **Profiles** groups saved workspaces, views, and plots.
 Expand a workspace's **Views** branch to drag an entire view into another workspace.
 Views contain plots, and plots contain fields. **Profile files** holds file edit/delete actions.
@@ -116,11 +154,11 @@ shared sidebar; Shift-selection still includes off-screen matches. Use Left/Righ
 to collapse or expand a focused branch, or Enter/Space to toggle it.
 Drag a view or plot to use it; profile loads on demand. Missing
 fields skip affected outputs while remaining view works. Views, fields and geometry offer **Add** / **New panel**; fields also offer
-**Filter**. **Reload** updates owned outputs without resetting log; **Remove…**
+**Filter**. **Reload** updates owned outputs without resetting log; **Removeâ€¦**
 previews affected outputs and dependencies. **Auto** saves local firmware-matching
 preference without editing recipe. Select flight for multi-flight files. Double-click tab title (or focus it and press F2) to rename in place. See [profile setup and format](PROFILES.md).
 
-Raw field selected: **Labels…** edits display name, axis/component, and unit.
+Raw field selected: **Labelsâ€¦** edits display name, axis/component, and unit.
 Reusable group labels live in profiles; source IDs stay unchanged.
 
 1. Click **Open log** or pass a local log path. File Explorer drag-and-drop is deferred to future work.
@@ -129,12 +167,12 @@ Reusable group labels live in profiles; source IDs stay unchanged.
 4. Each plot's **Duplicate** button copies its lines and appearance into new pane. Tab **+** adds a tab in same pane; tab X closes it.
 5. Each dock keeps original left/right/top/bottom/center targets: center groups tabs, edges split that pane. Additional four-arrow guides target contiguous multi-pane row/column bands, including nested regions. Hover near a band to reveal its guide; center number counts visible panes. With three rows, top two and bottom two both have guides. Whole-layout preview labels every resulting dock at its future position, including neighbors that shift or resize. Preview and final drop use same layout transaction. Unselected bands keep their positions. Drag splitters to resize: other edges stay fixed until neighboring dock reaches 220 x 160 px minimum, then further dragging pushes its far edge and any adjacent minimum-size docks. Workspace border stops pushing; reversing within drag restores original edges. Perpendicular edges stay fixed; **Maximize**/**Restore** changes workspace view. **Equalize panels** balances columns and rows while keeping tabs and arrangement. Sidebar icon toggles fields; right grip resizes it.
 6. Gear inside legend box opens centered line-settings dialog. Legend and gear appear once plot has lines. Select legend entry in dialog to edit HSV color square, rainbow hue strip, hex RGB, width, sample markers (dots, square, triangle, diamond, cross), marker size, and linear/pre-step/post-step connection. Filters workspace manages derived fields separately from line appearance. Legend X removes its line; clicking label toggles visibility. Hovering hidden legend field previews its line above other lines until pointer leaves, without changing visibility or bounds.
-7. Pan, wheel/box zoom (release Shift to cancel selection), hover samples, toggle legend visibility. Wheel over bottom X band or left Y axis zooms only that axis around pointer; other axis stays fixed. Double-click inside plot fits both axes. Double-click bottom X axis or full-height left Y edge fits only that axis; right-click menu also offers Fit X axis, Fit Y axis, and Fit both axes. Drag upper/lower half of left Y edge to adjust that bound; Escape cancels axis drag. Legend toggles and removals preserve bounds; adding a field or moving a line into another panel fits destination. Automatic line colors use 16 contrasting colors, avoid reuse across panels until palette is exhausted, then prefer least-used colors. Each plot header's **Links** dropdown has checkboxes for All, X bounds, Y bounds, and pointer links. All enables or clears every link; toggling an individual link leaves other selections intact and updates All indicator. Only pointer links by default; opt into X/Y bounds independently. Linked pointer and coordinates below legend follow snapped sample cross; away from samples they follow free cross position. FPS appears in top-right toolbar and updates at 4 Hz (every 250 ms) from frame timestamps.
+7. Pan, wheel/box zoom (release Shift to cancel selection), hover samples, toggle legend visibility. Wheel over bottom X band or left Y axis zooms only that axis around pointer; other axis stays fixed. Double-click inside plot fits both axes. Double-click bottom X axis or full-height left Y edge fits only that axis; right-click menu also offers Fit X axis, Fit Y axis, and Fit both axes. Drag upper/lower half of left Y edge to adjust that bound; Escape cancels axis drag. Legend toggles and removals preserve bounds; adding a field or moving a line into another panel fits destination. Automatic line colors prefer colors not already used by other traces in the destination plot, then reuse the least-used palette colors. Each plot header's **Links** dropdown has checkboxes for All, X bounds, Y bounds, pointer, and timeline links. All enables or clears every link; toggling an individual link leaves other selections intact and updates All indicator. Pointer and timeline links are enabled by default; opt into X/Y bounds independently. Linked pointer and coordinates below legend follow snapped sample cross; away from samples they follow free cross position. FPS appears in the top-right toolbar, continuously samples UI frame cadence, and updates every 250 ms. Sampling does not force unchanged plot contents to redraw; performance logs distinguish presented and undamaged frames. See [performance measurements](PERFORMANCE.md) to record frame costs and compare Linux backends.
 
 **Filters** beside Collapse all in field browser switches plot area to filtering workspace while keeping left field tree visible. Drag raw or derived fields into source area; hover Filters button during a drag to open workspace, or drop directly onto button. Ctrl-click or Shift-click fields, then drag any selected field to add whole group. Clear fields empties source selector without changing editor mode or deleting saved fields. Sources have individually editable output names; low/high-pass, moving average, derivative, integral, or gain/offset settings apply identically to every source. Create batch, edit shared settings without changing output identities, or use **Add next filter** to chain all batch outputs. **Plot outputs** returns to plots and adds outputs to active dock. Sources can be removed from batch individually. Outputs appear under **Derived fields** and support normal plotting and drag/drop.
 
 Choose **Magnitude** to combine all source fields into one named output, or
-**Quaternion → RPY** to create three named outputs. Choose radians (default) or
+**Quaternion â†’ RPY** to create three named outputs. Choose radians (default) or
 degrees in **Output units**; editing a saved group restores its unit setting. Quaternion
 requires exactly four source fields, assigned **w, x, y, z** from top to bottom.
 W/X/Y/Z slots remain visible when empty. Drop a field directly into its slot, or
@@ -194,11 +232,11 @@ segment and one-sided differences at its ends; a single sample has no derivative
 Nonfinite samples, duplicate timestamps, and gaps exceeding 10 times median
 positive interval separate segments; integration and averaging restart there.
 
-Gain/offset applies y = input * gain + offset. Its **rad → deg** and
-**deg → rad** presets fill gain and reset offset to zero; both remain editable.
+Gain/offset applies y = input * gain + offset. Its **rad â†’ deg** and
+**deg â†’ rad** presets fill gain and reset offset to zero; both remain editable.
 Timestamps and gaps are preserved.
 
-One log file at a time; dynamic docked plots and tabs. Plot area fills available workspace, with a green theme and docked panels. ULog timestamps use elapsed seconds from file header. Blackbox flights use elapsed seconds from each flight’s first main frame. Incomplete logs show recovered samples with load warning. Missing/unsupported timestamps, decreasing timestamps, and mismatched field lengths also produce load warnings. Numeric and boolean fields are plottable; character and padding fields are omitted. Raw typed values remain in memory; plot values use f64. Linear and step rendering use column LOD. Visible samples are reduced before step corners are generated, retaining extrema and gaps. Sparse pre/post steps retain exact corners. Markers use bounded visible samples; cursor snapping uses full original samples. Preparation runs off UI thread with one worker per pane, coalesces viewport changes, publishes compatible completed buffers during continuous pans, and reuses unchanged lines. Preparation includes one extra viewport on either side so nearby pans reveal cached samples immediately. Exact rendering falls back to columns above 65,536 visible samples to limit GPU geometry. Filtering always uses full samples. Large logs retain all decoded fields, plus buffers for selected signals.
+One log file at a time; dynamic docked plots and tabs. Plot area fills available workspace, with a green theme and docked panels. ULog timestamps use elapsed seconds from file header. Blackbox flights use elapsed seconds from each flightâ€™s first main frame. Incomplete logs show recovered samples with load warning. Missing/unsupported timestamps, decreasing timestamps, and mismatched field lengths also produce load warnings. Numeric and boolean fields are plottable; character and padding fields are omitted. Raw typed values remain in memory; plot values use f64. Linear and step rendering use column LOD. Visible samples are reduced before step corners are generated, retaining extrema and gaps. Sparse pre/post steps retain exact corners. Markers use bounded visible samples; cursor snapping uses full original samples. Preparation runs off UI thread with one worker per pane, coalesces viewport changes, publishes compatible completed buffers during continuous pans, and reuses unchanged lines. Preparation includes one extra viewport on either side so nearby pans reveal cached samples immediately. Exact rendering falls back to columns above 65,536 visible samples to limit GPU geometry. Filtering always uses full samples. Large logs retain all decoded fields, plus buffers for selected signals.
 
 Automatic session recovery and multi-log comparison are not implemented yet.
 
@@ -324,7 +362,7 @@ handles change length; move handle or position input changes line's X/Y level.
 
 ## Legend
 
-Click **▾ Legend** to minimize legend to its heading. Click **▸ Legend** to expand
+Click **â–¾ Legend** to minimize legend to its heading. Click **â–¸ Legend** to expand
 again. Plotted fields, geometry, and visibility remain unchanged. Each plot has
 its own collapsed state; line settings remain available while collapsed.
 

@@ -68,7 +68,7 @@ fn file_drop_opens_replaces_and_validates_logs() {
     let handler = app().with_size(1500.0, 850.0)
         .with_renderer(renderer())
         .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
-        .into_handler(move || view! { WorkbenchApp(initial_path=None, client_frame=true, preferences=crate::preferences::ThemePreference::disabled(), log_directory=directory.clone()) })
+        .into_handler(move || {provide_local_context(crate::update_state::UpdateState::isolated());view! { WorkbenchApp(initial_path=None, client_frame=true, preferences=crate::preferences::ThemePreference::disabled(), log_directory=directory.clone()) }})
         .unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(

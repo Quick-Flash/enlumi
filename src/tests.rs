@@ -247,6 +247,7 @@ fn analysis_selection_stays_separate_and_conditioner_is_not_a_spectral_input() {
 fn app_starts_with_one_full_workspace_and_adds_plots_with_keyboard() {
     let window = Window::open();
     let mut built = window.scope.with(|| {
+        provide_local_context(crate::update_state::UpdateState::isolated());
         view! { WorkbenchApp(initial_path = None) }
             .into_view()
             .build(&mut window.cx.cx())

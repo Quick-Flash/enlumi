@@ -1,0 +1,353 @@
+--- a/vendor/zgui-plot/Cargo.toml
++++ b/vendor/zgui-plot/Cargo.toml
+@@ -16,11 +16,12 @@
+ kurbo = "0.13.1"
+ resvg = { version = "0.46", default-features = false, features = ["text", "system-fonts"], optional = true }
+ zgui = { git = "https://github.com/zortax/zgui", optional = true }
++zgui-profile = { git = "https://github.com/zortax/zgui", optional = true }
+ zgui-ui = { git = "https://github.com/zortax/zgui", optional = true }
+ 
+ [features]
+ default = []
+-zgui = ["dep:zgui"]
++zgui = ["dep:zgui", "dep:zgui-profile"]
+ raster = ["dep:resvg"]
+ clipboard = ["raster", "dep:arboard"]
+ workspace = ["zgui", "dep:zgui-ui"]
+@@ -44,3 +45,10 @@
+ [[example]]
+ name = "data_plots"
+ required-features = ["workspace"]
++
++[workspace]
++resolver = "3"
++
++[patch."https://github.com/zortax/zgui"]
++zgui-runtime = { path = "../zgui-runtime" }
++zgui-render-wgpu = { path = "../zgui-render-wgpu" }
+--- a/vendor/zgui-plot/src/lib.rs
++++ b/vendor/zgui-plot/src/lib.rs
+@@ -50,6 +50,8 @@
+ //! ```
+ 
+ pub mod axis;
++#[cfg(feature = "zgui")]
++pub mod preparation;
+ mod description;
+ mod geometry;
+ mod grid;
+--- a/vendor/zgui-plot/src/zgui_plot/time_lines.rs
++++ b/vendor/zgui-plot/src/zgui_plot/time_lines.rs
+@@ -157,7 +157,7 @@
+                         .collect::<Vec<_>>()
+                 });
+                 let x = crate::Range::new(f64::from_bits(min), f64::from_bits(max));
+-                let data: Prepared = blocking(move || {
++                let data: Prepared = crate::preparation::prepare("time-series", move || {
+                     jobs.into_iter()
+                         .map(|(id, data, mode, reuse)| {
+                             if let Some(reuse) = reuse {
+@@ -203,7 +203,7 @@
+                     return;
+                 };
+                 if let Some(latest) = plan.get_untracked()
+-                    && compatible(&request, &latest)
++                    && compatible(&sampled, &latest)
+                     && !restore(&latest)
+                 {
+                     history.update_value(|history| history.remember(sampled.clone(), data.clone()));
+@@ -348,10 +348,11 @@
+                     TimeSeriesSet::new(vec![crate::time_series::TimeSeries::new("a", "a", data)])
+                         .unwrap();
+                 let handle = CanvasHandle::new();
++                let drawing = RwSignal::new_local(BTreeMap::new());
+                 time_lines(
+                     Signal::stored_local(set),
+                     state,
+-                    Signal::stored_local(BTreeMap::new()),
++                    Signal::derive_local(move || drawing.get()),
+                     geometry,
+                     visible.into(),
+                     handle.clone(),
+@@ -361,13 +362,13 @@
+                     show_ranges(&view_handle, geometry.get().unwrap(), state.ranges.get())
+                 });
+                 let initial = handle.scene().revision();
+-                *model.borrow_mut() = Some((state, visible, handle.clone(), initial));
++                *model.borrow_mut() = Some((state, visible, handle.clone(), initial, drawing));
+                 zgui::elements::canvas().scene(&handle).into_view()
+             })
+             .unwrap();
+         let mut harness = zgui_platform_headless::Harness::new(handler.into_runtime());
+         harness.settle(16);
+-        let (state, visible, handle, initial) = built.borrow().as_ref().unwrap().clone();
++        let (state, visible, handle, initial, drawing) = built.borrow().as_ref().unwrap().clone();
+         let wait = |harness: &mut zgui_platform_headless::Harness<zgui::runtime::Runtime>,
+                     revision| {
+             let start = Instant::now();
+@@ -382,6 +383,25 @@
+             harness.settle(16);
+         };
+         wait(&mut harness, initial);
++        let wait_series =
++            |harness: &mut zgui_platform_headless::Harness<zgui::runtime::Runtime>| {
++                let deadline = Instant::now() + Duration::from_secs(10);
++                while zgui::canvas::resolve(handle.scene().token())
++                    .unwrap()
++                    .lock()
++                    .unwrap()
++                    .series()
++                    .is_empty()
++                {
++                    assert!(
++                        Instant::now() < deadline,
++                        "Prepared series did not become visible"
++                    );
++                    harness.settle(32);
++                    std::thread::sleep(Duration::from_millis(2));
++                }
++            };
++        wait_series(&mut harness);
+         let revision = handle.scene().revision();
+         let view = handle.scene().view();
+         let started = Instant::now();
+@@ -446,10 +466,55 @@
+         let hidden = handle.scene().revision();
+         visible.set(true);
+         wait(&mut harness, hidden);
++        wait_series(&mut harness);
+         assert!(
+             handle.scene().revision() > hidden,
+             "Showing a hidden plot restores cleared geometry"
+         );
++        for pattern in [
++            LinePattern::Dashed,
++            LinePattern::Dotted,
++            LinePattern::DashDot,
++        ] {
++            state
++                .ranges
++                .set(crate::Ranges::new((100., 200.), (-1., 1.)));
++            let old = vertices();
++            drawing.set(BTreeMap::from([(
++                "a".into(),
++                LineDraw {
++                    pattern,
++                    ..Default::default()
++                },
++            )]));
++            let deadline = Instant::now() + Duration::from_secs(10);
++            while std::sync::Arc::ptr_eq(&old, &vertices()) {
++                harness.settle(32);
++                assert!(Instant::now() < deadline, "Pattern preparation timed out");
++                std::thread::sleep(Duration::from_millis(2));
++            }
++            let retained = vertices();
++            let revision = handle.scene().revision();
++            let view = handle.scene().view();
++            for step in 1..=30 {
++                let offset = step as f64 / 30.;
++                state.ranges.set(crate::Ranges::new(
++                    (100. + offset * 20., 200. + offset * 20.),
++                    (-1. + offset * 0.5, 1. + offset * 0.5),
++                ));
++                harness.settle(16);
++            }
++            assert_eq!(
++                handle.scene().revision(),
++                revision,
++                "{pattern:?} pan must update transforms without rebuilding geometry"
++            );
++            assert!(
++                std::sync::Arc::ptr_eq(&retained, &vertices()),
++                "{pattern:?} must retain the uploaded vertex allocation"
++            );
++            assert!(handle.scene().view() > view);
++        }
+     }
+     #[test]
+     fn padded_pan_cache_reuses_coverage_without_losing_zoom_detail() {
+@@ -507,12 +572,13 @@
+         );
+         let mut patterned = original.clone();
+         patterned.0[0].2.1 = LinePattern::Dashed;
++        patterned.5 = ((-1_f64).to_bits(), 1_f64.to_bits(), 500);
+         next = patterned.clone();
+         next.1 = 101.0_f64.to_bits();
+         next.2 = 201.0_f64.to_bits();
+         assert!(
+-            !reusable(&patterned, &next),
+-            "Pattern spacing stays tied to pixels"
++            reusable(&patterned, &next),
++            "Translation retains pixel spacing and the prepared buffers"
+         );
+         next = original.clone();
+         next.4 = Lod::Exact;
+@@ -526,17 +592,25 @@
+                 123,
+                 (Connection::Pre, LinePattern::Solid, 0),
+             )],
+-            0,
+-            100,
++            0_f64.to_bits(),
++            100_f64.to_bits(),
+             800,
+             Lod::Columns,
+             (0, 0, 0),
+         );
++        let completed = detail_plan(&completed);
+         let mut latest = completed.clone();
+-        latest.1 = 10;
+-        latest.2 = 110;
++        latest.1 = 10_f64.to_bits();
++        latest.2 = 110_f64.to_bits();
+         latest.3 = 1200;
+         assert!(compatible(&completed, &latest));
++        let mut distant = latest.clone();
++        distant.1 = 1000_f64.to_bits();
++        distant.2 = 1100_f64.to_bits();
++        assert!(
++            !compatible(&completed, &distant),
++            "Distant stale preparation must not replace the current viewport"
++        );
+         latest.0[0].1 = 456;
+         assert!(!compatible(&completed, &latest));
+         latest.0[0].1 = 123;
+--- a/vendor/zgui-plot/src/zgui_plot/time_cache.rs
++++ b/vendor/zgui-plot/src/zgui_plot/time_cache.rs
+@@ -16,23 +16,43 @@
+     (u64, u64, usize),
+ );
+ pub(super) fn compatible(completed: &Plan, latest: &Plan) -> bool {
+-    completed.0 == latest.0
++    reusable(completed, latest)
+ }
+ 
+ pub(super) fn reusable(completed: &Plan, latest: &Plan) -> bool {
+     if completed == latest {
+         return true;
+     }
+-    if completed.0 != latest.0 || completed.4 != latest.4 || completed.5 != latest.5 {
++    if completed.0 != latest.0 || completed.4 != latest.4 {
+         return false;
+     }
+-    // Pixel-spaced patterns must be rebuilt when either axis or plot size changes.
++    // Pixel-spaced geometry survives translation while scale and overscan stay
++    // valid. Reusing it preserves both dash phase and GPU buffer identity.
+     if completed
+         .0
+         .iter()
+         .any(|(_, _, (_, pattern, _))| !matches!(pattern, LinePattern::Solid | LinePattern::None))
+     {
+-        return false;
++        let old_x = crate::Range::new(f64::from_bits(completed.1), f64::from_bits(completed.2));
++        let next_x = crate::Range::new(f64::from_bits(latest.1), f64::from_bits(latest.2));
++        let old_y = crate::Range::new(f64::from_bits(completed.5.0), f64::from_bits(completed.5.1));
++        let next_y = crate::Range::new(f64::from_bits(latest.5.0), f64::from_bits(latest.5.1));
++        return [
++            (old_x, next_x, completed.3, latest.3),
++            (old_y, next_y, completed.5.2, latest.5.2),
++        ]
++        .into_iter()
++        .all(|(old, next, pixels, next_pixels)| {
++            let scale = pixels as f64 / old.span();
++            let next_scale = next_pixels as f64 / next.span();
++            scale.is_finite()
++                && scale > 0.
++                && next_scale.is_finite()
++                && next_scale > 0.
++                && (scale - next_scale).abs() <= scale * 1e-9
++                && next.min >= old.min - old.span() * 0.75
++                && next.max <= old.max + old.span() * 0.75
++        });
+     }
+     let old = crate::Range::new(f64::from_bits(completed.1), f64::from_bits(completed.2));
+     let next = crate::Range::new(f64::from_bits(latest.1), f64::from_bits(latest.2));
+@@ -151,4 +171,37 @@
+         cache.clear();
+         assert!(cache.0.is_empty());
+     }
+-}
++
++    #[test]
++    fn patterned_pans_reuse_only_matching_pixel_scale_and_prepared_coverage() {
++        for pattern in [
++            LinePattern::Dashed,
++            LinePattern::Dotted,
++            LinePattern::DashDot,
++        ] {
++            let mut old = request();
++            old.0[0].2.1 = pattern;
++            old.5 = ((-1_f64).to_bits(), 1_f64.to_bits(), 500);
++            let mut next = old.clone();
++            next.1 = 120_f64.to_bits();
++            next.2 = 220_f64.to_bits();
++            next.5 = ((-0.5_f64).to_bits(), 1.5_f64.to_bits(), 500);
++            assert!(reusable(&old, &next));
++            next.2 = 170_f64.to_bits();
++            assert!(!reusable(&old, &next), "X zoom changes dash spacing");
++            next = old.clone();
++            next.5.1 = 0_f64.to_bits();
++            assert!(!reusable(&old, &next), "Y zoom changes dash spacing");
++            next = old.clone();
++            next.1 = 1000_f64.to_bits();
++            next.2 = 1100_f64.to_bits();
++            assert!(!reusable(&old, &next), "Distant pans need fresh geometry");
++            next = old.clone();
++            next.3 += 100;
++            assert!(!reusable(&old, &next), "Resize changes pixel scale");
++            next = old.clone();
++            next.0[0].2.2 = 8_f64.to_bits();
++            assert!(!reusable(&old, &next), "Width changes need fresh patterns");
++        }
++    }
++}
+--- a/vendor/zgui-plot/src/zgui_svg.rs
++++ b/vendor/zgui-plot/src/zgui_svg.rs
+@@ -143,6 +143,11 @@
+                     } else {
+                         attrs.push_str(" stroke=\"none\"");
+                     }
++                    if scene.transform() != kurbo::Affine::IDENTITY {
++                        let [a, b, c, d, e, f] = scene.transform().as_coeffs();
++                        write!(attrs, " transform=\"matrix({a} {b} {c} {d} {e} {f})\"")
++                            .expect("writing to String cannot fail");
++                    }
+                     write!(body, "<path d=\"{}\"{attrs}/>", shape.path.to_svg())
+                         .expect("writing to String cannot fail");
+                 }
+--- /dev/null
++++ b/vendor/zgui-plot/src/preparation.rs
+@@ -0,0 +1,32 @@
++//! Shared bounded background executor and opt-in geometry-preparation timing.
++//!
++//! zgui's default executor has at most four workers. Callers keep one active
++//! job and replace pending snapshots, retaining displayed geometry until a
++//! compatible result is ready. This helper does not mutate UI state on workers.
++
++/// Prepare geometry off the UI thread, recording queue and computation time
++/// separately when `ZGUI_LATENCY` tracing is enabled.
++///
++/// `kind` identifies the preparation stage and must not contain commas.
++pub async fn prepare<T: Send + 'static>(
++    kind: &'static str,
++    work: impl FnOnce() -> T + Send + 'static,
++) -> T {
++    let queued = zgui_profile::latency::marker();
++    zgui::prelude::blocking(move || {
++        let started = queued.map(|_| std::time::Instant::now());
++        let result = work();
++        if let Some((queued, started)) = queued.zip(started) {
++            let elapsed = started.elapsed();
++            zgui_profile::latency::note_with("plot.prepared", || {
++                format!(
++                    "{kind},{},{}",
++                    started.duration_since(queued).as_nanos(),
++                    elapsed.as_nanos()
++                )
++            });
++        }
++        result
++    })
++    .await
++}

@@ -15,6 +15,1052 @@ use zgui::vocab::{Modifiers, PointerAction, PointerEvent, Timestamp};
 use zgui_platform_headless::Harness;
 use zgui_testkit_scene::CaptureRenderer;
 
+#[path = "performance_replay.rs"]
+mod performance_replay;
+
+#[test]
+fn linked_plots_apply_pointer_bursts_once_per_frame() {
+    assert_linked_plot_input_bursts(false, false);
+}
+
+#[test]
+fn linked_normal_and_xy_plots_apply_wheel_bursts_once_per_frame() {
+    assert_linked_plot_input_bursts(true, false);
+    assert_linked_plot_input_bursts(true, true);
+}
+
+fn assert_linked_plot_input_bursts(wheel: bool, xy_source: bool) {
+    use crate::state::Line;
+    use std::cell::Cell;
+    let (mut harness, workbench) = geometry_harness();
+    let first = workbench.pane();
+    let second = workbench.add_plot(first.id, true, false);
+    let third = workbench.add_plot(second.id, true, false);
+    let panes = [first, second, third];
+    let data = plot::time_series::SeriesData::new(vec![
+        plot::PlotPoint { x: 0., y: 0. },
+        plot::PlotPoint { x: 10., y: 10. },
+    ])
+    .unwrap();
+    for pane in panes {
+        pane.lines.set(vec![Line {
+            id: pane.id + 1000,
+            source: "sample".into(),
+            name: "sample".into(),
+            revision: 0,
+            data: data.clone(),
+        }]);
+        pane.plot.auto_fit.set(false);
+        pane.links.update(|links| {
+            links.x = true;
+            links.y = false;
+        });
+        pane.plot
+            .set_view(plot::Ranges::new((0., 10.), (0., 10.)))
+            .unwrap();
+    }
+    if xy_source {
+        // Time and spatial bounds intentionally use separate link groups.
+        // Test each group, with equal scale off so only explicit X links apply.
+        for pane in panes {
+            pane.trajectory.set(Some(crate::trajectory::Spec {
+                x: "sample".into(),
+                y: "sample".into(),
+                equal: false,
+                ..Default::default()
+            }));
+        }
+    }
+    harness.settle(128);
+    if xy_source {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while panes
+            .iter()
+            .any(|pane| pane.trajectory_data.with_untracked(Option::is_none))
+        {
+            harness.settle(128);
+            assert!(Instant::now() < deadline, "XY input fixture must prepare");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        harness.settle(128);
+    }
+    let counts = panes.map(|_| Rc::new(Cell::new(0)));
+    let observers = workbench.owner.with_value(|owner| {
+        owner.with(|| {
+            panes
+                .into_iter()
+                .zip(&counts)
+                .map(|(pane, count)| {
+                    let count = count.clone();
+                    let previous = Cell::new(pane.plot.ranges.get_untracked());
+                    zgui::reactive::RenderEffect::new(move |_| {
+                        let next = pane.plot.ranges.get();
+                        if previous.replace(next) != next {
+                            count.set(count.get() + 1);
+                        }
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+    });
+    let host = first.menu_area.get_untracked().unwrap();
+    let bounds = host.window_bounds().unwrap();
+    let x = (bounds.origin.x.0 + bounds.size.width.0 * 0.35) / host.scale();
+    let y = (bounds.origin.y.0 + bounds.size.height.0 * 0.65) / host.scale();
+    if !wheel {
+        harness.deliver_to_first(pointer(PointerAction::Pressed, x, y));
+        harness.settle(32);
+    }
+    for frame in 0..10 {
+        let initial = first.plot.ranges.get_untracked();
+        for count in &counts {
+            count.set(0);
+        }
+        let delta = zgui::vocab::ScrollDelta::Pixels(Size::new(
+            CssPx(0.),
+            CssPx(if frame % 2 == 0 { -0.75 } else { 0.75 }),
+        ));
+        for sample in 1..=32 {
+            let timestamp = Timestamp::from_origin(Duration::from_micros(
+                100_000 + (frame * 32 + sample) * 500,
+            ));
+            let mut event = if wheel {
+                SurfaceEvent::Wheel {
+                    event: zgui::vocab::WheelEvent {
+                        delta,
+                        phase: zgui::vocab::ScrollPhase::Moved,
+                        position: Point::new(CssPx(x), CssPx(y)),
+                        id: zgui::vocab::PointerId::MOUSE,
+                        kind: zgui::vocab::PointerKind::Mouse,
+                    },
+                    modifiers: Modifiers::NONE,
+                    timestamp,
+                }
+            } else {
+                pointer(
+                    PointerAction::Moved,
+                    x + (frame * 32 + sample) as f32 / 8.,
+                    y,
+                )
+            };
+            if let SurfaceEvent::Pointer {
+                timestamp: sent, ..
+            } = &mut event
+            {
+                *sent = timestamp;
+            }
+            harness.deliver_to_first(event);
+        }
+        harness.advance(Duration::from_millis(17));
+        harness.settle(32);
+        for (pane, count) in panes.into_iter().zip(&counts) {
+            assert_eq!(
+                count.get(),
+                1,
+                "Plot {} must apply one final bounds update for 32 queued events (wheel={wheel}, xy_source={xy_source})",
+                pane.id
+            );
+            assert_eq!(
+                pane.plot.ranges.get_untracked().x,
+                first.plot.ranges.get_untracked().x
+            );
+        }
+        if wheel {
+            let actual = first.plot.ranges.get_untracked().x.span();
+            let expected = initial.x.span() * plot::zgui_surface::wheel_factor(&delta).powi(32);
+            assert!(
+                (actual - expected).abs() < expected.abs() * 1e-10,
+                "Batching must retain all fractional wheel deltas: {actual} vs {expected}"
+            );
+        }
+    }
+    if !wheel {
+        harness.deliver_to_first(pointer(PointerAction::Released, x + 40., y));
+    }
+    harness.settle(32);
+    drop(observers);
+}
+
+#[test]
+fn fps_ticks_continuously_without_continuous_restyle() {
+    use crate::fps::FpsProps;
+    struct Frames(
+        Rc<std::cell::Cell<usize>>,
+        Rc<dyn zgui::runtime::FrameProbe>,
+        Rc<std::cell::Cell<usize>>,
+    );
+    impl zgui::runtime::FrameProbe for Frames {
+        fn frame_ended(&self, _window: &zgui::runtime::Window) {
+            self.0.set(self.0.get() + 1);
+        }
+        fn frame_reported(
+            &self,
+            window: &zgui::runtime::Window,
+            report: &zgui::runtime::window::frame::FrameReport,
+        ) {
+            self.frame_ended(window);
+            if report.restyled > 0 {
+                self.2.set(self.2.get() + 1);
+            }
+            self.1.frame_reported(window, report);
+        }
+    }
+    let frames = Rc::new(std::cell::Cell::new(0));
+    let restyled_frames = Rc::new(std::cell::Cell::new(0));
+    let handler = app()
+        .with_size(300., 100.)
+        .with_probe(Rc::new(Frames(
+            frames.clone(),
+            crate::fps::probe(),
+            restyled_frames.clone(),
+        )))
+        .with_renderer(Box::new(|_, target| {
+            let mut renderer = CaptureRenderer::new();
+            renderer.configure(target);
+            Ok(Box::new(renderer))
+        }))
+        .into_handler(|| view! {column{Fps()}})
+        .unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(300.),
+        DevicePx(100.),
+    )));
+    harness.settle(128);
+    let before = frames.get();
+    for _ in 0..120 {
+        harness.advance(Duration::from_millis(17));
+        harness.settle(32);
+    }
+    assert!(
+        frames.get() - before >= 100,
+        "FPS sampling should stay continuous: {} frames",
+        frames.get() - before
+    );
+    assert!(
+        restyled_frames.get() < 24,
+        "Sampling must not continuously restyle the UI: {}",
+        restyled_frames.get()
+    );
+}
+
+#[test]
+fn inactive_normal_views_release_renderers_and_restore_plot_state() {
+    let (mut harness, workbench) = geometry_harness();
+    let original = workbench.bind_view();
+    let pane = original.pane();
+    let ranges = plot::Ranges::new((5., 15.), (-3., 3.));
+    pane.plot.auto_fit.set(false);
+    pane.plot.set_view(ranges).unwrap();
+    for _ in 0..8 {
+        let id = workbench.create_view();
+        workbench.switch_view(id);
+        harness.settle(128);
+        assert_eq!(
+            harness.app().windows()[0]
+                .nodes_with_class("cursor-plot")
+                .len(),
+            1,
+            "Only the active view should own plot renderers"
+        );
+    }
+    assert_eq!(pane.plot.ranges.get_untracked(), ranges);
+    workbench.switch_view(original.view().id);
+    harness.settle(128);
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("cursor-plot")
+            .len(),
+        1
+    );
+    assert_eq!(workbench.pane().id, pane.id);
+    assert_eq!(pane.plot.ranges.get_untracked(), ranges);
+}
+
+#[test]
+fn trajectory_timeline_renders_in_both_domains_and_preserves_spatial_zoom() {
+    use crate::{
+        state::{Line, Workbench},
+        trajectory_axes::TrajectorySetupProps,
+        workspace::PlotWorkspaceProps,
+    };
+    use plot::{PlotPoint, time_series::SeriesData};
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler=app().with_size(1600.,900.)
+        .with_renderer(Box::new(|_,target| {let mut renderer=CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .with_stylesheet(format!("{}\n{}\n{}\n{}\n.trajectory-test-builder {{ width: 420px; min-width: 420px; flex: none; }}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
+        .into_handler(move || {
+            let workbench=Workbench::new();let normal=workbench.pane();
+            let values=|ys:&[f64]|SeriesData::new(ys.iter().enumerate().map(|(i,y)|PlotPoint{x:i as f64,y:*y}).collect::<Vec<_>>()).unwrap();
+            let x=Line{id:workbench.id(),source:"x".into(),name:"East".into(),revision:0,data:values(&[0.,2.,0.,-2.,0.])};
+            let y=Line{id:workbench.id(),source:"y".into(),name:"North".into(),revision:0,data:values(&[0.,2.,4.,2.,0.])};
+            let z=Line{id:workbench.id(),source:"z".into(),name:"Target North".into(),revision:0,data:values(&[0.,1.,0.,-1.,0.])};
+            normal.lines.set(vec![x.clone(),y.clone(),z]);
+            *captured.borrow_mut()=Some((workbench,normal));
+            view! {column(class="page workbench") {row(class="body") {column(class="plot-page"){PlotWorkspace(workbench=workbench)} if move ||workbench.trajectory_builder().open.get(){column(class="trajectory-test-builder trajectory-side-panel"){TrajectorySetup(workbench=workbench,pane=workbench.trajectory_builder().pane)}}}}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1600.),
+        DevicePx(900.),
+    )));
+    harness.settle(128);
+    let (workbench, normal) = saved.borrow().unwrap();
+    workbench.new_trajectory(false);
+    harness.settle(128);
+    let xy = workbench.trajectory_builder().pane;
+    assert!(xy.trajectory.with_untracked(Option::is_some));
+    assert_eq!(
+        workbench.panes().with_untracked(Vec::len),
+        1,
+        "Opening the builder must not create a plot"
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("trajectory-settings")
+            .is_empty()
+    );
+    assert!(xy.trajectory_setup.get_untracked());
+    assert!(!workbench.timeline.follow.get_untracked());
+    workbench.timeline.hover(3.);
+    assert_eq!(
+        workbench.timeline.time.get_untracked(),
+        Some(0.),
+        "Pointer following must be explicitly enabled"
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .nodes_with_class("trajectory-setup-page")
+            .len(),
+        1
+    );
+    crate::trajectory_axes::assign(xy, 0, false, &["x".into()]).unwrap();
+    harness.settle(128);
+    let y_id = normal
+        .lines
+        .with_untracked(|lines| lines.iter().find(|line| line.source == "y").unwrap().id);
+    let source = workbench
+        .line_drag
+        .rows
+        .with_value(|rows| rows[&(normal.id, y_id)]);
+    let window = &harness.app().windows()[0];
+    let source = window
+        .nodes_with_class("legend-drag-source")
+        .into_iter()
+        .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+        .find(|rect| Workbench::inside(source, rect.origin.x.0, rect.origin.y.0))
+        .unwrap();
+    let slot = xy.trajectory_slots.with_value(|slots| slots[&(0, true)]);
+    let bounds = slot.window_bounds().unwrap();
+    let scale = slot.scale();
+    let (tx, ty) = (
+        (bounds.origin.x.0 + bounds.size.width.0 / 2.) / scale,
+        (bounds.origin.y.0 + bounds.size.height.0 / 2.) / scale,
+    );
+    harness.deliver_to_first(pointer(
+        PointerAction::Pressed,
+        source.origin.x.0 + source.size.width.0 / 2.,
+        source.origin.y.0 + source.size.height.0 / 2.,
+    ));
+    harness.deliver_to_first(pointer(PointerAction::Moved, tx, ty));
+    harness.deliver_to_first(pointer(PointerAction::Released, tx, ty));
+    harness.settle(128);
+    assert_eq!(
+        xy.trajectory.get_untracked().unwrap().y,
+        "y",
+        "Ordinary legend entries must be accepted by builder slots"
+    );
+    assert_eq!(
+        normal.lines.with_untracked(Vec::len),
+        3,
+        "Choosing a builder input must preserve the original plot"
+    );
+    crate::trajectory_axes::assign(xy, 1, true, &["z".into()]).unwrap();
+    crate::trajectory_axes::assign(xy, 1, false, &["x".into()]).unwrap();
+    xy.lines.set(normal.lines.get_untracked());
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("trajectory-column-divider")
+            .is_some()
+    );
+    let pairs = xy.trajectory.get_untracked().unwrap();
+    click_class(&mut harness, "trajectory-swap-axes");
+    let swapped = xy.trajectory.get_untracked().unwrap();
+    assert_eq!((&*swapped.x, &*swapped.y), ("y", "x"));
+    assert_eq!(swapped.extra, pairs.extra);
+    click_class(&mut harness, "trajectory-swap-axes");
+    assert_eq!(xy.trajectory.get_untracked(), Some(pairs));
+    for class in [
+        "trajectory-new-builder",
+        "trajectory-add-gps",
+        "trajectory-update-plot",
+        "trajectory-add-trace",
+        "trajectory-select-x",
+        "trajectory-select-y",
+        "trajectory-drag-payload",
+    ] {
+        assert!(
+            harness.app().windows()[0]
+                .nodes_with_class(class)
+                .is_empty(),
+            "Removed builder controls must stay absent: {class}"
+        );
+    }
+    let window = &harness.app().windows()[0];
+    let payload = window.box_with_class("trajectory-pair-drag").unwrap();
+    assert!(
+        payload.size.width.0 > 200.,
+        "A completed pair needs an obvious, wide drag target"
+    );
+    assert!(
+        !window
+            .nodes_with_class("trajectory-pair-drag-label")
+            .is_empty()
+    );
+    let target = normal
+        .menu_area
+        .get_untracked()
+        .unwrap()
+        .window_bounds()
+        .unwrap();
+    let scale = normal.dock.node.scale();
+    let (tx, ty) = (
+        (target.origin.x.0 + target.size.width.0 * 0.3) / scale,
+        (target.origin.y.0 + target.size.height.0 * 0.7) / scale,
+    );
+    harness.deliver_to_first(pointer(
+        PointerAction::Pressed,
+        payload.origin.x.0 + payload.size.width.0 / 2.,
+        payload.origin.y.0 + payload.size.height.0 / 2.,
+    ));
+    harness.deliver_to_first(pointer(PointerAction::Moved, tx, ty));
+    harness.deliver_to_first(pointer(PointerAction::Released, tx, ty));
+    harness.settle(128);
+    assert_eq!(
+        workbench.panes().with_untracked(Vec::len),
+        2,
+        "Dragging a pair onto an occupied time plot must create a 2D pane"
+    );
+    let xy = workbench.pane();
+    assert_eq!(
+        xy.trajectory.get_untracked().unwrap().pairs().len(),
+        1,
+        "Each pair drag adds only that pair"
+    );
+    let window = &harness.app().windows()[0];
+    let handle = window.nodes_with_class("trajectory-pair-drag")[1];
+    let handle = zgui::view::ViewHost::window_box(window.host().as_ref(), handle).unwrap();
+    let target = xy.dock.node.window_bounds().unwrap();
+    let scale = xy.dock.node.scale();
+    let (tx, ty) = (
+        (target.origin.x.0 + target.size.width.0 * 0.3) / scale,
+        (target.origin.y.0 + target.size.height.0 * 0.7) / scale,
+    );
+    harness.deliver_to_first(pointer(
+        PointerAction::Pressed,
+        handle.origin.x.0 + handle.size.width.0 / 2.,
+        handle.origin.y.0 + handle.size.height.0 / 2.,
+    ));
+    harness.deliver_to_first(pointer(PointerAction::Moved, tx, ty));
+    harness.deliver_to_first(pointer(PointerAction::Released, tx, ty));
+    harness.settle(128);
+    assert_eq!(
+        workbench.panes().with_untracked(Vec::len),
+        2,
+        "Dropping onto a 2D plot must reuse it"
+    );
+    assert_eq!(xy.trajectory.get_untracked().unwrap().pairs().len(), 2);
+    click_class(&mut harness, "trajectory-close-builder");
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("trajectory-axis-slot")
+            .is_empty()
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while xy.trajectory_data.with_untracked(Option::is_none) {
+        harness.settle(128);
+        assert!(
+            Instant::now() < deadline,
+            "Trajectory worker did not finish"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    harness.settle(128);
+    assert!(normal.timeline_link.get_untracked() && xy.timeline_link.get_untracked());
+    normal.timeline_link.set(false);
+    xy.timeline_link.set(false);
+    workbench.timeline.pin(2.).unwrap();
+    harness.settle(128);
+    assert!(
+        !workbench
+            .capture_screenshot(Some(normal))
+            .unwrap()
+            .contains("#ffbe3c")
+    );
+    assert!(
+        !workbench
+            .capture_screenshot(Some(xy))
+            .unwrap()
+            .contains("#ffbe3c")
+    );
+    let window = &harness.app().windows()[0];
+    assert!(
+        window.nodes_with_class("timeline-trigger").is_empty(),
+        "The timeline must not live in a toolbar popup"
+    );
+    let strip = window.box_with_class("timeline-strip").unwrap();
+    let plot = normal.dock.node.window_bounds().unwrap();
+    assert!(
+        strip.origin.y.0
+            >= plot.origin.y.0 / normal.dock.node.scale()
+                + plot.size.height.0 / normal.dock.node.scale()
+                - 1.,
+        "The timeline must sit below all plot panes"
+    );
+    assert!(
+        strip.size.height.0 <= 36.,
+        "The timeline should default to a compact single row"
+    );
+    assert!(window.nodes_with_class("timeline-clear").is_empty());
+    let input = window.box_with_class("timeline-time-input").unwrap();
+    let set = window.box_with_class("timeline-set-time").unwrap();
+    assert!(
+        (input.size.height.0 - set.size.height.0).abs() < 1.,
+        "Seconds input and buttons must have the same height: input={input:?}, button={set:?}"
+    );
+    assert_eq!(set.size.height.0, 22.);
+    assert!(
+        window
+            .box_with_class("timeline-time-input")
+            .unwrap()
+            .size
+            .width
+            .0
+            <= 70.
+    );
+    let grip = window.box_with_class("timeline-resize-handle").unwrap();
+    let (gx, gy) = (
+        grip.origin.x.0 + grip.size.width.0 / 2.,
+        grip.origin.y.0 + grip.size.height.0 / 2.,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, gx, gy));
+    harness.deliver_to_first(pointer(PointerAction::Moved, gx, gy + 12.));
+    harness.deliver_to_first(pointer(PointerAction::Released, gx, gy + 12.));
+    harness.settle(128);
+    assert_eq!(workbench.timeline.height.get_untracked(), 30.);
+    let window = &harness.app().windows()[0];
+    let slider = window.box_with_class("timeline-scrubber").unwrap();
+    let before_ranges = normal.plot.ranges.get_untracked();
+    for action in [PointerAction::Pressed, PointerAction::Released] {
+        harness.deliver_to_first(pointer(
+            action,
+            slider.origin.x.0 + slider.size.width.0 * 0.75,
+            slider.origin.y.0 + slider.size.height.0 / 2.,
+        ));
+    }
+    harness.settle(128);
+    assert!(
+        (workbench.timeline.time.get_untracked().unwrap() - 3.).abs() < 0.1,
+        "Dragging the bottom time field must move the shared time"
+    );
+    assert!(!workbench.timeline.follow.get_untracked());
+    assert_eq!(normal.plot.ranges.get_untracked(), before_ranges);
+    for time in [0., 4.] {
+        workbench.timeline.pin(time).unwrap();
+        harness.settle(128);
+        let window = &harness.app().windows()[0];
+        let thumb = window.box_with_class("zui-slider__thumb").unwrap();
+        let previous = window.box_with_class("timeline-previous").unwrap();
+        let next = window.box_with_class("timeline-next").unwrap();
+        assert!(
+            thumb.origin.x.0 - 4. >= previous.origin.x.0 + previous.size.width.0,
+            "Timeline thumb and focus ring must clear the previous button"
+        );
+        assert!(
+            thumb.origin.x.0 + thumb.size.width.0 + 4. <= next.origin.x.0,
+            "Timeline thumb and focus ring must clear the next button"
+        );
+    }
+    workbench.timeline.pin(2.).unwrap();
+    normal.timeline_link.set(true);
+    xy.timeline_link.set(true);
+    harness.settle(128);
+    assert_eq!(xy.trajectory_data.get_untracked().unwrap().traces.len(), 2);
+    assert_eq!(
+        xy.view_lines.with_untracked(Vec::len),
+        2,
+        "Legend contains traces, not unused X inputs"
+    );
+    let chart = harness.app().windows()[0]
+        .box_with_class("trajectory-chart")
+        .unwrap();
+    assert!(
+        xy.dock.node.window_bounds().unwrap().size.height.0 - chart.size.height.0 < 40.,
+        "2D settings must not consume permanent canvas space"
+    );
+    let time_svg = workbench.capture_screenshot(Some(normal)).unwrap();
+    let xy_svg = workbench.capture_screenshot(Some(xy)).unwrap();
+    if let Some(path) = std::env::var_os("ENLUMI_TRAJECTORY_PREVIEW") {
+        std::fs::write(
+            path,
+            plot::zgui_svg::ScreenshotFormat::Png
+                .encode(&workbench.capture_screenshot(None).unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+    }
+    assert!(
+        time_svg.contains("#ffbe3c"),
+        "Time plot must draw global vertical marker"
+    );
+    assert!(
+        xy_svg.contains("#ffbe3c"),
+        "XY plot must draw global position marker"
+    );
+    assert!(
+        xy_svg.contains(
+            &xy.plot
+                .style(&xy.view_lines.get_untracked()[0].id.to_string())
+                .css_color()
+        ),
+        "XY connected path must be exported"
+    );
+    assert_eq!(
+        xy.trajectory_data.get_untracked().unwrap().at(2.),
+        Some(PlotPoint { x: 0., y: 4. })
+    );
+    xy.plot
+        .set_view(plot::Ranges::new((-1., 1.), (0., 2.)))
+        .unwrap();
+    harness.settle(128);
+    let old = xy.plot.ranges.get_untracked();
+    let trace_id = xy.view_lines.get_untracked()[0].id;
+    let window = &harness.app().windows()[0];
+    let gear = window
+        .nodes_with_class("plot-settings-trigger")
+        .into_iter()
+        .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+        .find(|rect| Workbench::inside(xy.dock.node, rect.origin.x.0, rect.origin.y.0))
+        .unwrap();
+    for action in [PointerAction::Pressed, PointerAction::Released] {
+        harness.deliver_to_first(pointer(
+            action,
+            gear.origin.x.0 + gear.size.width.0 / 2.,
+            gear.origin.y.0 + gear.size.height.0 / 2.,
+        ));
+    }
+    harness.settle(128);
+    let slider = harness.app().windows()[0]
+        .box_with_class("line-width")
+        .unwrap();
+    let (sx, sy) = (
+        slider.origin.x.0 + slider.size.width.0 * 0.8,
+        slider.origin.y.0 + slider.size.height.0 * 0.5,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, sx, sy));
+    harness.deliver_to_first(pointer(PointerAction::Released, sx, sy));
+    harness.settle(128);
+    assert!(
+        xy.plot.style(&trace_id.to_string()).width > 2.,
+        "Native width control must edit the 2D trace"
+    );
+    click_class(&mut harness, "color-hex");
+    for (value, modifiers) in [("a", Modifiers::PRIMARY), ("#dc1e32", Modifiers::NONE)] {
+        harness.deliver_to_first(SurfaceEvent::Key {
+            state: zgui::vocab::KeyState::Pressed,
+            event: zgui::vocab::KeyEvent::character(value),
+            modifiers,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
+    assert_eq!(
+        xy.plot.style(&trace_id.to_string()).color,
+        [220, 30, 50, 255]
+    );
+    let window = &harness.app().windows()[0];
+    let dots = window.nodes_with_class("line-marker")[1];
+    let dots = zgui::view::ViewHost::window_box(window.host().as_ref(), dots).unwrap();
+    let (dx, dy) = (
+        dots.origin.x.0 + dots.size.width.0 * 0.5,
+        dots.origin.y.0 + dots.size.height.0 * 0.5,
+    );
+    harness.deliver_to_first(pointer(PointerAction::Pressed, dx, dy));
+    harness.deliver_to_first(pointer(PointerAction::Released, dx, dy));
+    harness.settle(128);
+    assert!(
+        xy.drawing
+            .with_untracked(|drawing| drawing[&trace_id].markers)
+    );
+    click_class(&mut harness, "settings-done");
+    xy.plot
+        .styles
+        .update(|styles| styles.get_mut(&trace_id.to_string()).unwrap().width = 5.5);
+    harness.settle(128);
+    let styled = workbench.capture_screenshot(Some(xy)).unwrap();
+    assert!(
+        styled.contains("#dc1e32") && styled.contains("stroke-width=\"5.5\""),
+        "Canvas must use native per-trace appearance"
+    );
+
+    // Hidden traces temporarily preview through the native legend hover, just like time plots.
+    let trace_key = trace_id.to_string();
+    xy.plot.hidden.update(|hidden| {
+        hidden.insert(trace_key.clone());
+    });
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1., 1.));
+    harness.settle(128);
+    assert!(
+        !workbench
+            .capture_screenshot(Some(xy))
+            .unwrap()
+            .contains("stroke-width=\"5.5\"")
+    );
+    let row = workbench
+        .line_drag
+        .rows
+        .with_value(|rows| rows[&(xy.id, trace_id)]);
+    let window = &harness.app().windows()[0];
+    let label = window
+        .nodes_with_class("legend-drag-source")
+        .into_iter()
+        .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+        .find(|rect| Workbench::inside(row, rect.origin.x.0, rect.origin.y.0))
+        .unwrap();
+    let bounds = xy.plot.ranges.get_untracked();
+    let order = xy.legend_order.get_untracked();
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        label.origin.x.0 + 20.,
+        label.origin.y.0 + label.size.height.0 / 2.,
+    ));
+    harness.settle(128);
+    assert_eq!(
+        xy.plot.emphasized.get_untracked().as_deref(),
+        Some(trace_key.as_str())
+    );
+    assert!(
+        workbench
+            .capture_screenshot(Some(xy))
+            .unwrap()
+            .contains("stroke-width=\"7\""),
+        "Hidden trace must render with the hover width"
+    );
+    assert!(xy.plot.hidden.get_untracked().contains(&trace_key));
+    assert_eq!(xy.plot.ranges.get_untracked(), bounds);
+    assert_eq!(xy.legend_order.get_untracked(), order);
+    harness.deliver_to_first(pointer(PointerAction::Moved, 1., 1.));
+    harness.settle(128);
+    assert!(xy.plot.emphasized.get_untracked().is_none());
+    let hidden = workbench.capture_screenshot(Some(xy)).unwrap();
+    assert!(!hidden.contains("stroke-width=\"7\""));
+    assert!(!hidden.contains("stroke-width=\"5.5\""));
+    assert!(xy.plot.hidden.get_untracked().contains(&trace_key));
+    assert_eq!(xy.plot.ranges.get_untracked(), bounds);
+    xy.plot.hidden.update(|hidden| {
+        hidden.remove(&trace_key);
+    });
+
+    xy.trajectory
+        .update(|spec| spec.as_mut().unwrap().points = true);
+    harness.settle(128);
+    assert_eq!(
+        xy.plot.ranges.get_untracked(),
+        old,
+        "Changing display style must preserve zoom"
+    );
+    normal.links.update(|options| options.x = true);
+    xy.links.update(|options| options.x = true);
+    normal
+        .plot
+        .set_view(plot::Ranges::new((10., 20.), (-1., 1.)))
+        .unwrap();
+    harness.settle(128);
+    assert_eq!(
+        xy.plot.ranges.get_untracked(),
+        old,
+        "Spatial bounds must not inherit time ranges"
+    );
+    workbench.timeline.hover(3.);
+    assert_eq!(
+        workbench.timeline.time.get_untracked(),
+        Some(2.),
+        "Pinned time must survive hovering"
+    );
+    workbench.timeline.follow.set(true);
+    normal.links.update(|options| options.pointer = false);
+    normal
+        .plot
+        .set_view(plot::Ranges::new((0., 4.), (-1., 1.)))
+        .unwrap();
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    let host = window.nodes_with_class("time-cursor-host")[0];
+    let bounds = zgui::view::ViewHost::window_box(window.host().as_ref(), host).unwrap();
+    harness.deliver_to_first(pointer(
+        PointerAction::Moved,
+        bounds.origin.x.0 + bounds.size.width.0 * 0.75,
+        bounds.origin.y.0 + bounds.size.height.0 * 0.8,
+    ));
+    harness.settle(128);
+    assert!(
+        (workbench.timeline.time.get_untracked().unwrap() - 3.).abs() < 0.01,
+        "Hovering a time plot must publish the global timeline independently of links"
+    );
+    xy.plot.hover.set(Some(plot::zgui_plot::SeriesHit {
+        series_id: xy.view_lines.get_untracked()[0].id.to_string(),
+        sample_index: 3,
+        point: PlotPoint { x: -2., y: 2. },
+    }));
+    harness.settle(128);
+    assert_eq!(workbench.timeline.time.get_untracked(), Some(3.));
+    workbench.timeline.pin(1.).unwrap();
+    harness.settle(128);
+    let window = &harness.app().windows()[0];
+    let marker = window.box_with_class("timeline-drag-handle").unwrap();
+    let host = window.box_with_class("time-cursor-host").unwrap();
+    let (mx, my) = (
+        marker.origin.x.0 + marker.size.width.0 * 0.5,
+        host.origin.y.0 + host.size.height.0 * 0.8,
+    );
+    let tx = host.origin.x.0 + host.size.width.0 * 0.5;
+    let time_bounds = normal.plot.ranges.get_untracked();
+    harness.deliver_to_first(pointer(PointerAction::Pressed, mx, my));
+    harness.deliver_to_first(pointer(PointerAction::Moved, tx, my));
+    harness.deliver_to_first(pointer(PointerAction::Released, tx, my));
+    harness.settle(128);
+    assert!((workbench.timeline.time.get_untracked().unwrap() - 2.).abs() < 0.01);
+    assert_eq!(normal.plot.ranges.get_untracked(), time_bounds);
+    for action in [
+        PointerAction::Pressed,
+        PointerAction::Moved,
+        PointerAction::Released,
+    ] {
+        let mut event = pointer(action, host.origin.x.0 + host.size.width.0 * 0.625, my);
+        if let SurfaceEvent::Pointer { modifiers, .. } = &mut event {
+            *modifiers = Modifiers::ALT;
+        }
+        harness.deliver_to_first(event);
+    }
+    harness.settle(128);
+    assert!((workbench.timeline.time.get_untracked().unwrap() - 2.5).abs() < 0.01);
+    assert_eq!(normal.plot.ranges.get_untracked(), time_bounds);
+    workbench.timeline.pin(1.25).unwrap();
+    workbench.step_timeline(true);
+    assert_eq!(workbench.timeline.time.get_untracked(), Some(2.));
+    workbench.step_timeline(false);
+    assert_eq!(workbench.timeline.time.get_untracked(), Some(1.));
+    workbench.timeline.pin(4.).unwrap();
+    workbench.step_timeline(true);
+    assert_eq!(workbench.timeline.time.get_untracked(), Some(4.));
+    assert!(workbench.timeline.pin(f64::NAN).is_err());
+    workbench.timeline.pin(100.).unwrap();
+    harness.settle(128);
+    assert!(
+        !workbench
+            .capture_screenshot(Some(xy))
+            .unwrap()
+            .contains("#ffbe3c"),
+        "No extrapolated position marker"
+    );
+    // Exercise the captured pointer path from the X chip onto the native Y entry.
+    workbench.edit_trajectory(xy);
+    harness.settle(128);
+    let draft = workbench.trajectory_builder().pane;
+    let before = draft.trajectory.get_untracked().unwrap();
+    for expected_x in ["y", "x"] {
+        let xslot = draft
+            .trajectory_slots
+            .with_value(|slots| slots[&(0, false)]);
+        let yslot = draft.trajectory_slots.with_value(|slots| slots[&(0, true)]);
+        let window = &harness.app().windows()[0];
+        let source = window
+            .nodes_with_class("metric-option")
+            .into_iter()
+            .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+            .find(|rect| Workbench::inside(xslot, rect.origin.x.0, rect.origin.y.0))
+            .unwrap();
+        let target = yslot.window_bounds().unwrap();
+        let scale = yslot.scale();
+        let (tx, ty) = (
+            (target.origin.x.0 + target.size.width.0 / 2.) / scale,
+            (target.origin.y.0 + target.size.height.0 / 2.) / scale,
+        );
+        harness.deliver_to_first(pointer(
+            PointerAction::Pressed,
+            source.origin.x.0 + source.size.width.0 / 2.,
+            source.origin.y.0 + source.size.height.0 / 2.,
+        ));
+        harness.deliver_to_first(pointer(PointerAction::Moved, tx, ty));
+        harness.deliver_to_first(pointer(PointerAction::Released, tx, ty));
+        harness.settle(128);
+        assert_eq!(
+            draft.trajectory.get_untracked().unwrap().x,
+            expected_x,
+            "Dragging a coordinate must exchange X/Y slots"
+        );
+    }
+    assert_eq!(draft.trajectory.get_untracked().unwrap(), before);
+    workbench.drop_trajectory_pair(0, xy.id);
+    click_class(&mut harness, "trajectory-close-builder");
+    let y_id = xy
+        .lines
+        .with_untracked(|lines| lines.iter().find(|line| line.source == "y").unwrap().id);
+    let normal_y = normal
+        .lines
+        .with_untracked(|lines| lines.iter().find(|line| line.source == "y").unwrap().id);
+    normal.remove_line(normal_y);
+    harness.settle(128);
+    let source = workbench
+        .line_drag
+        .rows
+        .with_value(|rows| rows[&(xy.id, y_id)]);
+    let window = &harness.app().windows()[0];
+    let source = window
+        .nodes_with_class("legend-drag-source")
+        .into_iter()
+        .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+        .find(|rect| Workbench::inside(source, rect.origin.x.0, rect.origin.y.0))
+        .unwrap();
+    let target = normal
+        .menu_area
+        .get_untracked()
+        .unwrap()
+        .window_bounds()
+        .unwrap();
+    let scale = normal.dock.node.scale();
+    let (tx, ty) = (
+        (target.origin.x.0 + target.size.width.0 * 0.2) / scale,
+        (target.origin.y.0 + target.size.height.0 * 0.8) / scale,
+    );
+    harness.deliver_to_first(pointer(
+        PointerAction::Pressed,
+        source.origin.x.0 + source.size.width.0 / 2.,
+        source.origin.y.0 + source.size.height.0 / 2.,
+    ));
+    harness.deliver_to_first(pointer(PointerAction::Moved, tx, ty));
+    harness.deliver_to_first(pointer(PointerAction::Released, tx, ty));
+    harness.settle(128);
+    assert!(
+        normal
+            .lines
+            .with_untracked(|lines| lines.iter().any(|line| line.id == y_id)),
+        "Native legend drag must transfer a 2D Y series back to a time plot"
+    );
+    assert!(
+        !xy.view_lines
+            .with_untracked(|lines| lines.iter().any(|line| line.id == y_id))
+    );
+    let second = workbench.add_plot(xy.id, false, false);
+    let mut spec = xy.trajectory.get_untracked().unwrap();
+    spec.equal = false;
+    xy.trajectory.set(Some(spec.clone()));
+    second.trajectory.set(Some(spec));
+    second.lines.set(xy.lines.get_untracked());
+    harness.settle(128);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while xy.trajectory_data.with_untracked(Option::is_none)
+        || second.trajectory_data.with_untracked(Option::is_none)
+    {
+        harness.settle(128);
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    xy.links.update(|links| links.x = true);
+    second.links.update(|links| links.x = true);
+    harness.settle(128);
+    let time_ranges = normal.plot.ranges.get_untracked();
+    xy.plot
+        .set_view(plot::Ranges::new((100., 200.), (0., 10.)))
+        .unwrap();
+    harness.settle(128);
+    assert_eq!(
+        second.plot.ranges.get_untracked().x,
+        xy.plot.ranges.get_untracked().x,
+        "Linked spatial bounds must propagate between 2D plots"
+    );
+    assert_eq!(
+        normal.plot.ranges.get_untracked(),
+        time_ranges,
+        "Spatial links must not move time axes"
+    );
+    xy.links.update(|links| links.x = false);
+    second.links.update(|links| links.x = false);
+    harness.settle(128);
+    for enabled in [true, false] {
+        let window = &harness.app().windows()[0];
+        let button = window
+            .nodes_with_class("trajectory-equal-scale")
+            .into_iter()
+            .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+            .find(|rect| Workbench::inside(xy.dock.node, rect.origin.x.0, rect.origin.y.0))
+            .unwrap();
+        let legend = window
+            .nodes_with_class("trajectory-legend")
+            .into_iter()
+            .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+            .find(|rect| Workbench::inside(xy.dock.node, rect.origin.x.0, rect.origin.y.0))
+            .unwrap();
+        assert!(
+            button.origin.y.0 >= legend.origin.y.0 + legend.size.height.0,
+            "Equal scale must sit below the legend"
+        );
+        assert!(
+            (button.origin.x.0 + button.size.width.0 - legend.origin.x.0 - legend.size.width.0)
+                .abs()
+                < 2.,
+            "Equal scale must align with the legend's right edge"
+        );
+        for action in [PointerAction::Pressed, PointerAction::Released] {
+            harness.deliver_to_first(pointer(
+                action,
+                button.origin.x.0 + button.size.width.0 / 2.,
+                button.origin.y.0 + button.size.height.0 / 2.,
+            ));
+        }
+        harness.settle(128);
+        assert_eq!(xy.trajectory.get_untracked().unwrap().equal, enabled);
+        if !enabled {
+            xy.plot
+                .set_view(plot::Ranges::new((0., 10.), (0., 10.)))
+                .unwrap();
+            harness.settle(128);
+        }
+        let before = xy.plot.ranges.get_untracked();
+        let area = xy.menu_area.get_untracked().unwrap();
+        let bounds = area.window_bounds().unwrap();
+        let scale = area.scale();
+        let start = (
+            (bounds.origin.x.0 + bounds.size.width.0 * 0.25) / scale,
+            (bounds.origin.y.0 + bounds.size.height.0 * 0.55) / scale,
+        );
+        let end = (
+            (bounds.origin.x.0 + bounds.size.width.0 * 0.65) / scale,
+            (bounds.origin.y.0 + bounds.size.height.0 * 0.65) / scale,
+        );
+        for (action, point) in [
+            (PointerAction::Pressed, start),
+            (PointerAction::Moved, end),
+            (PointerAction::Released, end),
+        ] {
+            let mut event = pointer(action, point.0, point.1);
+            if let SurfaceEvent::Pointer { modifiers, .. } = &mut event {
+                *modifiers = Modifiers::SHIFT;
+            }
+            harness.deliver_to_first(event);
+        }
+        harness.settle(128);
+        let after = xy.plot.ranges.get_untracked();
+        assert!((after.x.span() / before.x.span() - 0.4).abs() < 0.03);
+        assert!(
+            (after.y.span() / before.y.span() - if enabled { 0.4 } else { 0.1 }).abs() < 0.03,
+            "Equal-scale Shift zoom must use the displayed viewport aspect; free zoom must remain free"
+        );
+    }
+}
+
 #[derive(Default, Debug)]
 struct Counts {
     peak_shadows: usize,
@@ -1418,7 +2464,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
             Ok(Box::new(Capture { renderer, counts: Rc::clone(&captured) }))
         }))
         .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
-        .into_handler(|| view! { WorkbenchApp(preferences = crate::preferences::ThemePreference::disabled(), initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) })
+        .into_handler(|| {provide_local_context(crate::update_state::UpdateState::isolated());view! { WorkbenchApp(preferences = crate::preferences::ThemePreference::disabled(), initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) }})
         .unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -1505,7 +2551,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
         window
             .dom()
             .text_content(window.nodes_with_class("plot-links-label")[0]),
-        "Links: pointer"
+        "Links: pointer, timeline"
     );
     let actions = window.box_with_class("duplicate-plot-button").unwrap();
     let maximize = window.box_with_class("maximize-button").unwrap();
@@ -1517,10 +2563,10 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     click_class(&mut harness, "plot-links-trigger");
     let window = &harness.app().windows()[0];
     let checks = window.nodes_with_class("link-option");
-    assert_eq!(checks.len(), 4);
+    assert_eq!(checks.len(), 5);
     let popup = window.box_with_class("plot-links-surface").unwrap();
     assert!(
-        (popup.size.width.0 - links.size.width.0).abs() < 2.0 && popup.size.height.0 <= 120.0,
+        (popup.size.width.0 - links.size.width.0).abs() < 2.0 && popup.size.height.0 <= 150.0,
         "Links popup should use compact AFLR proportions: {popup:?}"
     );
     assert!(
@@ -1548,6 +2594,7 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
             Some("unchecked".into()),
             Some("unchecked".into()),
             Some("unchecked".into()),
+            Some("checked".into()),
             Some("checked".into())
         ]
     );
@@ -1575,18 +2622,22 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
                 .dom()
                 .text_content(window.nodes_with_class("plot-links-label")[0]),
             if expected == "checked" {
-                "Links: X, pointer"
+                "Links: X, pointer, timeline"
             } else {
-                "Links: pointer"
+                "Links: pointer, timeline"
             }
         );
     }
     for (index, expected, label) in [
-        (0, [true, true, true, true], "Links: all"),
-        (2, [false, true, false, true], "Links: X, pointer"),
-        (0, [true, true, true, true], "Links: all"),
-        (0, [false, false, false, false], "Links: off"),
-        (3, [false, false, false, true], "Links: pointer"),
+        (0, [true, true, true, true, true], "Links: all"),
+        (
+            2,
+            [false, true, false, true, true],
+            "Links: X, pointer, timeline",
+        ),
+        (0, [true, true, true, true, true], "Links: all"),
+        (0, [false, false, false, false, false], "Links: off"),
+        (3, [false, false, false, true, false], "Links: pointer"),
     ] {
         let window = &harness.app().windows()[0];
         let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), checks[index]).unwrap();
@@ -1645,6 +2696,8 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
         .find(|node| window.nodes_with_class("tree-arrow").contains(node))
         .unwrap();
     let arrow = zgui::view::ViewHost::window_box(window.host().as_ref(), arrow_node).unwrap();
+    // Expansion can move virtualized rows as metadata arrives; compare current bounds.
+    let topic = zgui::view::ViewHost::window_box(window.host().as_ref(), topic_node).unwrap();
     assert!(
         (arrow.origin.x.0 + arrow.size.width.0 / 2.0 - stem.origin.x.0).abs() < 1.0,
         "Chevron must align with connector trunk: {arrow:?} {stem:?}"
@@ -2028,8 +3081,21 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     let pane = window.box_with_class("workbench-plot-active").unwrap();
     let grid = window.box_with_class("plot-grid").unwrap();
     assert!(
-        (grid.origin.y.0 + grid.size.height.0 - 350.0).abs() < 1.0,
-        "Workspace must reach window bottom: {grid:?}"
+        (grid.origin.y.0 + grid.size.height.0
+            - window.box_with_class("timeline-strip").unwrap().origin.y.0)
+            .abs()
+            < 1.0
+            && (window.box_with_class("timeline-strip").unwrap().origin.y.0
+                + window
+                    .box_with_class("timeline-strip")
+                    .unwrap()
+                    .size
+                    .height
+                    .0
+                - 350.)
+                .abs()
+                < 1.,
+        "Plots and timeline must fill the window without overlapping: {grid:?}"
     );
     assert!(
         pane.origin.y.0 + pane.size.height.0 <= 350.0,
@@ -2473,10 +3539,16 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
             .filter(|rect| rect.size.height.0 > 0.0)
             .collect();
         assert!(
-            previews
-                .iter()
-                .any(|rect| (rect.size.height.0 - 1000.0).abs() < 1.0
-                    && (rect.size.width.0 - 797.0).abs() < 1.0),
+            previews.iter().any(|rect| (rect.size.height.0
+                - window
+                    .box_with_class("workspace-view-pages")
+                    .unwrap()
+                    .size
+                    .height
+                    .0)
+                .abs()
+                < 1.0
+                && (rect.size.width.0 - 797.0).abs() < 1.0),
             "Workspace preview must span stacked panes: {previews:?}"
         );
         harness.deliver_to_first(pointer(PointerAction::Released, x, y));
@@ -2484,7 +3556,17 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
         let a = first.dock.node.window_bounds().unwrap();
         let b = second.dock.node.window_bounds().unwrap();
         let c = third.dock.node.window_bounds().unwrap();
-        assert!((c.size.height.0 - 1000.0).abs() < 1.0);
+        assert!(
+            (c.size.height.0
+                - harness.app().windows()[0]
+                    .box_with_class("workspace-view-pages")
+                    .unwrap()
+                    .size
+                    .height
+                    .0)
+                .abs()
+                < 1.0
+        );
         assert_eq!(a.origin.x, b.origin.x);
         assert_eq!(a.size.width, b.size.width);
         assert!(if zone == DropZone::Left {
@@ -2574,7 +3656,17 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
         if zone == DropZone::Left {
             assert_eq!(a.origin.x, b.origin.x);
             assert!(c.origin.x.0 < a.origin.x.0);
-            assert!((c.size.height.0 - 1200.0).abs() < 1.0);
+            assert!(
+                (c.size.height.0
+                    - harness.app().windows()[0]
+                        .box_with_class("workspace-view-pages")
+                        .unwrap()
+                        .size
+                        .height
+                        .0)
+                    .abs()
+                    < 1.0
+            );
         } else {
             assert!(c.origin.y.0 > b.origin.y.0);
             assert_eq!(c.size.width, a.size.width);
@@ -3406,7 +4498,7 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
             Ok(Box::new(Capture { renderer, counts: Rc::clone(&captured) }))
         }))
         .with_stylesheet(format!("{}\n{}\n{}\n{}", plot::zgui_surface::stylesheet(), plot::zgui_time_series::stylesheet(), plot::zgui_workspace::stylesheet(), crate::theme::stylesheet()))
-        .into_handler(|| view! { WorkbenchApp(preferences = crate::preferences::ThemePreference::disabled(), initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) }).unwrap();
+        .into_handler(|| {provide_local_context(crate::update_state::UpdateState::isolated());view! { WorkbenchApp(preferences = crate::preferences::ThemePreference::disabled(), initial_path = Some(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/esc_status_log.ulg")))) }}).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
         DevicePx(1500.0),
@@ -3622,6 +4714,202 @@ fn preset_harness() -> (Harness<zgui::runtime::Runtime>, crate::state::Workbench
     harness.settle(128);
     let workbench = model.borrow().unwrap();
     (harness, workbench)
+}
+
+#[test]
+fn trajectory_scalar_drops_create_time_plots_and_legend_swap_works() {
+    use crate::{
+        state::{Line, Workbench},
+        trajectory::Spec,
+    };
+    let (mut harness, workbench) = preset_harness();
+    let log = std::sync::Arc::new(
+        crate::log::LogStore::read(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/esc_status_log.ulg"
+        )))
+        .unwrap(),
+    );
+    let sources = [log.catalogue[0].id.clone(), log.catalogue[1].id.clone()];
+    workbench.log.set(Some(log.clone()));
+    let xy = workbench.pane();
+    xy.trajectory.set(Some(Spec {
+        x: sources[0].clone(),
+        y: sources[1].clone(),
+        ..Default::default()
+    }));
+    xy.lines.set(
+        sources
+            .iter()
+            .map(|source| Line {
+                id: workbench.id(),
+                source: source.clone(),
+                name: source.clone(),
+                data: log.prepare(source).unwrap(),
+                revision: 0,
+            })
+            .collect(),
+    );
+    let before = xy.trajectory.get_untracked().unwrap();
+    let wait = |harness: &mut Harness<zgui::runtime::Runtime>, ready: &dyn Fn() -> bool| {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while !ready() {
+            harness.settle(128);
+            assert!(
+                Instant::now() < deadline,
+                "2D operation timed out: {}",
+                workbench.status.get_untracked()
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        harness.settle(128);
+    };
+    wait(&mut harness, &|| {
+        xy.trajectory_data.with_untracked(Option::is_some)
+    });
+    click_class(&mut harness, "trajectory-swap-axes");
+    assert_eq!(xy.trajectory.get_untracked().unwrap().x, sources[1]);
+    click_class(&mut harness, "trajectory-swap-axes");
+    assert_eq!(xy.trajectory.get_untracked(), Some(before.clone()));
+    harness.settle(128);
+    let center = |pane: crate::state::Pane| {
+        let bounds = pane.dock.node.window_bounds().unwrap();
+        let scale = pane.dock.node.scale();
+        (
+            (bounds.origin.x.0 + bounds.size.width.0 * 0.3) / scale,
+            (bounds.origin.y.0 + bounds.size.height.0 * 0.7) / scale,
+        )
+    };
+    let (x, y) = center(xy);
+    workbench
+        .selected_fields
+        .set(sources.iter().cloned().collect());
+    workbench.drop_fields(sources[0].clone(), x, y);
+    let time = workbench.pane();
+    assert_ne!(time.id, xy.id);
+    assert!(time.trajectory.with_untracked(Option::is_none));
+    wait(&mut harness, &|| time.lines.with_untracked(Vec::len) == 2);
+    assert_eq!(
+        workbench.panes().with_untracked(Vec::len),
+        2,
+        "A multi-field drop creates one time plot"
+    );
+    assert_eq!(xy.trajectory.get_untracked(), Some(before.clone()));
+    let line = time.lines.get_untracked()[0].id;
+    let row = workbench
+        .line_drag
+        .rows
+        .with_value(|rows| rows[&(time.id, line)]);
+    let window = &harness.app().windows()[0];
+    let label = window
+        .nodes_with_class("legend-drag-source")
+        .into_iter()
+        .filter_map(|node| zgui::view::ViewHost::window_box(window.host().as_ref(), node))
+        .find(|rect| Workbench::inside(row, rect.origin.x.0, rect.origin.y.0))
+        .unwrap();
+    let (x, y) = center(xy);
+    harness.deliver_to_first(pointer(
+        PointerAction::Pressed,
+        label.origin.x.0 + 20.,
+        label.origin.y.0 + label.size.height.0 / 2.,
+    ));
+    harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
+    harness.deliver_to_first(pointer(PointerAction::Released, x, y));
+    harness.settle(128);
+    let added = workbench.pane();
+    assert_ne!(added.id, xy.id);
+    assert_ne!(added.id, time.id);
+    assert!(added.trajectory.with_untracked(Option::is_none));
+    assert_eq!(added.lines.get_untracked()[0].id, line);
+    assert_eq!(xy.trajectory.get_untracked(), Some(before));
+    assert_eq!(workbench.panes().with_untracked(Vec::len), 3);
+}
+
+#[test]
+fn saved_workspace_ui_survives_switching_between_ulog_and_tlog() {
+    use crate::{preset_ui::ApplyAction, profile::identity::ProfileKey, state::Workbench};
+    fn finish(harness: &mut Harness<zgui::runtime::Runtime>, workbench: Workbench) {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            harness.settle(128);
+            if !workbench.loading.get_untracked()
+                && !workbench.profiles.busy.get_untracked()
+                && workbench.authoring.workspace_load.get_value().is_none()
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Log/workspace did not finish: {}",
+                workbench.status.get_untracked()
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    for (matching, other, source) in [
+        (
+            "esc_status_log.ulg",
+            "synthetic-telemetry.tlog",
+            "esc_status/0/esc[5].esc_rpm",
+        ),
+        (
+            "synthetic-telemetry.tlog",
+            "esc_status_log.ulg",
+            "mavlink/1.1/HEARTBEAT.custom_mode",
+        ),
+    ] {
+        let (mut harness, workbench) = preset_harness();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("format-specific.json");
+        let definition = serde_json::json!({
+            "version":2, "name":"Format-specific workspace",
+            "geometry":[{"id":"mode", "name":"Mode", "shape":{"kind":"states", "source":source, "rules":[]}}],
+            "workspace_presets":[{"name":"Review", "views":[{"name":"View", "plots":[{
+                "name":"Signals", "geometry":["mode"], "lines":[{"source":source,"color":[200,80,20,255],"width":2.,"radius":2.,"marker":"circle","connection":"linear","pattern":"solid","markers":false,"hidden":false}]
+            }], "layout":{"kind":"plot","plot":0}}]}]
+        });
+        std::fs::write(&path, definition.to_string()).unwrap();
+        let key = ProfileKey::new(path.canonicalize().unwrap(), 1);
+        workbench.open(fixtures.join(other));
+        finish(&mut harness, workbench);
+        workbench.use_saved_preset(key.clone(), "Review".into(), ApplyAction::Workspace);
+        finish(&mut harness, workbench);
+        let workspace = workbench.workspace_id();
+        let panes = workbench.panes().get_untracked();
+        assert_eq!(panes.len(), 1);
+        assert!(panes[0].lines.with_untracked(Vec::is_empty));
+        for (file, available) in [(matching, true), (other, false), (matching, true)] {
+            let pane_id = workbench.pane().id;
+            workbench.open(fixtures.join(file));
+            finish(&mut harness, workbench);
+            assert_eq!(workbench.workspace_id(), workspace);
+            assert_eq!(workbench.pane().id, pane_id);
+            assert_eq!(
+                workbench
+                    .profiles
+                    .instances
+                    .with_untracked(|instances| instances[&key].ids.geometry.contains_key("mode")),
+                available
+            );
+            // Reapplying the recipe also exercises mounted legend and overlay rebuilding.
+            workbench.use_saved_preset(key.clone(), "Review".into(), ApplyAction::Workspace);
+            finish(&mut harness, workbench);
+            assert_eq!(
+                workbench.pane().lines.with_untracked(Vec::len),
+                usize::from(available)
+            );
+            assert_eq!(
+                workbench.pane().geometry.with_untracked(|ids| ids.len()),
+                usize::from(available)
+            );
+            assert!(
+                harness.app().windows()[0]
+                    .box_with_class("cursor-plot")
+                    .is_some()
+            );
+        }
+    }
 }
 
 #[test]
@@ -5256,6 +6544,8 @@ fn state_bands_map_sources_render_labels_refresh_and_keep_manual_highlights() {
     );
     workbench.edit_geometry_on(pane, manual_id);
     harness.settle(128);
+    // Leave the band handle exposed in the smaller canvas above the shared timeline.
+    click_class(&mut harness, "geometry-editor-collapse");
     let handle = harness.app().windows()[0]
         .box_with_class("geometry-move-handle")
         .unwrap();
@@ -6001,7 +7291,19 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
         crate::line_colors::PALETTE[0]
     );
     let normal_svg = workbench.capture_screenshot(Some(normal)).unwrap();
-    let map_svg = workbench.capture_screenshot(Some(time)).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let map_svg = loop {
+        let svg = workbench.capture_screenshot(Some(time)).unwrap();
+        if svg.contains("linearGradient") {
+            break svg;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Heatmap geometry did not prepare"
+        );
+        harness.settle(64);
+        std::thread::sleep(Duration::from_millis(1));
+    };
     assert!(normal_svg.contains("fill=\"#f5f5f5\""));
     assert!(map_svg.contains("fill=\"#202834\""));
     assert!(normal_svg.contains("Raw gyro") && !normal_svg.contains("Gyro over time"));

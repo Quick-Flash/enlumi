@@ -1,4 +1,5 @@
 use crate::plot_appearance::PlotBackgroundProps;
+use crate::timeline::TimeMarkerProps;
 use crate::{analysis_heatmap::AnalysisHeatmapProps, analysis_state::AnalysisResult};
 use plot::{
     time_series::{SeriesData, TimeSeries, TimeSeriesSet},
@@ -14,6 +15,7 @@ pub fn AnalysisPlot(
     visible: Signal<bool, LocalStorage>,
     snapshot: plot::zgui_svg::PlotSnapshotSource,
     background: RwSignal<Option<[u8; 3]>, LocalStorage>,
+    #[prop(optional)] timeline: Option<(crate::state::Workbench, crate::state::Pane)>,
 ) -> impl IntoView {
     plot::zgui_svg::SnapshotLayers::current_or_new();
     install_stylesheet("enlumi-analysis", include_str!("analysis.css"));
@@ -44,6 +46,8 @@ pub fn AnalysisPlot(
         },
     );
     let is_heatmap = heatmap.with_value(Option::is_some);
+    let time_axis =
+        heatmap.with_value(|map| map.as_ref().is_some_and(|map| map.x_label == "Time (s)"));
     let chart = NodeRef::new();
     let readout = RwSignal::new_local("Hover heatmap to inspect bin".to_owned());
     let series = if let Some(map) = heatmap.get_value() {
@@ -109,6 +113,7 @@ pub fn AnalysisPlot(
                     let w=f64::from(bounds.size.width.0/chart.scale());let h=f64::from(bounds.size.height.0/chart.scale());
                     let Some(g)=plot::PlotGeometry::with_bounds(0.,0.,w,h,w,h) else {return;};
                     let ranges=state.ranges.get_untracked();let frequency=g.x_value(x,ranges.x);let value=g.y_value(y,ranges.y);
+                    if time_axis && visible.get_untracked() && let Some((workbench,pane))=timeline && pane.timeline_link.get_untracked() {workbench.timeline.hover(frequency);}
                     heatmap.with_value(|map| {
                         let Some(map)=map else {return;};
                         if frequency<map.x_low || frequency>map.x_high || value<map.y_low || value>map.y_high {return;}
@@ -121,6 +126,9 @@ pub fn AnalysisPlot(
     state = state,
     background_layer = move || AnyView::new((view! {PlotBackground(background=background,visible=visible)}.into_view(),heatmap.get_value().map(|data|AnyView::new(view! {AnalysisHeatmap(data=data,state=state)})).into_view())),
     options = plot_options)
+                if move ||time_axis {
+                    {move ||timeline.map(|(workbench,pane)|AnyView::new(view! {TimeMarker(workbench=workbench,pane=pane,visible=visible)}))}
+                }
                 }
             }
         }

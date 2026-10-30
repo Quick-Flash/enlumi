@@ -17,6 +17,7 @@ use zgui::prelude::*;
 
 #[derive(Clone, Copy)]
 pub enum Destination {
+    TrajectoryAxis(usize, bool),
     Plot(Option<u64>),
     Filter,
     Bands,
@@ -31,6 +32,7 @@ pub(crate) struct PendingDrop {
     pub sources: Vec<String>,
     pub target: Destination,
     pub filter_slot: Option<usize>,
+    pub trajectory_axis: Option<(usize, bool)>,
 }
 
 #[derive(Clone, Copy)]
@@ -297,25 +299,7 @@ impl Workbench {
                 .as_ref()
                 .map(|old| old.ids.clone())
                 .unwrap_or_default();
-            ids.fields
-                .retain(|id, _| profile.filters.iter().any(|field| &field.id == id));
-            ids.geometry
-                .retain(|id, _| profile.geometry.iter().any(|geometry| &geometry.id == id));
-            let mut field_ids = std::collections::BTreeSet::new();
-            for field in &profile.filters {
-                let id = ids.fields
-                    .entry(field.id.clone())
-                    .or_insert_with(|| self.id());
-                if !field_ids.insert(*id) { *id = self.id(); field_ids.insert(*id); }
-            }
-            let mut geometry_ids = std::collections::BTreeSet::new();
-            for geometry in &profile.geometry {
-                let id = ids.geometry
-                    .entry(geometry.id.clone())
-                    .or_insert_with(|| self.id());
-                // Previously identical aliases can diverge on reload.
-                if !geometry_ids.insert(*id) { *id = self.id(); geometry_ids.insert(*id); }
-            }
+            ids.reconcile(&profile, || self.id());
             self.status.set(format!("Preparing profile: {}", profile.name));
             let definition = profile.clone();
             let base = path

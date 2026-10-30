@@ -448,3 +448,5 @@
 .filter-edit-state.filter-edit-unchanged { color: var(--app-muted); }
 .filter-edit-state:not(.filter-edit-unchanged) { border-color: var(--app-accent); color: var(--app-accent); }
 .plot-loading { max-width: 140px; min-width: 0; font-size: var(--app-font-xs); color: var(--app-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
+
+.workspace-view-pages { position: relative; flex: 1; width: 100%; min-width: 0; min-height: 0; overflow: hidden; }
