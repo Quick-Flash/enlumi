@@ -124,7 +124,7 @@ pub fn filter(
 - Code and definitions currently belong to this app session. Save source elsewhere
   before closing; there is no script-file library or session persistence yet.
 
-Source editor uses pinned [zgui-editor](https://github.com/zortax/zgui-editor), with
+Source editor uses pinned [zgui-editor fork](https://github.com/Quick-Flash/zgui-editor), with
 Rust syntax highlighting, line numbers, indentation, undo/redo, word/line selection,
 and caret line/column status. Code uses 14px text; filter labels use at least 12px.
 Editor becomes read-only during compilation/execution.

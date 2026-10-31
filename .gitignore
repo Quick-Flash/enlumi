@@ -1,6 +1,4 @@
 /target
-/vendor/zgui-runtime/Cargo.lock
-/vendor/zgui-plot/Cargo.lock
 /dist/
 *.log
 *.ulg

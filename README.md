@@ -140,6 +140,9 @@ includes and upstream license, records provenance, updates `Cargo.toml` and
 Review and commit the resulting diff. Ordinary builds use the checked-in files
 without downloading definitions.
 
+UI dependencies use pinned [fork branches](docs/UPSTREAM_PATCHES.md), including
+independent branches ready for upstream PRs. UI sources are no longer vendored.
+
 On Linux, test native Wayland parsing and window-state bookkeeping with
 `cargo test --locked -p zgui-platform-wayland --lib`. From a running Wayland
 desktop, also check compositor-confirmed maximize, restore, fullscreen, and close:
