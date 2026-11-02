@@ -34,14 +34,14 @@ ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 syn = { version = "3.0.9", features = ["full"] }
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 wasmtime = { version = "49", default-features = false, features = ["cranelift", "runtime", "std"] }
-zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
+zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
 zgui-editor = { git = "https://github.com/Quick-Flash/zgui-editor", rev = "a5f84d76cd3f7e28860ea637f1e244501b524844", features = ["lang-rust"] }
-zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
+zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-zgui-platform-wayland = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
+zgui-platform-wayland = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
 
 [build-dependencies]
 mavlink-bindgen = { version = "0.19.1", default-features = false, features = ["mav2-message-extensions"] }
@@ -56,12 +56,12 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 
 [dev-dependencies]
 accesskit = "0.24"
-zgui-render-wgpu = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-render-vector-vello = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-profile = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-testkit-view = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
+zgui-render-wgpu = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-render-vector-vello = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-profile = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-testkit-view = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
 
 [target.'cfg(windows)'.dependencies]
 zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
@@ -70,9 +70,9 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 # Keep upstream dependencies from editor/plot on the same framework fork.
 # PR branches and aggregate revisions: docs/UPSTREAM_PATCHES.md.
 [patch."https://github.com/zortax/zgui"]
-zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-css = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-interned = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-profile = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-text-style = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
-zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "42bb0c2d04a5743c39391cbd819a34256ccce2ca" }
+zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-css = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-interned = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-profile = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-text-style = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }
+zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "41324c958d52833127d779b1126654c10b80931b" }

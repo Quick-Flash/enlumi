@@ -133,6 +133,71 @@ This is a real offscreen GPU workload, not a native compositor/presentation test
 or a GPU timestamp-query measurement. Compare it with native frame recordings
 to distinguish application costs from surface acquisition and frame pacing.
 
+### Compare framework revisions
+
+Build the release replay executable at each dependency revision with
+`cargo test --locked --release -p enlumi --no-run --message-format=json`.
+Save the `compiler-artifact` executable for each build under a distinct name,
+then run the comparison from the repository root:
+
+```powershell
+python scripts/compare-zgui-replay.py --baseline target/pr21-comparison/baseline.exe --candidate target/pr21-comparison/candidate.exe --log C:/logs/flight.ulg --profile 'C:/profiles/PX4 Flight Review.json' --out target/pr21-comparison --runs 3
+```
+
+The runner alternates version order across pairs, enables the full workspace
+and offscreen GPU, and clears optional stage tracing and damage-coalescing
+overrides. Both versions use damage coalescing. It saves per-frame CSVs,
+run logs, input and executable hashes, and a JSON summary with the median
+and range of each run's p95. Final image comparisons exclude the top 60 rows
+containing the FPS toolbar. Input recordings and profiles stay outside Git.
+
+### PR #21 framework comparison (2026-11-02)
+
+Enlumi base `42c9325a` was built with the original framework `42bb0c2d`
+and the rebased framework `41324c95` on branch `enlumi/zgui-pr-21`.
+The plot and editor revisions, registry package versions, compiler
+(`nightly-2026-04-16`), and replay source were held fixed. PR #21 adds
+`smallvec` to the framework reactive crate's dependency list.
+
+Both release builds ran the full saved PX4 Flight Review workspace against
+the same 1,907-second local recording, on Windows/DX12 with an NVIDIA
+RTX 4070 Laptop GPU (driver 32.0.15.8195). Each run used 1500 x 850 pixels
+and 180 drag frames per case. Three runs per version alternated in the order
+baseline, candidate, candidate, baseline, baseline, candidate. Compilation
+finished before measurement. Stage tracing was disabled and damage
+coalescing was enabled for both versions.
+
+Frame costs below are the median of three per-run p95 values. Parentheses
+give the minimum and maximum per-run p95. Lower values are better.
+
+| Case | Original p95 ms (range) | PR #21 p95 ms (range) | Change |
+| --- | ---: | ---: | ---: |
+| Three linked charts, full range | 16.10 (14.85–16.31) | 13.68 (7.67–19.69) | −15.0% |
+| Three linked charts, zoomed | 13.66 (12.21–13.83) | 12.98 (6.81–13.20) | −5.0% |
+| One unlinked chart, zoomed | 5.47 (3.74–6.03) | 5.00 (3.22–6.15) | −8.6% |
+| Three linked charts without mode bands | 10.39 (8.61–16.27) | 11.59 (6.46–15.49) | +11.6% |
+| One maximized chart | 7.26 (4.44–9.89) | 6.34 (5.06–7.74) | −12.7% |
+
+Four medians improved and one regressed, but run ranges overlap substantially.
+These measurements do not establish a consistent speedup. Mean draw counts
+were effectively unchanged, while uploaded bytes per frame increased by
+20–30% across the five cases. Frame cost excludes the separately measured
+GPU completion wait. These offscreen results do not establish native window
+presentation FPS or Linux compositor performance.
+
+All six replays passed their zoom-span assertions (5,400 measured frames).
+The candidate passed 249 application tests; 11 opt-in tests were skipped.
+The first run of each version captured final images. Outside the top 60
+toolbar rows, 5–170 pixels per case differed by more than one channel level;
+the maximum channel difference was 89. The images are therefore not pixel
+identical. The full-range images showed no obvious missing chart geometry
+on visual inspection.
+
+The [machine-readable summary](ZGUI_PR21_PERFORMANCE.json) includes per-run
+metrics, ranges, input/executable hashes, and image difference counts.
+Local executables, raw CSVs, logs, and images are in
+`target/pr21-comparison/` and are excluded from Git.
+
 ### Measured Attitude replay
 
 On Windows/DX12 with an RTX 4070 Laptop GPU, the release replay loaded
