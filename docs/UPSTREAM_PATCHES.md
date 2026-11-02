@@ -50,6 +50,14 @@ Base: `40757c406d0384a36434a8baf0fd3fad512b33ed`.
 Aggregate: [`enlumi/all-fixes`](https://github.com/Quick-Flash/zgui-plot/tree/enlumi/all-fixes),
 `0087b2b2efb5666a26eaf4f1ee8779c61caa04b3`.
 
+The band optimization currently consumes the local `../zgui-plot` checkout.
+Its default branch is `master`; local commit
+`e7e928cd57f3fe05f2007030a7abf8293013f003` adds retained time bands on top of
+the merged aggregate. It is intentionally unpushed. After pushing plot master,
+replace Enlumi's local plot path with the fork URL and that revision, then
+regenerate `Cargo.lock`. The local checkout's existing aspect-selection commit
+was preserved when merging `origin/master`.
+
 The old vendoring notes named `aef14a9ce0c8097f8347239a423c151e1641077c`;
 that object was unavailable in the local fork, Cargo cache, and GitHub fork.
 Changes were recovered by comparing vendored sources with the current fork head.

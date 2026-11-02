@@ -98,6 +98,17 @@ resize, width changes, and leaving prepared coverage invalidate that geometry.
 Completed preparation must cover the current viewport at adequate detail before
 it can replace displayed geometry, including when a drag returns to a cached view.
 
+Time-band backgrounds use zgui-plot's `RetainedTimeBands`. Interval buffers are
+prepared over a padded range and reused during nearby pans and zooms. Fill
+height and boundary width stay in CSS pixels. Panning within one uniform mode
+leaves the background canvas unchanged. Visible transitions still need to
+repaint. Boundaries mark actual interval starts, including after clipping;
+clipping no longer invents a boundary at the viewport's left edge.
+
+Band labels move with CSS transforms. Separate reactive memos retain their text,
+colour, and width when only position changes. Width changes remain necessary
+when the available interval clips a label; those updates preserve ellipsis.
+
 ## Replay a local Attitude view
 
 The ignored replay uses a local log and the saved PX4 Flight Review profile.
@@ -197,6 +208,46 @@ The [machine-readable summary](ZGUI_PR21_PERFORMANCE.json) includes per-run
 metrics, ranges, input/executable hashes, and image difference counts.
 Local executables, raw CSVs, logs, and images are in
 `target/pr21-comparison/` and are excluded from Git.
+
+### Retained time-band comparison (2026-11-02)
+
+The framework remains `41324c95`. The baseline uses plot `0087b2b2` and the
+original Enlumi band implementation; the candidate uses local plot master
+`e7e928cd` and retained band backgrounds with transformed labels. Both use the
+same recording, profile, release compiler, GPU, window size, and five replay
+cases described above. Three runs per version alternated in the same order;
+all compilation and lint checks finished before measurement.
+
+| Case | Original frame p95 ms | Retained frame p95 ms | Mean draws, original / retained |
+| --- | ---: | ---: | ---: |
+| Three linked charts, full range | 12.68 | 7.67 | 217.9 / 228.7 |
+| Three linked charts, zoomed | 11.16 | 7.18 | 211.4 / 207.4 |
+| One unlinked chart, zoomed | 4.42 | 3.54 | 65.9 / 65.9 |
+| Three linked charts without mode bands | 11.68 | 7.09 | 209.4 / 209.4 |
+| One maximized chart | 6.46 | 5.17 | 69.4 / 69.4 |
+
+Times are medians of per-run p95 values. The unchanged no-bands control also
+improved by 39%, and individual runs varied widely, so these times do not
+establish a band-specific speedup. Full-range uploads fell from 62.4 to
+55.7 KB per frame (11%), with 5% more draw calls. Zoomed linked charts used
+four fewer draw calls per frame; other draw counts were unchanged. A visible
+transition still repaints chart content above it.
+
+Regression tests establish stable source path allocations and boundary buffers
+across nearby pans and zooms, constant boundary stroke width, and unchanged
+canvas revision/view counters while panning inside one uniform mode. Raster
+exports match reference rectangles through gaps, overlapping layers, pan, zoom,
+and resize. All 126 plot library tests and 249 Enlumi tests passed; 11 opt-in
+application tests were skipped. Formatting and Clippy passed in both projects.
+All six final GPU replays passed their zoom-span assertions.
+
+Final captures preserve chart geometry on visual inspection. They differ from
+the baseline around band edges because the artificial left-edge boundary was
+removed and the retained primitives have small antialiasing differences. The
+no-bands capture is pixel-identical. Per-run values, image difference counts,
+and input/executable hashes are in the
+[machine-readable summary](TIME_BAND_PERFORMANCE.json). Local raw artifacts are
+under `target/band-final-comparison/`.
 
 ### Measured Attitude replay
 
