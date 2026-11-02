@@ -35,16 +35,15 @@ Windows: running executables can prevent Cargo from replacing them.
 ## Zgui fork development
 
 Zgui dependencies and testkits pin a public commit from
-[Quick-Flash/zgui, branch `text-multiclick-selection`](https://github.com/Quick-Flash/zgui/tree/text-multiclick-selection)
-until upstream merges text-selection support. `Cargo.toml` records the full
-revision; Enlumi and `zgui-plot` must use the same commit. No sibling checkout is
-required.
+[Quick-Flash/zgui, branch `enlumi/all-fixes-pr-21`](https://github.com/Quick-Flash/zgui/tree/enlumi/all-fixes-pr-21).
+`Cargo.toml` records the full revision. Plot dependencies also pin a public
+commit from [Quick-Flash/zgui-plot, branch `master`](https://github.com/Quick-Flash/zgui-plot/tree/master).
+No sibling checkout is required.
 
-Both Enlumi and `zgui-plot` now point directly to the same fork revision. After
-upstream merges text-selection support, switch every Zgui dependency and testkit
-in both repositories to one upstream revision containing the merge. Push the
-plot dependency update, then update Enlumi's plot pin. Commit lockfiles with
-those changes.
+Enlumi's framework source patches keep the upstream framework dependencies of
+plot and editor on that same fork revision. Update every framework dependency,
+testkit, and source patch together, and commit `Cargo.lock` with the changes.
+See [fork revisions](docs/UPSTREAM_PATCHES.md) for the consumed branches and patches.
 
 ## Pull requests
 

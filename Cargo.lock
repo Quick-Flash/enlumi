@@ -6871,6 +6871,7 @@ dependencies = [
 [[package]]
 name = "zgui-plot"
 version = "0.1.0"
+source = "git+https://github.com/Quick-Flash/zgui-plot?rev=5537852574b7838c56a553b3debffc8b12ef3c43#5537852574b7838c56a553b3debffc8b12ef3c43"
 dependencies = [
  "arboard",
  "kurbo",
