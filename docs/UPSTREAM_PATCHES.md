@@ -13,9 +13,12 @@ Plaizier's configured Git identity.
 ## Framework
 
 Fork: [Quick-Flash/zgui](https://github.com/Quick-Flash/zgui).
-Base: `951a0ea3b113247da6dff439fccbd9097aa3187f`.
-Aggregate: [`enlumi/all-fixes`](https://github.com/Quick-Flash/zgui/tree/enlumi/all-fixes),
-`42bb0c2d04a5743c39391cbd819a34256ccce2ca`.
+Base: [upstream PR #21](https://github.com/zortax/zgui/pull/21),
+`be5596501fa92877485879e5ba184c9b63e5ebf6`.
+Aggregate: [`enlumi/all-fixes-pr-21`](https://github.com/Quick-Flash/zgui/tree/enlumi/all-fixes-pr-21),
+`41324c958d52833127d779b1126654c10b80931b`.
+This rebases all nine commits from `enlumi/all-fixes` (`42bb0c2d`) onto PR #21.
+The focused branches below retain their original base, `951a0ea3`.
 
 | Branch | Change |
 | --- | --- |
@@ -46,6 +49,13 @@ Fork: [Quick-Flash/zgui-plot](https://github.com/Quick-Flash/zgui-plot).
 Base: `40757c406d0384a36434a8baf0fd3fad512b33ed`.
 Aggregate: [`enlumi/all-fixes`](https://github.com/Quick-Flash/zgui-plot/tree/enlumi/all-fixes),
 `0087b2b2efb5666a26eaf4f1ee8779c61caa04b3`.
+
+Consumed branch: [`master`](https://github.com/Quick-Flash/zgui-plot/tree/master),
+`5537852574b7838c56a553b3debffc8b12ef3c43`. This includes the merged aggregate
+and retained time bands, including rectangle fills and fixed-width boundaries.
+The published commit has the same source tree as local `e7e928cd`, used for
+the retained-band and latest PR #21 benchmarks. Enlumi pins the published Git
+revision; no sibling checkout is required.
 
 The old vendoring notes named `aef14a9ce0c8097f8347239a423c151e1641077c`;
 that object was unavailable in the local fork, Cargo cache, and GitHub fork.

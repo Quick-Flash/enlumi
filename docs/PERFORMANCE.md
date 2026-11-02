@@ -98,6 +98,17 @@ resize, width changes, and leaving prepared coverage invalidate that geometry.
 Completed preparation must cover the current viewport at adequate detail before
 it can replace displayed geometry, including when a drag returns to a cached view.
 
+Time-band backgrounds use zgui-plot's `RetainedTimeBands`. Interval buffers are
+prepared over a padded range and reused during nearby pans and zooms. Fill
+height and boundary width stay in CSS pixels. Panning within one uniform mode
+leaves the background canvas unchanged. Visible transitions still need to
+repaint. Boundaries mark actual interval starts, including after clipping;
+clipping no longer invents a boundary at the viewport's left edge.
+
+Band labels move with CSS transforms. Separate reactive memos retain their text,
+colour, and width when only position changes. Width changes remain necessary
+when the available interval clips a label; those updates preserve ellipsis.
+
 ## Replay a local Attitude view
 
 The ignored replay uses a local log and the saved PX4 Flight Review profile.
@@ -132,6 +143,119 @@ reports that wait separately from frame processing and paint/submission time.
 This is a real offscreen GPU workload, not a native compositor/presentation test
 or a GPU timestamp-query measurement. Compare it with native frame recordings
 to distinguish application costs from surface acquisition and frame pacing.
+
+### Compare framework revisions
+
+Build the release replay executable at each dependency revision with
+`cargo test --locked --release -p enlumi --no-run --message-format=json`.
+Save the `compiler-artifact` executable for each build under a distinct name,
+then run the comparison from the repository root:
+
+```powershell
+python scripts/compare-zgui-replay.py --baseline target/pr21-comparison/baseline.exe --candidate target/pr21-comparison/candidate.exe --log C:/logs/flight.ulg --profile 'C:/profiles/PX4 Flight Review.json' --out target/pr21-comparison --runs 3
+```
+
+The runner alternates version order across pairs, enables the full workspace
+and offscreen GPU, and clears optional stage tracing and damage-coalescing
+overrides. Both versions use damage coalescing. It saves per-frame CSVs,
+run logs, input and executable hashes, and a JSON summary with the median
+and range of each run's p95. Final image comparisons exclude the top 60 rows
+containing the FPS toolbar. Input recordings and profiles stay outside Git.
+
+### PR #21 framework comparison with retained bands (2026-11-02)
+
+This rerun supersedes the earlier comparison made before the band optimization.
+Both builds use Enlumi `99680b9` and local plot master `e7e928cd`, including
+retained band paths, boundary buffers, and transformed labels. The baseline
+framework is `42bb0c2d`; the PR #21 framework is `41324c95`. The editor revision,
+registry package versions, compiler (`nightly-2026-04-16`), and replay source
+are identical. The only lockfile dependency-edge change is PR #21 adding
+`smallvec` to the framework reactive crate.
+
+Both release builds ran the full saved PX4 Flight Review workspace against
+the same 1,907-second local recording, on Windows/DX12 with an NVIDIA
+RTX 4070 Laptop GPU (driver 32.0.15.8195), using the Balanced power scheme.
+Each run used 1500 x 850 pixels and 180 drag frames per case. Six runs per
+version alternated in pairs: baseline/candidate, candidate/baseline, repeated
+three times. Compilation and application tests finished before measurement.
+Stage tracing was disabled and damage coalescing was enabled for both versions.
+
+Frame costs below are the median of six per-run p95 values. Parentheses
+give the minimum and maximum per-run p95. Lower values are better.
+
+| Case | Original p95 ms (range) | PR #21 p95 ms (range) | Change |
+| --- | ---: | ---: | ---: |
+| Three linked charts, full range | 16.29 (10.89-18.57) | 12.72 (11.48-24.10) | -21.9% |
+| Three linked charts, zoomed | 13.72 (9.18-15.96) | 11.84 (10.99-15.21) | -13.7% |
+| One unlinked chart, zoomed | 6.27 (3.96-7.67) | 5.09 (4.34-7.58) | -18.8% |
+| Three linked charts without mode bands | 14.27 (8.62-17.43) | 11.95 (8.59-28.09) | -16.3% |
+| One maximized chart | 8.79 (4.48-10.60) | 8.25 (6.54-11.88) | -6.1% |
+
+No consistent frame-time slowdown was observed with the latest band code.
+All five medians improved. In paired runs PR #21 was faster in five of six
+pairs for the first four cases and four of six for the maximized case. One
+PR #21 run was slower across every scenario; it remains in the results.
+Ranges overlap substantially, so this is evidence from this replay rather
+than a guaranteed speedup or a native-window FPS measurement.
+
+Draw counts were effectively identical. Uploaded bytes per frame remain
+19-30% higher on PR #21. Frame processing excludes the separately recorded
+GPU completion wait. Median per-run p95 input-step times, which also include
+input dispatch and GPU completion waiting, improved by 3-23% across the cases.
+The maximized GPU-wait p95 increased slightly (7.51 to 7.75 ms), with overlapping
+run ranges; the other four GPU-wait medians decreased.
+
+All twelve replays passed their zoom-span assertions (10,800 measured frames).
+Both builds passed 249 application tests each; 11 opt-in tests were skipped in
+each build. The first run of each version captured final images. Outside the
+top 60 toolbar rows, all five image pairs differ by at most two levels per
+8-bit colour channel.
+
+The [machine-readable summary](ZGUI_PR21_PERFORMANCE.json) includes per-run
+metrics, paired comparisons, ranges, input-step timings, input/executable
+hashes, and image difference counts. Local executables, build records, raw
+CSVs, logs, and images are in `target/pr21-latest-comparison/` and are excluded
+from Git. Enlumi remains configured for PR #21 after the comparison.
+
+### Retained time-band comparison (2026-11-02)
+
+The framework remains `41324c95`. The baseline uses plot `0087b2b2` and the
+original Enlumi band implementation; the candidate uses local plot master
+`e7e928cd` and retained band backgrounds with transformed labels. Both use the
+same recording, profile, release compiler, GPU, window size, and five replay
+cases described above. Three runs per version alternated in the same order;
+all compilation and lint checks finished before measurement.
+
+| Case | Original frame p95 ms | Retained frame p95 ms | Mean draws, original / retained |
+| --- | ---: | ---: | ---: |
+| Three linked charts, full range | 12.68 | 7.67 | 217.9 / 228.7 |
+| Three linked charts, zoomed | 11.16 | 7.18 | 211.4 / 207.4 |
+| One unlinked chart, zoomed | 4.42 | 3.54 | 65.9 / 65.9 |
+| Three linked charts without mode bands | 11.68 | 7.09 | 209.4 / 209.4 |
+| One maximized chart | 6.46 | 5.17 | 69.4 / 69.4 |
+
+Times are medians of per-run p95 values. The unchanged no-bands control also
+improved by 39%, and individual runs varied widely, so these times do not
+establish a band-specific speedup. Full-range uploads fell from 62.4 to
+55.7 KB per frame (11%), with 5% more draw calls. Zoomed linked charts used
+four fewer draw calls per frame; other draw counts were unchanged. A visible
+transition still repaints chart content above it.
+
+Regression tests establish stable source path allocations and boundary buffers
+across nearby pans and zooms, constant boundary stroke width, and unchanged
+canvas revision/view counters while panning inside one uniform mode. Raster
+exports match reference rectangles through gaps, overlapping layers, pan, zoom,
+and resize. All 126 plot library tests and 249 Enlumi tests passed; 11 opt-in
+application tests were skipped. Formatting and Clippy passed in both projects.
+All six final GPU replays passed their zoom-span assertions.
+
+Final captures preserve chart geometry on visual inspection. They differ from
+the baseline around band edges because the artificial left-edge boundary was
+removed and the retained primitives have small antialiasing differences. The
+no-bands capture is pixel-identical. Per-run values, image difference counts,
+and input/executable hashes are in the
+[machine-readable summary](TIME_BAND_PERFORMANCE.json). Local raw artifacts are
+under `target/band-final-comparison/`.
 
 ### Measured Attitude replay
 
