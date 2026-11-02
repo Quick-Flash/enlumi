@@ -162,52 +162,60 @@ run logs, input and executable hashes, and a JSON summary with the median
 and range of each run's p95. Final image comparisons exclude the top 60 rows
 containing the FPS toolbar. Input recordings and profiles stay outside Git.
 
-### PR #21 framework comparison (2026-11-02)
+### PR #21 framework comparison with retained bands (2026-11-02)
 
-Enlumi base `42c9325a` was built with the original framework `42bb0c2d`
-and the rebased framework `41324c95` on branch `enlumi/zgui-pr-21`.
-The plot and editor revisions, registry package versions, compiler
-(`nightly-2026-04-16`), and replay source were held fixed. PR #21 adds
-`smallvec` to the framework reactive crate's dependency list.
+This rerun supersedes the earlier comparison made before the band optimization.
+Both builds use Enlumi `99680b9` and local plot master `e7e928cd`, including
+retained band paths, boundary buffers, and transformed labels. The baseline
+framework is `42bb0c2d`; the PR #21 framework is `41324c95`. The editor revision,
+registry package versions, compiler (`nightly-2026-04-16`), and replay source
+are identical. The only lockfile dependency-edge change is PR #21 adding
+`smallvec` to the framework reactive crate.
 
 Both release builds ran the full saved PX4 Flight Review workspace against
 the same 1,907-second local recording, on Windows/DX12 with an NVIDIA
-RTX 4070 Laptop GPU (driver 32.0.15.8195). Each run used 1500 x 850 pixels
-and 180 drag frames per case. Three runs per version alternated in the order
-baseline, candidate, candidate, baseline, baseline, candidate. Compilation
-finished before measurement. Stage tracing was disabled and damage
-coalescing was enabled for both versions.
+RTX 4070 Laptop GPU (driver 32.0.15.8195), using the Balanced power scheme.
+Each run used 1500 x 850 pixels and 180 drag frames per case. Six runs per
+version alternated in pairs: baseline/candidate, candidate/baseline, repeated
+three times. Compilation and application tests finished before measurement.
+Stage tracing was disabled and damage coalescing was enabled for both versions.
 
-Frame costs below are the median of three per-run p95 values. Parentheses
+Frame costs below are the median of six per-run p95 values. Parentheses
 give the minimum and maximum per-run p95. Lower values are better.
 
 | Case | Original p95 ms (range) | PR #21 p95 ms (range) | Change |
 | --- | ---: | ---: | ---: |
-| Three linked charts, full range | 16.10 (14.85–16.31) | 13.68 (7.67–19.69) | −15.0% |
-| Three linked charts, zoomed | 13.66 (12.21–13.83) | 12.98 (6.81–13.20) | −5.0% |
-| One unlinked chart, zoomed | 5.47 (3.74–6.03) | 5.00 (3.22–6.15) | −8.6% |
-| Three linked charts without mode bands | 10.39 (8.61–16.27) | 11.59 (6.46–15.49) | +11.6% |
-| One maximized chart | 7.26 (4.44–9.89) | 6.34 (5.06–7.74) | −12.7% |
+| Three linked charts, full range | 16.29 (10.89-18.57) | 12.72 (11.48-24.10) | -21.9% |
+| Three linked charts, zoomed | 13.72 (9.18-15.96) | 11.84 (10.99-15.21) | -13.7% |
+| One unlinked chart, zoomed | 6.27 (3.96-7.67) | 5.09 (4.34-7.58) | -18.8% |
+| Three linked charts without mode bands | 14.27 (8.62-17.43) | 11.95 (8.59-28.09) | -16.3% |
+| One maximized chart | 8.79 (4.48-10.60) | 8.25 (6.54-11.88) | -6.1% |
 
-Four medians improved and one regressed, but run ranges overlap substantially.
-These measurements do not establish a consistent speedup. Mean draw counts
-were effectively unchanged, while uploaded bytes per frame increased by
-20–30% across the five cases. Frame cost excludes the separately measured
-GPU completion wait. These offscreen results do not establish native window
-presentation FPS or Linux compositor performance.
+No consistent frame-time slowdown was observed with the latest band code.
+All five medians improved. In paired runs PR #21 was faster in five of six
+pairs for the first four cases and four of six for the maximized case. One
+PR #21 run was slower across every scenario; it remains in the results.
+Ranges overlap substantially, so this is evidence from this replay rather
+than a guaranteed speedup or a native-window FPS measurement.
 
-All six replays passed their zoom-span assertions (5,400 measured frames).
-The candidate passed 249 application tests; 11 opt-in tests were skipped.
-The first run of each version captured final images. Outside the top 60
-toolbar rows, 5–170 pixels per case differed by more than one channel level;
-the maximum channel difference was 89. The images are therefore not pixel
-identical. The full-range images showed no obvious missing chart geometry
-on visual inspection.
+Draw counts were effectively identical. Uploaded bytes per frame remain
+19-30% higher on PR #21. Frame processing excludes the separately recorded
+GPU completion wait. Median per-run p95 input-step times, which also include
+input dispatch and GPU completion waiting, improved by 3-23% across the cases.
+The maximized GPU-wait p95 increased slightly (7.51 to 7.75 ms), with overlapping
+run ranges; the other four GPU-wait medians decreased.
+
+All twelve replays passed their zoom-span assertions (10,800 measured frames).
+Both builds passed 249 application tests each; 11 opt-in tests were skipped in
+each build. The first run of each version captured final images. Outside the
+top 60 toolbar rows, all five image pairs differ by at most two levels per
+8-bit colour channel.
 
 The [machine-readable summary](ZGUI_PR21_PERFORMANCE.json) includes per-run
-metrics, ranges, input/executable hashes, and image difference counts.
-Local executables, raw CSVs, logs, and images are in
-`target/pr21-comparison/` and are excluded from Git.
+metrics, paired comparisons, ranges, input-step timings, input/executable
+hashes, and image difference counts. Local executables, build records, raw
+CSVs, logs, and images are in `target/pr21-latest-comparison/` and are excluded
+from Git. Enlumi remains configured for PR #21 after the comparison.
 
 ### Retained time-band comparison (2026-11-02)
 
