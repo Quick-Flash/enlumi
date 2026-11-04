@@ -15,9 +15,10 @@ Plaizier's configured Git identity.
 Fork: [Quick-Flash/zgui](https://github.com/Quick-Flash/zgui).
 Base: [upstream PR #21](https://github.com/zortax/zgui/pull/21),
 `be5596501fa92877485879e5ba184c9b63e5ebf6`.
-Aggregate: [`enlumi/all-fixes-pr-21`](https://github.com/Quick-Flash/zgui/tree/enlumi/all-fixes-pr-21),
-`41324c958d52833127d779b1126654c10b80931b`.
-This rebases all nine commits from `enlumi/all-fixes` (`42bb0c2d`) onto PR #21.
+Aggregate: [`enlumi/wayland-dnd-actions`](https://github.com/Quick-Flash/zgui/tree/enlumi/wayland-dnd-actions),
+`abc660ae5d6d39953412c8f5c32801bfb35ef341`. This includes the prior aggregate changes, bounded asynchronous
+FIFO presentation for native Wayland, and choosing the copy action when a
+Wayland drag enters.
 The focused branches below retain their original base, `951a0ea3`.
 
 | Branch | Change |
@@ -30,6 +31,8 @@ The focused branches below retain their original base, `951a0ea3`.
 | `enlumi/wayland-window-state` | Restore normal dimensions when the compositor supplies no restore size. |
 | `enlumi/frame-reporting` | Report completed frame timings/counters to passive probes and coalesce dense paint damage. |
 | `enlumi/renderer-timing` | Expose opt-in surface, submission, retirement, and upload latency boundaries. |
+| `enlumi/wayland-async-fifo` | Present native Wayland frames on a bounded worker; keep UI responsive while FIFO pacing waits for compositor readiness. |
+| `enlumi/wayland-dnd-actions` | Set the drag action on `wl_data_device.enter`; compositors send `source_actions` first, so file drops were cancelled. |
 
 ## Editor
 
