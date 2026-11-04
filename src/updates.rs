@@ -87,7 +87,7 @@ pub fn open_repository() -> Result<(), String> {
     open_url("https://github.com/Quick-Flash/enlumi")
 }
 
-fn open_url(url: &str) -> Result<(), String> {
+pub(crate) fn open_url(url: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let mut command = {
         let mut c = Command::new("rundll32.exe");

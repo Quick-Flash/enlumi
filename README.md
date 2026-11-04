@@ -88,6 +88,29 @@ cargo run --locked --release -p enlumi -- /path/to/flight.BBL
 ```
 
 A desktop session and GPU supported by wgpu are required.
+Click **Map** to open the coordinate-pair builder. Bind longitude/latitude
+(with explicit units), or local east/north positions in metres. Local traces
+can start at entered coordinates or a point chosen with **Set start** in the
+legend. Drag a pair onto a map to add a trace, or another plot to create an
+independent map. Maps use the normal legend, line controls, screenshots and
+clipboard; PNG/SVG exports include loaded tiles and attribution. The position
+markers follow the timeline, and clicking a trace selects its time.
+
+Normal map panes now support **2D map** and **3D map** from the right coordinate
+builder. Provider selection, offline mode, and attribution links live there too.
+Bind any Z field per trace and select metres, millimetres, or feet. **Local Z**
+uses a fixed terrain elevation at trace start; **Global elevation** uses absolute
+elevation. 3D traces render with terrain depth, start/end markers, and timeline
+picking. Plot screenshots embed 2D basemap tiles or the completed 3D frame in SVG/PNG exports.
+
+The experimental map and 3D terrain demo runs with
+`cargo run --locked --release -p enlumi -- --map-preview`. It shows OpenStreetMap tiles
+and Mapterhorn terrain in dockable panes, starting at the Matterhorn. Drag the
+2D map to pan and the 3D view to orbit; middle-drag or Ctrl-drag in 3D to pan,
+and wheel to zoom. Distance rulers show metric and imperial units. Lower angles
+and the view-distance control show more distant terrain. The first visit needs
+internet access. See the [mapping plan and demo controls](docs/maps.md) for local
+XYZ data, caching, verification and remaining flight-track/workspace work.
 For frame-cost recording and Linux backend comparisons, see [performance measurements](docs/PERFORMANCE.md).
 See [portable build instructions](docs/RUST_FILTERS.md#build-portable-distribution)
 to package the app with its offline filter compiler.

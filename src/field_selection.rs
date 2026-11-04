@@ -107,7 +107,7 @@ impl Workbench {
     }
     pub fn field_drag_move(self, x: f32, y: f32) {
         self.update_trajectory_drop(x, y);
-        if self.builder_slot_at(x, y).is_some() {
+        if self.builder_altitude_slot_at(x, y).is_some() || self.builder_slot_at(x, y).is_some() {
             self.drop_target.set(None);
             self.analysis().hover.set(false);
             return;
@@ -206,6 +206,15 @@ impl Workbench {
             if let Some(target) = self.hit_any_plot(x, y) {
                 self.drop_trajectory_pair(index, target);
             }
+            self.finish_field_drag();
+            return;
+        }
+        if let Some(index) = self.builder_altitude_slot_at(x, y) {
+            self.queue_field_sources(
+                self.drag_fields(source),
+                crate::profile_state::Destination::TrajectoryAltitude(index),
+                None,
+            );
             self.finish_field_drag();
             return;
         }

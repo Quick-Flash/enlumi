@@ -128,9 +128,11 @@ fn PlotAreaMenuEntries(
     settings: RwSignal<bool, LocalStorage>,
 ) -> impl IntoView {
     view! {
+        if move || !pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {
         MenuItem(class="plot-fit-x",on_select=UnsyncCallback::new(move |()|fit(pane,plot::interaction::Axes::X_ONLY))) {"Fit X axis"}
         MenuItem(class="plot-fit-y",on_select=UnsyncCallback::new(move |()|fit(pane,plot::interaction::Axes{x:false,y:true}))) {"Fit Y axis"}
-        MenuItem(class="plot-fit-both",on_select=UnsyncCallback::new(move |()|fit(pane,plot::interaction::Axes::BOTH))) {"Fit both axes"}
+        }
+        MenuItem(class="plot-fit-both",on_select=UnsyncCallback::new(move |()|fit(pane,plot::interaction::Axes::BOTH))) {{move ||if pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())){"Fit flight"}else{"Fit both axes"}}}
         MenuItem(class="plot-line-settings",disabled=Signal::derive_local(move ||pane.lines.with(Vec::is_empty)),on_select=UnsyncCallback::new(move |()|settings.set(true))) {"Line settings"}
         if move ||pane.analysis.with(Option::is_none) && pane.trajectory.with(Option::is_none) {
             MenuItem(class="convert-2d-plot",on_select=UnsyncCallback::new(move |()|workbench.convert_to_trajectory(pane))) {"Convert to 2D"}

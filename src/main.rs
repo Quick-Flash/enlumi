@@ -70,6 +70,7 @@ mod legend_drag;
 mod line_colors;
 mod log;
 mod log_session;
+mod mapping;
 mod measurement_background;
 mod measurement_overlay;
 mod measurement_state;
@@ -162,6 +163,12 @@ use app::WorkbenchAppProps;
 use zgui::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "--map-preview")
+    {
+        return mapping::preview::run();
+    }
     if update_install::startup()? {
         return Ok(());
     }

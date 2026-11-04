@@ -1,3 +1,4 @@
+use crate::mapping::settings::{AltitudeOptionsProps, MapSettingsProps};
 use crate::{
     action_button::ActionButtonProps,
     state::{Pane, Workbench},
@@ -5,6 +6,7 @@ use crate::{
 };
 use plot::zgui_workspace::{SeriesSourceActions, SeriesSourceProps};
 use zgui::prelude::*;
+use zgui_ui::prelude::*;
 
 #[derive(Clone, Copy)]
 pub struct Builder {
@@ -29,6 +31,17 @@ impl Builder {
 impl Workbench {
     pub fn trajectory_builder(self) -> Builder {
         self.view().trajectory_builder
+    }
+    pub fn builder_altitude_slot_at(self, x: f32, y: f32) -> Option<usize> {
+        let builder = self.trajectory_builder();
+        if !builder.open.get_untracked() {
+            return None;
+        }
+        builder.pane.altitude_slots.with_value(|slots| {
+            slots
+                .iter()
+                .find_map(|(index, node)| Self::inside(*node, x, y).then_some(*index))
+        })
     }
     pub fn builder_slot_at(self, x: f32, y: f32) -> Option<(usize, bool)> {
         let builder = self.trajectory_builder();
@@ -65,8 +78,17 @@ impl Workbench {
         let Some(original) = workbench.find(target) else {
             return;
         };
-        let pane = if builder.target.get_untracked() == Some(target)
-            || original.trajectory.with_untracked(Option::is_some)
+        let map = builder
+            .pane
+            .trajectory
+            .with_untracked(|s| s.as_ref().and_then(|s| s.map));
+        let same_mode = original
+            .trajectory
+            .with_untracked(|s| s.as_ref().is_some_and(|s| s.map.is_some() == map.is_some()));
+        let editing_regular = builder.target.get_untracked() == Some(target)
+            && original.trajectory.with_untracked(Option::is_none);
+        let pane = if same_mode
+            || editing_regular
             || (original.lines.with_untracked(Vec::is_empty)
                 && original.analysis.with_untracked(Option::is_none))
         {
@@ -75,6 +97,11 @@ impl Workbench {
             workbench.add_plot(target, false, false)
         };
         let mut spec = pane.trajectory.get_untracked().unwrap_or_default();
+        spec.map = spec.map.filter(|_| map.is_some()).or(map);
+        let incoming_altitude = builder
+            .pane
+            .trajectory
+            .with_untracked(|s| s.as_ref().and_then(|s| s.altitudes.get(&index).cloned()));
         let incoming_y = pair.y.clone();
         let previous = spec.pairs();
         let new_trace = !previous.iter().any(|pair| pair.y == incoming_y);
@@ -103,12 +130,14 @@ impl Workbench {
                 spec.x = first.x;
                 spec.y = first.y;
                 spec.fix = first.fix;
+                spec.local = first.local;
                 spec.gps_scale = first.gps_scale;
                 spec.extra = pairs;
             } else if spec.x.is_empty() && spec.y.is_empty() {
                 spec.x = pair.x;
                 spec.y = pair.y;
                 spec.fix = pair.fix;
+                spec.local = pair.local;
                 spec.gps_scale = pair.gps_scale;
             } else {
                 spec.extra.push(pair);
@@ -117,7 +146,13 @@ impl Workbench {
             spec.x = pair.x;
             spec.y = pair.y;
             spec.fix = pair.fix;
+            spec.local = pair.local;
             spec.gps_scale = pair.gps_scale;
+        }
+        if let Some(altitude) = incoming_altitude {
+            if let Some(slot) = spec.pairs().iter().position(|pair| pair.y == incoming_y) {
+                spec.altitudes.insert(slot, altitude);
+            }
         }
         if let Err(error) = spec.validate() {
             self.status.set(error);
@@ -128,7 +163,13 @@ impl Workbench {
         pane.trajectory_setup.set(false);
         workbench.activate(pane.id);
         workbench.profiles.titles.update(|titles| {
-            titles.entry(pane.id).or_insert_with(|| "2D plot".into());
+            titles.entry(pane.id).or_insert_with(|| {
+                if map.is_some() {
+                    "Map".into()
+                } else {
+                    "2D plot".into()
+                }
+            });
         });
         let available = workbench
             .panes()
@@ -197,6 +238,7 @@ impl Workbench {
 
 fn blank_pair() -> Pair {
     Pair {
+        local: None,
         x: String::new(),
         y: String::new(),
         gps_scale: None,
@@ -205,9 +247,12 @@ fn blank_pair() -> Pair {
 }
 fn store(pane: Pane, mut spec: Spec, mut pairs: Vec<Pair>) -> Result<(), String> {
     while pairs.len() > 1
-        && pairs
-            .last()
-            .is_some_and(|pair| pair.x.is_empty() && pair.y.is_empty())
+        && pairs.last().is_some_and(|pair| {
+            pair.x.is_empty()
+                && pair.y.is_empty()
+                && (spec.map.is_none()
+                    || (pair.gps_scale == Some(1.) && pair.fix.is_empty() && pair.local.is_none()))
+        })
     {
         pairs.pop();
     }
@@ -218,6 +263,7 @@ fn store(pane: Pane, mut spec: Spec, mut pairs: Vec<Pair>) -> Result<(), String>
     spec.x = first.x;
     spec.y = first.y;
     spec.fix = first.fix;
+    spec.local = first.local;
     spec.gps_scale = first.gps_scale;
     spec.extra = pairs;
     spec.validate()?;
@@ -235,7 +281,11 @@ pub fn assign(pane: Pane, index: usize, y: bool, sources: &[String]) -> Result<(
             return Err("A 2D plot supports at most 256 traces".into());
         }
         while pairs.len() <= index {
-            pairs.push(blank_pair());
+            let mut pair = blank_pair();
+            if spec.map.is_some() {
+                pair.gps_scale = Some(1.);
+            }
+            pairs.push(pair);
         }
         if y {
             pairs[index].y = source.clone();
@@ -254,7 +304,11 @@ fn swap_slots(pane: Pane, from: (usize, bool), to: (usize, bool)) -> Result<(), 
         return Err("A 2D plot supports at most 256 pairs".into());
     }
     while pairs.len() <= from.0.max(to.0) {
-        pairs.push(blank_pair());
+        let mut pair = blank_pair();
+        if spec.map.is_some() {
+            pair.gps_scale = Some(1.);
+        }
+        pairs.push(pair);
     }
     let value = |slot: (usize, bool)| {
         pairs.get(slot.0).map(|pair| {
@@ -417,6 +471,10 @@ fn AxisSlot(workbench: Workbench, pane: Pane, index: usize, y: bool) -> impl Int
     let actions = SeriesSourceActions {
         on_move: UnsyncCallback::new(move |(x, y)| workbench.field_drag_move(x, y)),
         on_drop: UnsyncCallback::new(move |(source, x, py)| {
+            if workbench.builder_altitude_slot_at(x, py).is_some() {
+                workbench.drop_fields(source, x, py);
+                return;
+            }
             if ((pane.id == 0 && workbench.trajectory_builder().open.get_untracked())
                 || workbench.hit_any_plot(x, py) == Some(pane.id))
                 && let Some(to) = workbench.trajectory_slot_at(pane, x, py)
@@ -479,14 +537,19 @@ fn row_indices(pane: Pane) -> Vec<usize> {
 #[component]
 pub fn TrajectorySetup(workbench: Workbench, pane: Pane) -> impl IntoView {
     let builder = workbench.trajectory_builder();
+    let is_map = Memo::new(move |_| {
+        pane.trajectory
+            .with(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+    });
     view! {column(class="trajectory-setup-page"){
         row(class="trajectory-setup-heading"){
-            column(class="trajectory-heading-copy"){text(class="heading"){"2D plots"}text(class="trajectory-setup-caption"){"Pair fields, then drag to a plot"}}
-            ActionButton(icon=true,class="trajectory-close-builder",a11y:label="Close 2D setup",on:click=move |_|builder.open.set(false)){
+            column(class="trajectory-heading-copy"){text(class="heading"){{move ||if is_map.get(){"Map plots"}else{"2D plots"}}}text(class="trajectory-setup-caption"){{move ||if is_map.get(){"Bind coordinates and units, then drag a trace to a plot"}else{"Pair fields, then drag to a plot"}}}}
+            ActionButton(icon=true,class="trajectory-close-builder",a11y:label="Close plot setup",on:click=move |_|builder.open.set(false)){
                 vector(class="trajectory-control-icon",prop:viewBox="0 0 16 16",prop:d="M4 4 L12 12 M12 4 L4 12",a11y:hidden=true)
             }
         }
-        row(class="trajectory-axis-headings"){text{"X axis"}text{"Y axis"}}
+        if move ||is_map.get() {MapSettings(workbench=workbench,pane=pane)}
+        row(class="trajectory-axis-headings"){text{{move ||if is_map.get(){"Longitude / east"}else{"X axis"}}}text{{move ||if is_map.get(){"Latitude / north"}else{"Y axis"}}}}
         scroll(class="trajectory-setup-pairs",node_ref=builder.area){
             for index in move ||row_indices(pane),key=|index|*index{
                 column(class="trajectory-axis-pair"){
@@ -500,13 +563,120 @@ pub fn TrajectorySetup(workbench: Workbench, pane: Pane) -> impl IntoView {
                         }
                     }
                 }
+                if move ||is_map.get() {MapPairOptions(workbench=workbench,pane=pane,index=index) AltitudeOptions(workbench=workbench,pane=pane,index=index)}
                 if move ||pane.trajectory.with(|spec|spec.as_ref().and_then(|spec|spec.pairs().get(index).map(|pair|!pair.x.is_empty() && !pair.y.is_empty())).unwrap_or(false)){
                     PairDrag(workbench=workbench,pane=pane,index=index)
                 }
                 }
             }
         }
-        text(class="trajectory-setup-hint"){"Drop on a 2D plot to add a trace, or a time plot to create one."}
+        text(class="trajectory-setup-hint"){{move ||if is_map.get(){"Drop on a map to add a trace, or another plot to create a map."}else{"Drop on a 2D plot to add a trace, or a time plot to create one."}}}
+    }}
+}
+
+pub(crate) fn map_pair_options(
+    pane: Pane,
+    index: usize,
+    scale: f64,
+    fix: Option<String>,
+) -> Result<(), String> {
+    let Some(spec) = pane.trajectory.get_untracked() else {
+        return Ok(());
+    };
+    if spec.map.is_none() {
+        return Ok(());
+    }
+    let mut pairs = spec.pairs();
+    while pairs.len() <= index {
+        let mut p = blank_pair();
+        p.gps_scale = Some(1.);
+        pairs.push(p);
+    }
+    pairs[index].local = None;
+    pairs[index].gps_scale = Some(scale);
+    if let Some(fix) = fix {
+        pairs[index].fix = fix;
+    }
+    store(pane, spec, pairs)
+}
+#[component]
+fn MapPairOptions(workbench: Workbench, pane: Pane, index: usize) -> impl IntoView {
+    let scale = move || {
+        pane.trajectory
+            .with(|s| {
+                s.as_ref()
+                    .and_then(|s| s.pairs().get(index).and_then(|p| p.gps_scale))
+            })
+            .unwrap_or(1.)
+    };
+    view! {column(class="map-coordinate-options") {
+        row(class="map-coordinate-units") {
+            text(class="muted"){"Units"}
+            for item in move ||[(1.,"Degrees"),(1e-7,"Degrees x 10^7"),(180./std::f64::consts::PI,"Radians")],key=|item|item.0.to_bits() {
+                ActionButton(class="map-coordinate-unit",class:setting-active=move ||scale()==item.0&&!pane.trajectory.with(|s|s.as_ref().and_then(|s|s.pairs().get(index).map(|p|p.local.is_some())).unwrap_or(false)),on:click=move |_|{if let Err(e)=map_pair_options(pane,index,item.0,None){workbench.status.set(e);}}) {{item.1}}
+            }
+        }
+        ActionButton(class="map-coordinate-local",class:setting-active=move ||pane.trajectory.with(|s|s.as_ref().and_then(|s|s.pairs().get(index).map(|p|p.local.is_some())).unwrap_or(false)),on:click=move |_|{if let Err(e)=local_pair(pane,index){workbench.status.set(e);}}) {"Local metres (east / north)"}
+        if move ||pane.trajectory.with(|s|s.as_ref().and_then(|s|s.pairs().get(index).map(|p|p.local.is_some())).unwrap_or(false)) {LocalOriginOptions(workbench=workbench,pane=pane,index=index)}else {
+        Input(class="map-fix-field",a11y:label="GPS fix type field (optional)",placeholder="Fix type field ID (optional)",value=Binding::controlled(Signal::derive_local(move ||pane.trajectory.with(|s|s.as_ref().and_then(|s|s.pairs().get(index).map(|p|p.fix.clone()))).unwrap_or_default()),move |value:String|{if let Err(e)=map_pair_options(pane,index,scale(),Some(value.trim().to_owned())){workbench.status.set(e);}}))
+        }
+    }}
+}
+
+pub(crate) fn local_pair(pane: Pane, index: usize) -> Result<(), String> {
+    let Some(spec) = pane.trajectory.get_untracked() else {
+        return Ok(());
+    };
+    let mut pairs = spec.pairs();
+    while pairs.len() <= index {
+        pairs.push(blank_pair());
+    }
+    pairs[index].gps_scale = None;
+    pairs[index].fix.clear();
+    pairs[index].local.get_or_insert_with(Default::default);
+    store(pane, spec, pairs)
+}
+
+#[component]
+fn LocalOriginOptions(workbench: Workbench, pane: Pane, index: usize) -> impl IntoView {
+    let lat = RwSignal::new_local(String::new());
+    let lon = RwSignal::new_local(String::new());
+    let origin = Memo::new(move |_| {
+        pane.trajectory.with(|s| {
+            s.as_ref().and_then(|s| {
+                s.pairs()
+                    .get(index)
+                    .and_then(|p| p.local.and_then(|l| l.origin))
+            })
+        })
+    });
+    let sync = zgui::reactive::RenderEffect::new(move |_| {
+        let value = origin.get();
+        lat.set(value.map(|v| v[1].to_string()).unwrap_or_default());
+        lon.set(value.map(|v| v[0].to_string()).unwrap_or_default());
+    });
+    on_cleanup_local(move || drop(sync));
+    view! {column(class="local-origin-controls") {
+        row {
+            Input(class="local-origin-lat",value=lat,placeholder="Latitude",a11y:label="Starting latitude")
+            Input(class="local-origin-lon",value=lon,placeholder="Longitude",a11y:label="Starting longitude")
+        }
+        row {
+            ActionButton(class="local-origin-apply",on:click=move |_| {
+                let coords=lon.get_untracked().trim().parse::<f64>().ok().zip(lat.get_untracked().trim().parse::<f64>().ok());
+                if let Some((lon,lat))=coords {
+                    if let Err(error)=crate::mapping::flight::set_origin_at(pane,index,[lon,lat]){workbench.status.set(error);}
+                } else {workbench.status.set("Enter starting latitude and longitude in degrees".into());}
+            }) {"Set coordinates"}
+            ActionButton(class="local-origin-zero",on:click=move |_| {
+                if let Some(spec)=pane.trajectory.get_untracked() {
+                    let mut pairs=spec.pairs();
+                    if let Some(local)=pairs.get_mut(index).and_then(|p|p.local.as_mut()){local.at_first= !local.at_first;}
+                    if let Err(e)=store(pane,spec,pairs){workbench.status.set(e);}
+                }
+            }) {{move ||if pane.trajectory.with(|s|s.as_ref().and_then(|s|s.pairs().get(index).and_then(|p|p.local.map(|l|l.at_first))).unwrap_or(true)){"Anchor: first sample"}else{"Anchor: local zero"}}}
+        }
+        text(class="muted") {"Or drag onto a map, then use Set start in its legend."}
     }}
 }
 
@@ -602,6 +772,7 @@ mod tests {
             x: "x".into(),
             y: "y".into(),
             extra: vec![Pair {
+                local: None,
                 x: "x".into(),
                 y: "z".into(),
                 gps_scale: None,

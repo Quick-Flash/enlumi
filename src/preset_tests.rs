@@ -35,6 +35,7 @@ fn trajectory_recipe_preserves_axes_and_display_mode_through_capture_and_restore
         points: true,
         equal: false,
         extra: vec![crate::trajectory::Pair {
+            local: None,
             x: SOURCE.into(),
             y: other.clone(),
             gps_scale: None,

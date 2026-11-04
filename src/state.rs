@@ -41,8 +41,10 @@ pub struct Pane {
     pub analysis: RwSignal<Option<crate::analysis_state::AnalysisResult>, LocalStorage>,
     pub trajectory: RwSignal<Option<crate::trajectory::Spec>, LocalStorage>,
     pub trajectory_setup: RwSignal<bool, LocalStorage>,
+    pub map_origin_target: RwSignal<Option<String>, LocalStorage>,
     pub trajectory_data: RwSignal<Option<Arc<crate::trajectory::Tracks>>, LocalStorage>,
     pub timeline_link: RwSignal<bool, LocalStorage>,
+    pub altitude_slots: StoredValue<BTreeMap<usize, NodeRef>, LocalStorage>,
     pub trajectory_slots: StoredValue<BTreeMap<(usize, bool), NodeRef>, LocalStorage>,
     pub trajectory_drop: RwSignal<Option<(usize, bool)>, LocalStorage>,
     pub snapshot: plot::zgui_svg::PlotSnapshotSource,
@@ -104,8 +106,10 @@ impl Pane {
             analysis: RwSignal::new_local(None),
             trajectory,
             trajectory_setup: RwSignal::new_local(false),
+            map_origin_target: RwSignal::new_local(None),
             trajectory_data: RwSignal::new_local(None),
             timeline_link: RwSignal::new_local(true),
+            altitude_slots: StoredValue::new_local(BTreeMap::new()),
             trajectory_slots: StoredValue::new_local(BTreeMap::new()),
             trajectory_drop: RwSignal::new_local(None),
             snapshot: StoredValue::new_local(None),
@@ -153,6 +157,8 @@ impl Pane {
         if let Some(source) = source {
             self.trajectory.update(|spec| {
                 if let Some(spec) = spec {
+                    let previous = spec.pairs();
+                    let altitudes = spec.altitudes.clone();
                     spec.extra.retain(|pair| pair.y != source);
                     if spec.y == source {
                         if spec.extra.is_empty() {
@@ -162,13 +168,30 @@ impl Pane {
                             spec.x = pair.x;
                             spec.y = pair.y;
                             spec.fix = pair.fix;
+                            spec.local = pair.local;
                             spec.gps_scale = pair.gps_scale;
                         }
                     }
-                    keep_input = spec
+                    spec.altitudes = spec
                         .pairs()
                         .iter()
-                        .any(|pair| pair.x == source || pair.fix == source);
+                        .enumerate()
+                        .filter_map(|(slot, pair)| {
+                            previous
+                                .iter()
+                                .position(|old| old.y == pair.y)
+                                .and_then(|old| altitudes.get(&old).cloned())
+                                .map(|altitude| (slot, altitude))
+                        })
+                        .collect();
+                    keep_input = spec
+                        .altitudes
+                        .values()
+                        .any(|altitude| altitude.source == source)
+                        || spec
+                            .pairs()
+                            .iter()
+                            .any(|pair| pair.x == source || pair.fix == source);
                 }
             });
         }
@@ -184,6 +207,7 @@ impl Pane {
 #[derive(Clone, Copy)]
 pub struct Workbench {
     pub timeline: crate::timeline::Timeline,
+    pub(crate) map_tiles: StoredValue<Option<crate::mapping::Service>, LocalStorage>,
     pub authoring: crate::preset_ui::Authoring,
     pub views: crate::view_state::Views,
     pub workspaces: crate::workspace_state::Workspaces,
@@ -245,6 +269,7 @@ impl Workbench {
         let views = crate::view_state::Views::new();
         Self {
             timeline: crate::timeline::Timeline::new(),
+            map_tiles: StoredValue::new_local(None),
             authoring: crate::preset_ui::Authoring::new(),
             views,
             workspaces: crate::workspace_state::Workspaces::new(views),
@@ -482,6 +507,23 @@ impl Workbench {
         } else {
             active
         };
+        if pane.trajectory.with_untracked(|spec| {
+            spec.as_ref().is_some_and(|s| {
+                s.map.is_some()
+                    && !s
+                        .altitudes
+                        .values()
+                        .any(|altitude| altitude.source == source)
+                    && !s
+                        .pairs()
+                        .iter()
+                        .any(|p| p.x == source || p.y == source || p.fix == source)
+            })
+        }) {
+            self.status
+                .set("Bind longitude and latitude using Edit coordinates in the map pane".into());
+            return;
+        }
         pane.trajectory.update(|spec| {
             if let Some(spec) = spec {
                 spec.add_source(&source);
@@ -539,6 +581,21 @@ impl Workbench {
             }
             match result {
                 Ok(data) => {
+                    if pane.trajectory.with_untracked(|spec| {
+                        spec.as_ref().is_some_and(|s| {
+                            s.map.is_some()
+                                && !s
+                                    .altitudes
+                                    .values()
+                                    .any(|altitude| altitude.source == source)
+                                && !s
+                                    .pairs()
+                                    .iter()
+                                    .any(|p| p.x == source || p.y == source || p.fix == source)
+                        })
+                    }) {
+                        return;
+                    }
                     if pane
                         .lines
                         .with_untracked(|lines| lines.iter().any(|line| line.source == source))

@@ -4,6 +4,17 @@ use zgui::prelude::*;
 
 impl Pane {
     pub fn fit_axes(self, axes: Axes) {
+        if self
+            .trajectory
+            .with_untracked(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+        {
+            self.trajectory.update(|s| {
+                if let Some(map) = s.as_mut().and_then(|s| s.map.as_mut()) {
+                    map.camera = None;
+                }
+            });
+            return;
+        }
         if self.trajectory.with_untracked(Option::is_some) {
             if let Some(track) = self.trajectory_data.get_untracked() {
                 self.plot.fit_axes(

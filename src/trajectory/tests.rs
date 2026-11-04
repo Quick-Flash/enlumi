@@ -47,6 +47,7 @@ fn multiple_pairs_keep_identity_share_gps_origin_and_recover_other_valid_traces(
         y: "lat".into(),
         gps_scale: Some(1.),
         extra: vec![Pair {
+            local: None,
             x: "other_lon".into(),
             y: "other_lat".into(),
             gps_scale: Some(1.),

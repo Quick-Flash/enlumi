@@ -1,4 +1,4 @@
-//! Portable recipes. Viewport state and sample buffers deliberately have no fields here.
+//! Portable recipes. Map cameras are optional; Cartesian viewport state and sample buffers are omitted.
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, path::PathBuf};
 

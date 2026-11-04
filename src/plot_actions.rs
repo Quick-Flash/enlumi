@@ -11,7 +11,7 @@ pub fn PlotActions(workbench: Workbench, pane: Pane) -> impl IntoView {
     view! {
         row(class="plot-actions") {
         if move ||pane.trajectory.with(Option::is_some) {
-            ActionButton(class="trajectory-open-setup",on:click=move |_|workbench.edit_trajectory(pane)){"Edit X/Y"}
+            ActionButton(class="trajectory-open-setup",on:click=move |_|workbench.edit_trajectory(pane)){{move ||if pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())){"Edit coordinates"}else{"Edit X/Y"}}}
         }
         Screenshot(workbench=workbench,pane=pane)
         PlotPresetMenu(workbench=workbench,pane=pane)

@@ -550,8 +550,17 @@ impl Workbench {
             let Some(pane) = self.find(plot.id) else {
                 continue;
             };
+            if pane
+                .trajectory
+                .with_untracked(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+            {
+                pane.trajectory_data.set(None);
+            }
             pane.trajectory.update(|spec| {
                 if let Some(spec) = spec {
+                    if let Some(map) = &mut spec.map {
+                        map.camera = None;
+                    }
                     for source in spec.sources_mut() {
                         if source.is_empty() {
                             continue;

@@ -16,6 +16,8 @@ resolver = "3"
 
 [dependencies]
 async-channel = "2.5"
+base64 = "0.22.1"
+image = { version = "0.25.10", default-features = false, features = ["png", "webp"] }
 bbl_parser = { version = "1.1.1", default-features = false }
 flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 kurbo = "0.13.1"
@@ -24,6 +26,8 @@ plot = { package = "zgui-plot", git = "https://github.com/Quick-Flash/zgui-plot"
 px4-ulog = "0.6.1"
 rayon = "1.12"
 rfd = "0.17.2"
+# Enable embedded basemap PNGs in zgui-plot's shared PNG/clipboard rasterizer.
+resvg = { version = "0.46", default-features = false, features = ["raster-images"] }
 rustfft = { version = "6.4.1", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -36,6 +40,7 @@ proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 wasmtime = { version = "49", default-features = false, features = ["cranelift", "runtime", "std"] }
 # Framework revision from Quick-Flash/zgui branch enlumi/wayland-dnd-actions.
 zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "abc660ae5d6d39953412c8f5c32801bfb35ef341" }
+zgui-image = { git = "https://github.com/Quick-Flash/zgui", rev = "abc660ae5d6d39953412c8f5c32801bfb35ef341" }
 zgui-editor = { git = "https://github.com/Quick-Flash/zgui-editor", rev = "a5f84d76cd3f7e28860ea637f1e244501b524844", features = ["lang-rust"] }
 zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "abc660ae5d6d39953412c8f5c32801bfb35ef341" }
 zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", rev = "abc660ae5d6d39953412c8f5c32801bfb35ef341" }
@@ -67,6 +72,9 @@ zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "abc66
 [target.'cfg(windows)'.dependencies]
 zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+ureq = { version = "3.4.2", default-features = false, features = ["native-tls"] }
 
 # Keep upstream dependencies from editor/plot on the same framework fork.
 # PR branches and aggregate revisions: docs/UPSTREAM_PATCHES.md.

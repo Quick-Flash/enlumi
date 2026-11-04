@@ -95,6 +95,31 @@ pub(crate) fn config_directory() -> Option<PathBuf> {
             .map(|path| path.join("enlumi"))
     }
 }
+/// Writable per-user cache location, separate from portable workspace recipes.
+pub(crate) fn cache_directory() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    let directory = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .map(|p| p.join("Enlumi"));
+    #[cfg(target_os = "macos")]
+    let directory = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .map(|p| p.join("Library/Caches/Enlumi"));
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let directory = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+                .map(|p| p.join(".cache"))
+        })
+        .map(|p| p.join("enlumi"));
+    directory.or_else(|| config_directory().map(|p| p.join("cache")))
+}
 #[cfg(test)]
 mod tests {
     use super::*;

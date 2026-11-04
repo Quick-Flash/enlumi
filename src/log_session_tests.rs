@@ -165,6 +165,7 @@ fn trajectory_inputs_and_mode_survive_log_replacement_and_global_time_resets() {
         x: "sensor/0/value".into(),
         y: "other/0/value".into(),
         extra: vec![crate::trajectory::Pair {
+            local: None,
             x: "other/0/value".into(),
             y: "sensor/0/value".into(),
             gps_scale: None,

@@ -153,6 +153,16 @@ impl Workbench {
         self.profiles.pending_drop.set_value(None);
         let sources = self.resolve_field_sources(&pending.sources);
         match pending.target {
+            Destination::TrajectoryAltitude(index) => {
+                if let Some(source) = sources.first() {
+                    crate::mapping::settings::bind_altitude(
+                        self,
+                        self.trajectory_builder().pane,
+                        index,
+                        source.clone(),
+                    );
+                }
+            }
             Destination::TrajectoryAxis(index, y) => {
                 if let Err(error) = crate::trajectory_axes::assign(
                     self.trajectory_builder().pane,

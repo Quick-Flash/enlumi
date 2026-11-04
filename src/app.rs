@@ -115,7 +115,8 @@ pub fn WorkbenchApp(
                         else {workbench.new_analysis();}
                         workbench.filters_open.set(false);workbench.trajectory_builder().open.set(false);
                     }) {"Analyze"}
-                    ActionButton(class="create-2d-plot",class:setting-active=move ||workbench.trajectory_builder().open.get(),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked(){workbench.trajectory_builder().open.set(false);}else{workbench.new_trajectory(false);}}) {"2D plot"}
+                    ActionButton(class="create-2d-plot",class:setting-active=move ||workbench.trajectory_builder().open.get()&&!workbench.trajectory_builder().pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked()&&!workbench.trajectory_builder().pane.trajectory.with_untracked(|s|s.as_ref().is_some_and(|s|s.map.is_some())){workbench.trajectory_builder().open.set(false);}else{workbench.new_trajectory(false);}}) {"2D plot"}
+                    ActionButton(class="create-flight-map",class:setting-active=move ||workbench.trajectory_builder().open.get()&&workbench.trajectory_builder().pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked()&&workbench.trajectory_builder().pane.trajectory.with_untracked(|s|s.as_ref().is_some_and(|s|s.map.is_some())){workbench.trajectory_builder().open.set(false);}else{workbench.new_flight_map();}}) {"Map"}
                     ThemePicker(palette = palette, preferences = preferences.clone())
                     row(class="toolbar-brand") {
                         GithubLink(workbench = workbench)
@@ -133,8 +134,8 @@ pub fn WorkbenchApp(
                                 column(class = "plot-page") { PlotWorkspace(workbench = workbench) }
                             }
                             if move ||workbench.trajectory_builder().open.get(){
-                                ResizableHandle(label="Resize plot and 2D builder panels",class="workspace-divider")
-                                ResizablePanel(default_size=26.0,min_size=20.0,min_pixels=300.0,label="2D plot builder",class="trajectory-side-panel"){
+                                ResizableHandle(label="Resize plot and coordinate builder panels",class="workspace-divider")
+                                ResizablePanel(default_size=26.0,min_size=20.0,min_pixels=300.0,label="Coordinate plot builder",class="trajectory-side-panel"){
                                     TrajectoryWorkspace(workbench=workbench)
                                 }
                             }

@@ -1,3 +1,4 @@
+use crate::mapping::flight::FlightMapProps;
 use crate::{
     action_button::ActionButtonProps,
     plot_appearance::PlotBackgroundProps,
@@ -27,11 +28,11 @@ type PreparationFn = dyn Fn(&[crate::state::Line], &Spec) -> Result<Tracks, Stri
 
 #[cfg(test)]
 #[derive(Clone)]
-struct OverlayProbe(std::rc::Rc<std::cell::RefCell<Option<OverlayHandles>>>);
+pub(crate) struct OverlayProbe(pub(crate) std::rc::Rc<std::cell::RefCell<Option<OverlayHandles>>>);
 #[cfg(test)]
-struct OverlayHandles {
-    canvas: zgui::elements::canvas::CanvasHandle,
-    paths: RwSignal<crate::trajectory_render::Paths, LocalStorage>,
+pub(crate) struct OverlayHandles {
+    pub(crate) canvas: zgui::elements::canvas::CanvasHandle,
+    pub(crate) paths: RwSignal<crate::trajectory_render::Paths, LocalStorage>,
 }
 
 #[cfg(test)]
@@ -60,8 +61,14 @@ impl Workbench {
             spec = gps;
         }
         let builder = self.trajectory_builder();
-        if gps {
+        if gps
+            || builder
+                .pane
+                .trajectory
+                .with_untracked(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+        {
             builder.pane.trajectory.set(Some(spec));
+            builder.target.set(None);
         }
         builder.pane.lines.set(original.lines.get_untracked());
         if gps {
@@ -107,7 +114,11 @@ pub fn TrajectoryPlot(
     let cancel = StoredValue::new_local(None::<Arc<AtomicBool>>);
     #[cfg(test)]
     let preparation_hook = use_local_context::<PreparationHook>();
-    let inputs = Memo::new(move |_| pane.trajectory.get().map(|spec| spec.pairs()));
+    let inputs = Memo::new(move |_| {
+        pane.trajectory
+            .get()
+            .map(|spec| (spec.pairs(), spec.map.is_some()))
+    });
     let content = Memo::new(move |_| {
         let mut keys = pane.lines.with(|lines| {
             lines
@@ -204,7 +215,12 @@ pub fn TrajectoryPlot(
                     Ok(data) => {
                         let ranges = PlotData::Scatter(data.scatter.clone())
                             .fitted_ranges(&pane.plot.hidden.get_untracked(), 32);
-                        let _ = pane.plot.set_view(ranges);
+                        if !pane
+                            .trajectory
+                            .with_untracked(|spec| spec.as_ref().is_some_and(|s| s.map.is_some()))
+                        {
+                            let _ = pane.plot.set_view(ranges);
+                        }
                         message.set(data.warnings.join("; "));
                         pane.trajectory_data.set(Some(data));
                     }
@@ -288,16 +304,20 @@ pub fn TrajectoryPlot(
     });
     let press = StoredValue::new_local(None::<(f32, f32)>);
     view! {column(class="trajectory-pane") {
-        column(class="trajectory-chart",node_ref=area,on:pointer_down:capture=move |event| {if event.button==Some(zgui::vocab::PointerButton::Primary){press.set_value(Some((event.position.x.0,event.position.y.0)));}},on:pointer_up:capture=move |event| {
+        column(class="trajectory-chart",class:flight-map-chart=move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),node_ref=area,on:pointer_down:capture=move |event| {if event.button==Some(zgui::vocab::PointerButton::Primary){press.set_value(Some((event.position.x.0,event.position.y.0)));}},on:pointer_up:capture=move |event| {
             if pane.timeline_link.get_untracked() && let Some((x,y))=press.get_value() && (event.position.x.0-x).hypot(event.position.y.0-y)<4. && let Some(time)=hovered_time(pane) {let _=workbench.timeline.pin(time);}press.set_value(None);
         },on:pointer_cancel=move |_|press.set_value(None)) {
-            DataPlot(series=series,state=pane.plot,options=options,background_layer=move ||AnyView::new(view!{PlotBackground(background=pane.background,visible=visible)}))
+            if move ||pane.trajectory.with(|spec|spec.as_ref().is_some_and(|s|s.map.is_some())) {
+                FlightMap(workbench=workbench,pane=pane,visible=visible)
+            }else {
+            DataPlot(series=series,state=pane.plot,options=options.clone(),background_layer=move ||AnyView::new(view!{PlotBackground(background=pane.background,visible=visible)}))
             TrajectoryOverlay(workbench=workbench,pane=pane,visible=chart_visible)
             column(class="trajectory-plot-controls"){
                 TrajectoryLegend(workbench=workbench,pane=pane)
                 row(class="trajectory-plot-tools"){
                     ActionButton(class="trajectory-equal-scale",class:setting-active=move ||pane.trajectory.with(|spec|spec.as_ref().is_some_and(|spec|spec.equal)),on:pointer_down=move |event|{press.set_value(None);event.stop_propagation();},on:click=move |_|pane.trajectory.update(|spec|if let Some(spec)=spec{spec.equal= !spec.equal;})){"Equal scale"}
                 }
+            }
             }
             if move ||busy.get() || !message.get().is_empty() {
                 text(class="trajectory-status muted",a11y:role=Role::Status) {{move ||if busy.get(){"Preparing 2D traces...".into()}else{message.get()}}}
@@ -321,37 +341,12 @@ fn hovered_time(pane: Pane) -> Option<f64> {
 }
 
 #[component]
-fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoView {
+pub(crate) fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoView {
     let collapsed = RwSignal::new_local(false);
     let settings = RwSignal::new_local(false);
     plot::zgui_svg::register_description(
         plot::zgui_svg::SnapshotLayer::Foreground,
-        move |description| {
-            let entries = pane
-                .view_lines
-                .get_untracked()
-                .iter()
-                .map(|line| {
-                    plot::zgui_plot::theme::LEGEND.entry(
-                        plot::LegendMarker::Line,
-                        &line.name,
-                        pane.plot.style(&line.id.to_string()).css_color(),
-                        !pane
-                            .plot
-                            .hidden
-                            .with_untracked(|hidden| hidden.contains(&line.id.to_string())),
-                    )
-                })
-                .collect();
-            description.push_legend(
-                entries,
-                (
-                    description.width - plot::zgui_plot::theme::LEGEND_RIGHT,
-                    plot::zgui_plot::theme::LEGEND_TOP,
-                ),
-                &plot::zgui_plot::theme::legend_box(),
-            );
-        },
+        move |description| describe_legend(pane, description),
     );
     view! {column(class="workbench-legend trajectory-legend",on:pointer_down=move |event|event.stop_propagation(),on:pointer_up=move |event|event.stop_propagation()) {
         row(class="legend-heading") {
@@ -367,6 +362,39 @@ fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoView {
             }
         }
     }}
+}
+
+pub(crate) fn describe_legend(pane: Pane, description: &mut plot::PlotDescription) {
+    let order = pane.legend_order.get_untracked();
+    let mut lines = pane.view_lines.get_untracked();
+    lines.sort_by_key(|line| {
+        order
+            .iter()
+            .position(|id| *id == line.id)
+            .unwrap_or(usize::MAX)
+    });
+    let entries = lines
+        .iter()
+        .map(|line| {
+            plot::zgui_plot::theme::LEGEND.entry(
+                plot::LegendMarker::Line,
+                &line.name,
+                pane.plot.style(&line.id.to_string()).css_color(),
+                !pane
+                    .plot
+                    .hidden
+                    .with_untracked(|hidden| hidden.contains(&line.id.to_string())),
+            )
+        })
+        .collect();
+    description.push_legend(
+        entries,
+        (
+            description.width - plot::zgui_plot::theme::LEGEND_RIGHT,
+            plot::zgui_plot::theme::LEGEND_TOP,
+        ),
+        &plot::zgui_plot::theme::legend_box(),
+    );
 }
 
 #[component]
@@ -394,11 +422,14 @@ fn TrajectoryLegendRow(
     view! {row(class="trajectory-legend-row"){
         LegendEntry(host=workbench.legend_host(),pane=pane.display(),line=line)
         SwapAxes(workbench=workbench,pane=pane,index=index)
+        if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some()&&s.pairs().get(index.get()).is_some_and(|p|p.local.is_some()))) {
+            ActionButton(class="map-place-start",on:click=move |_|{if let Some(source)=pane.trajectory.get_untracked().and_then(|s|s.pairs().get(index.get_untracked()).map(|p|p.y.clone())) {pane.map_origin_target.set(Some(source));}}) {"Set start"}
+        }
     }}
 }
 
 #[component]
-fn TrajectoryOverlay(
+pub(crate) fn TrajectoryOverlay(
     workbench: Workbench,
     pane: Pane,
     visible: Signal<bool, LocalStorage>,
@@ -542,6 +573,7 @@ fn TrajectoryOverlay(
     });
     // Timeline motion only changes this small marker scene, never the retained paths.
     let markers = zgui::elements::canvas::CanvasHandle::new();
+    crate::mapping::export::register_canvases(handle.clone(), markers.clone());
     plot::zgui_svg::register_canvas(&markers, plot::zgui_svg::SnapshotLayer::Foreground);
     let marker_drawing = markers.clone();
     plot::zgui_renderer::redraw_on_change(move || {
@@ -566,10 +598,39 @@ fn TrajectoryOverlay(
                 }
                 let [r, gc, b, a] = pane.plot.style(&key).color;
                 let color = Color::srgb_u8(r, gc, b, a);
+                if pane
+                    .trajectory
+                    .with(|spec| spec.as_ref().is_some_and(|s| s.map.is_some()))
+                {
+                    for (point, color) in [
+                        (trace.track.endpoints.0, Color::srgb_u8(40, 230, 110, 255)),
+                        (trace.track.endpoints.1, Color::srgb_u8(240, 75, 65, 255)),
+                    ] {
+                        let mut path = kurbo::BezPath::new();
+                        plot::append_circle(
+                            &mut path,
+                            (g.x(point.x, ranges.x), g.y(point.y, ranges.y)),
+                            5.,
+                        );
+                        plot::zgui_renderer::push_fill_stroke(
+                            scene,
+                            path,
+                            color,
+                            Color::srgb_u8(255, 255, 255, 255),
+                            1.,
+                        );
+                    }
+                }
                 if let Some(point) = workbench
                     .timeline
                     .time
                     .get()
+                    .filter(|_| {
+                        pane.timeline_link.get()
+                            || !pane
+                                .trajectory
+                                .with(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+                    })
                     .and_then(|time| trace.track.at(time))
                     && ranges.x.contains(point.x)
                     && ranges.y.contains(point.y)

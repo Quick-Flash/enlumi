@@ -62,7 +62,7 @@ pub fn Panel(
                     on_close = UnsyncCallback::new(move |id| workbench.close_plot(id)),
                     on_add = UnsyncCallback::new(move |id| { workbench.add_plot(id, false, true); }))
                 }
-                PlotLinksMenu(pane=pane)
+                if move ||!pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {PlotLinksMenu(pane=pane)}
                 PlotActions(workbench = workbench, pane = pane)
                 if move || pane.loading.with(Option::is_some) {
                     text(class="plot-loading",a11y:role=Role::Status) {{move ||pane.loading.get().unwrap_or_default()}}

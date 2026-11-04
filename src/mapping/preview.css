@@ -1,0 +1,41 @@
+.map-preview { width: 100%; height: 100%; padding: 12px; gap: 8px; }
+.map-preview-toolbar { align-items: center; gap: 8px; flex: none; flex-wrap: wrap; }
+.map-status { flex: none; }
+.map-preview-workspace { position: relative; flex: 1; min-height: 0; width: 100%; }
+.map-viewport { position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+.map-tiles, .map-gpu { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.map-tile { position: absolute; left: 0; top: 0; width: 256px; height: 256px; transform-origin: 0 0; }
+.map-tile-image { width: 256px; height: 256px; }
+.map-tile-label { position: absolute; left: 4px; top: 4px; color: #ffffff; font-size: 11px; }
+.map-terrain-input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; cursor: grab; }
+.map-terrain-input:active { cursor: grabbing; }
+.map-terrain-help { position: absolute; left: 8px; top: 8px; color: white; background: #151b26cc; font-size: 11px; pointer-events: none; }
+.map-attribution { flex: none; gap: 16px; flex-wrap: wrap; font-size: 11px; }
+.map-load-status { flex: 1; min-width: 0; font-size: 11px; }
+
+.map-distance-scale { position: absolute; left: 8px; bottom: 8px; width: 144px; padding: 6px 8px; gap: 4px; background: #151b26dd; color: white; font-size: 11px; pointer-events: none; }
+.map-scale-reference { font-size: 10px; color: #c4cdd8; }
+.map-scale-row { gap: 2px; }
+.map-scale-rule { height: 5px; border-left: 2px solid white; border-right: 2px solid white; border-bottom: 2px solid white; flex: none; }
+
+.flight-map { flex: 1; min-height: 0; min-width: 0; height: 100%; gap: 0; }
+.flight-map-controls { flex: none; gap: 6px; padding: 4px; align-items: center; flex-wrap: wrap; }
+.flight-map-source-name { min-width: 0; flex: 1; font-size: 11px; overflow: hidden; }
+.flight-map-view { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: hidden; background: #18212a; }
+.flight-map-view > .map-viewport { position: absolute; inset: 0; }
+.flight-map-footer { padding: 2px 4px; align-items: center; }
+.flight-map-chart > .trajectory-status { top: 42px; bottom: auto; }
+
+.map-coordinate-options { padding: 4px; gap: 4px; flex: none; }
+.map-coordinate-units { gap: 4px; flex-wrap: wrap; align-items: center; }
+.map-fix-field { width: 100%; font-size: 11px; }
+
+.local-origin-controls { gap: 4px; flex: none; }
+.local-origin-controls > row { gap: 4px; flex-wrap: wrap; }
+.local-origin-lat, .local-origin-lon { flex: 1; min-width: 80px; }
+.map-origin-prompt { color: #ffcc66; font-size: 11px; }
+
+.map-sidebar-settings, .map-altitude-options { gap: 6px; padding: 6px; flex: none; }
+
+.map-hover-pin { position: absolute; width: 14px; height: 14px; border: 2px solid #ffffff; border-radius: 50%; background: #ffbe3c88; transform: translate(-50%, -50%); pointer-events: none; }
+.map-hover-tooltip { position: absolute; width: 246px; padding: 8px; border: 1px solid #697580; border-radius: 4px; background: #12181ef2; color: #ffffff; font-size: 12px; white-space: pre; pointer-events: none; }

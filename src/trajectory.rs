@@ -10,6 +10,12 @@ use std::sync::Arc;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Spec {
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub altitudes: std::collections::BTreeMap<usize, Altitude>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<crate::mapping::flight::LocalFrame>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map: Option<crate::mapping::flight::Config>,
     pub x: String,
     pub y: String,
     /// GPS: X is longitude, Y is latitude; scale converts wire values to degrees.
@@ -23,8 +29,26 @@ pub struct Spec {
     pub extra: Vec<Pair>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Altitude {
+    pub source: String,
+    pub scale: f64,
+    pub local: bool,
+}
+impl Default for Altitude {
+    fn default() -> Self {
+        Self {
+            source: String::new(),
+            scale: 1.,
+            local: true,
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Pair {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<crate::mapping::flight::LocalFrame>,
     pub x: String,
     pub y: String,
     pub gps_scale: Option<f64>,
@@ -34,6 +58,9 @@ pub struct Pair {
 impl Default for Spec {
     fn default() -> Self {
         Self {
+            altitudes: Default::default(),
+            local: None,
+            map: None,
             x: String::new(),
             y: String::new(),
             gps_scale: None,
@@ -48,6 +75,7 @@ impl Default for Spec {
 impl Spec {
     pub fn pairs(&self) -> Vec<Pair> {
         std::iter::once(Pair {
+            local: self.local,
             x: self.x.clone(),
             y: self.y.clone(),
             gps_scale: self.gps_scale,
@@ -57,13 +85,27 @@ impl Spec {
         .collect()
     }
     pub fn sources_mut(&mut self) -> impl Iterator<Item = &mut String> {
-        [&mut self.x, &mut self.y, &mut self.fix].into_iter().chain(
-            self.extra
-                .iter_mut()
-                .flat_map(|pair| [&mut pair.x, &mut pair.y, &mut pair.fix]),
-        )
+        [&mut self.x, &mut self.y, &mut self.fix]
+            .into_iter()
+            .chain(
+                self.extra
+                    .iter_mut()
+                    .flat_map(|pair| [&mut pair.x, &mut pair.y, &mut pair.fix]),
+            )
+            .chain(
+                self.altitudes
+                    .values_mut()
+                    .map(|altitude| &mut altitude.source),
+            )
     }
     pub fn add_source(&mut self, source: &str) {
+        if self
+            .altitudes
+            .values()
+            .any(|altitude| altitude.source == source)
+        {
+            return;
+        }
         if self
             .pairs()
             .iter()
@@ -87,6 +129,7 @@ impl Spec {
             }
         } else if self.extra.len() < 255 {
             self.extra.push(Pair {
+                local: None,
                 x: source.into(),
                 y: String::new(),
                 gps_scale: None,
@@ -96,11 +139,37 @@ impl Spec {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if self
+            .altitudes
+            .values()
+            .any(|a| !a.scale.is_finite() || a.scale == 0.)
+        {
+            return Err("Altitude scale must be nonzero and finite".into());
+        }
+        if let Some(map) = &self.map {
+            map.validate()?;
+            if self
+                .pairs()
+                .iter()
+                .any(|pair| pair.gps_scale.is_none() && pair.local.is_none())
+            {
+                return Err(
+                    "Choose geographic coordinates or anchored local metres for each map trace"
+                        .into(),
+                );
+            }
+        }
         let mut seen = std::collections::BTreeSet::new();
         if self.extra.len() > 255 {
             return Err("A 2D plot supports at most 256 traces".into());
         }
         for pair in self.pairs() {
+            if let Some(local) = pair.local {
+                local.validate()?;
+                if self.map.is_none() || pair.gps_scale.is_some() {
+                    return Err("Local anchors require a map trace with metre units".into());
+                }
+            }
             if !pair.y.is_empty() && !seen.insert(pair.y) {
                 return Err("Each Y signal can appear only once in a 2D plot".into());
             }
@@ -128,6 +197,8 @@ pub struct Track {
     pub vertices: Arc<[[f32; 2]]>,
     pub origin: PlotPoint,
     pub gps_origin: Option<(f64, f64)>,
+    pub geographic: Option<Arc<[[f64; 2]]>>,
+    pub endpoints: (PlotPoint, PlotPoint),
     max_gap: f64,
 }
 pub struct PreparedTrace {
@@ -143,6 +214,7 @@ pub struct Tracks {
 }
 #[derive(Default, PartialEq)]
 struct Inputs {
+    map: bool,
     pairs: Vec<Pair>,
     lines: Vec<(u64, String, String, u64, usize, usize)>,
 }
@@ -163,6 +235,7 @@ impl Inputs {
             .collect::<Vec<_>>();
         keys.sort_by_key(|line| line.0);
         Self {
+            map: spec.map.is_some(),
             pairs: spec.pairs(),
             lines: keys,
         }
@@ -213,6 +286,8 @@ impl Tracks {
                     )
                 };
                 let local = Spec {
+                    local: pair.local,
+                    map: spec.map,
                     x: pair.x,
                     y: pair.y,
                     gps_scale: pair.gps_scale,
@@ -309,6 +384,25 @@ impl Track {
         }
         let max_gap = intervals.get(intervals.len() / 2).copied().unwrap_or(0.) * 10.;
         let mut previous_time = None;
+        let mut geographic = (spec.gps_scale.is_some() || spec.local.is_some())
+            .then(|| Vec::with_capacity(reference.len()));
+        let local_frame = spec
+            .local
+            .map(|frame| {
+                let origin = frame.origin.ok_or_else(|| {
+                    "Choose the starting location for this local trace".to_string()
+                })?;
+                let mut world = crate::mapping::flight::project(origin[0], origin[1]).unwrap();
+                if let Some((lon, lat)) = anchor {
+                    let reference = crate::mapping::flight::project(lon, lat).unwrap()[0];
+                    world[0] += ((reference - world[0]) / crate::mapping::flight::WORLD).round()
+                        * crate::mapping::flight::WORLD;
+                }
+                Ok::<_, String>((frame, origin, world, origin[1].to_radians().cos()))
+            })
+            .transpose()?;
+        let mut local_zero = None;
+        let mut previous_x = None::<f64>;
         for (index, sample) in reference.iter().enumerate() {
             if index % 4096 == 0 && cancelled() {
                 return Err("2D preparation superseded".into());
@@ -317,14 +411,41 @@ impl Track {
                 x: sample.y,
                 y: aligned.at(index, sample.x),
             };
-            if let Some(scale) = spec.gps_scale {
+            let gap = previous_time.is_some_and(|time| sample.x - time > max_gap);
+            if gap {
+                previous_x = None;
+            }
+            let mut geo = [f64::NAN; 2];
+            if let Some((frame, origin, world, scale)) = local_frame {
+                if point.x.is_finite() && point.y.is_finite() {
+                    let zero = if frame.at_first {
+                        *local_zero.get_or_insert([point.x, point.y])
+                    } else {
+                        [0., 0.]
+                    };
+                    point = PlotPoint {
+                        x: world[0] + (point.x - zero[0]) / scale,
+                        y: world[1] + (point.y - zero[1]) / scale,
+                    };
+                    let coords = crate::mapping::flight::geographic([point.x, point.y]);
+                    geo = [(coords[0] + 180.).rem_euclid(360.) - 180., coords[1]];
+                    gps_origin = Some((origin[0], origin[1]));
+                } else {
+                    point = PlotPoint {
+                        x: f64::NAN,
+                        y: f64::NAN,
+                    };
+                }
+            } else if let Some(scale) = spec.gps_scale {
                 let (lon, lat) = (point.x * scale, point.y * scale);
                 let valid_fix = fix.is_none_or(|fix| {
                     let values = fix.samples();
                     let right = values.partition_point(|value| value.x <= sample.x);
                     right.checked_sub(1).is_some_and(|index| {
                         let value = values[index];
-                        value.y.is_finite() && value.y >= 3. && sample.x - value.x <= max_gap
+                        value.y.is_finite()
+                            && value.y >= (if spec.map.is_some() { 2. } else { 3. })
+                            && sample.x - value.x <= max_gap
                     })
                 });
                 if !valid_fix
@@ -338,14 +459,32 @@ impl Track {
                         y: f64::NAN,
                     };
                 } else {
+                    geo = [lon, lat];
                     let (lon0, lat0) = *gps_origin.get_or_insert((lon, lat));
                     // Local spherical East/North coordinates, with dateline wrapping.
                     let dlon = (lon - lon0 + 180.).rem_euclid(360.) - 180.;
                     point.x = 6_371_008.8 * dlon.to_radians() * lat0.to_radians().cos();
                     point.y = 6_371_008.8 * (lat - lat0).to_radians();
+                    if spec.map.is_some() {
+                        let [mut x, y] = crate::mapping::flight::project(lon, lat)
+                            .expect("Validated geographic coordinates");
+                        let reference = previous_x.unwrap_or_else(|| {
+                            crate::mapping::flight::project(lon0, lat0).unwrap()[0]
+                        });
+                        x += ((reference - x) / crate::mapping::flight::WORLD).round()
+                            * crate::mapping::flight::WORLD;
+                        previous_x = Some(x);
+                        point = PlotPoint { x, y };
+                    }
                 }
             }
-            if previous_time.is_some_and(|time| sample.x - time > max_gap) {
+            if !point.x.is_finite() {
+                previous_x = None;
+            }
+            if gap {
+                if let Some(geo) = &mut geographic {
+                    geo.push([f64::NAN; 2]);
+                }
                 times.push(sample.x);
                 points.push(PlotPoint {
                     x: f64::NAN,
@@ -353,6 +492,9 @@ impl Track {
                 });
             }
             previous_time = Some(sample.x);
+            if let Some(geographic) = &mut geographic {
+                geographic.push(geo);
+            }
             times.push(sample.x);
             points.push(point);
         }
@@ -362,6 +504,17 @@ impl Track {
         {
             return Err("No overlapping valid X/Y samples".into());
         }
+        let endpoints = (
+            *points
+                .iter()
+                .find(|p| p.x.is_finite() && p.y.is_finite())
+                .unwrap(),
+            *points
+                .iter()
+                .rev()
+                .find(|p| p.x.is_finite() && p.y.is_finite())
+                .unwrap(),
+        );
         let points: Arc<[PlotPoint]> = points.into();
         let series = ScatterSeries::new(id, label, points.clone())?;
         let vertices = series.vertices();
@@ -374,6 +527,8 @@ impl Track {
             vertices,
             origin,
             gps_origin,
+            geographic: geographic.map(Arc::from),
+            endpoints,
             max_gap,
         })
     }
@@ -405,6 +560,10 @@ impl Track {
 
 /// Pair only fields in the same message/instance, never different vehicles or GPS receivers.
 pub fn gps_pair(ids: &[String]) -> Option<Spec> {
+    gps_pairs(ids).into_iter().next()
+}
+pub fn gps_pairs(ids: &[String]) -> Vec<Spec> {
+    let mut pairs = Vec::new();
     for id in ids {
         let (prefix, field, delimiter, scale) = if id.starts_with("mavlink/") {
             let Some((prefix, field)) = id.rsplit_once('.') else {
@@ -449,7 +608,7 @@ pub fn gps_pair(ids: &[String]) -> Option<Spec> {
             continue;
         }
         let fix = format!("{prefix}{delimiter}fix_type");
-        return Some(Spec {
+        pairs.push(Spec {
             x: id.clone(),
             y: lat,
             gps_scale: Some(scale),
@@ -461,7 +620,7 @@ pub fn gps_pair(ids: &[String]) -> Option<Spec> {
             ..Default::default()
         });
     }
-    None
+    pairs
 }
 
 pub fn equal_ranges(mut ranges: plot::Ranges, width: f64, height: f64) -> plot::Ranges {
