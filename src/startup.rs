@@ -105,7 +105,10 @@ pub fn retry_with_software_vulkan() {
         eprintln!("No hardware GPU can present. Retrying with the software Vulkan driver.");
         let mut args: Vec<_> = std::env::args_os().skip(1).collect();
         // The first start already consumed and deleted the update stage directory.
-        if args.first().is_some_and(|arg| arg == "--enlumi-finish-update") {
+        if args
+            .first()
+            .is_some_and(|arg| arg == "--enlumi-finish-update")
+        {
             args.clear();
         }
         let error = std::process::Command::new(exe)
@@ -146,12 +149,19 @@ mod software_retry_tests {
 
     #[test]
     fn retry_stops_after_the_marker_is_set() {
-        assert!(!software_retry_allowed(with(&[("ENLUMI_SOFTWARE_RETRY", "1")])));
+        assert!(!software_retry_allowed(with(&[(
+            "ENLUMI_SOFTWARE_RETRY",
+            "1"
+        )])));
     }
 
     #[test]
     fn retry_respects_a_user_driver_choice() {
-        for name in ["VK_DRIVER_FILES", "VK_LOADER_DRIVERS_SELECT", "ZGUI_BACKENDS"] {
+        for name in [
+            "VK_DRIVER_FILES",
+            "VK_LOADER_DRIVERS_SELECT",
+            "ZGUI_BACKENDS",
+        ] {
             let set: &'static [(&str, &str)] = Box::leak(Box::new([(name, "x")]));
             assert!(!software_retry_allowed(with(set)), "{name}");
         }
