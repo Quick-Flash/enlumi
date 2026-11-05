@@ -103,8 +103,13 @@ pub fn retry_with_software_vulkan() {
             return;
         };
         eprintln!("No hardware GPU can present. Retrying with the software Vulkan driver.");
+        let mut args: Vec<_> = std::env::args_os().skip(1).collect();
+        // The first start already consumed and deleted the update stage directory.
+        if args.first().is_some_and(|arg| arg == "--enlumi-finish-update") {
+            args.clear();
+        }
         let error = std::process::Command::new(exe)
-            .args(std::env::args_os().skip(1))
+            .args(args)
             .env(SOFTWARE_RETRY_MARKER, "1")
             .env_remove("VK_LOADER_DRIVERS_DISABLE")
             .env("VK_LOADER_DRIVERS_SELECT", "*lvp*")
