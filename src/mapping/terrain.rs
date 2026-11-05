@@ -801,8 +801,10 @@ mod retention_tests {
             marker: plot::plot_data::MarkerShape::Circle,
             local: true,
         };
-        let mut scene = Scene::default();
-        scene.paths = Arc::from([path.clone()]);
+        let mut scene = Scene {
+            paths: Arc::from([path.clone()]),
+            ..Default::default()
+        };
         scene
             .path_bases
             .insert((1, 0_f64.to_bits(), 0_f64.to_bits()), 1200.);

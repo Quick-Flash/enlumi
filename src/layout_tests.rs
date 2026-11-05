@@ -265,7 +265,7 @@ fn inactive_normal_views_release_renderers_and_restore_plot_state() {
         );
     }
     assert_eq!(pane.plot.ranges.get_untracked(), ranges);
-    workbench.switch_view(original.view().id);
+    workbench.switch_view(original.view_untracked().id);
     harness.settle(128);
     assert_eq!(
         harness.app().windows()[0]
@@ -312,7 +312,7 @@ fn trajectory_timeline_renders_in_both_domains_and_preserves_spatial_zoom() {
     let xy = workbench.trajectory_builder().pane;
     assert!(xy.trajectory.with_untracked(Option::is_some));
     assert_eq!(
-        workbench.panes().with_untracked(Vec::len),
+        workbench.view_untracked().panes.with_untracked(Vec::len),
         1,
         "Opening the builder must not create a plot"
     );
@@ -439,7 +439,7 @@ fn trajectory_timeline_renders_in_both_domains_and_preserves_spatial_zoom() {
     harness.deliver_to_first(pointer(PointerAction::Released, tx, ty));
     harness.settle(128);
     assert_eq!(
-        workbench.panes().with_untracked(Vec::len),
+        workbench.view_untracked().panes.with_untracked(Vec::len),
         2,
         "Dragging a pair onto an occupied time plot must create a 2D pane"
     );
@@ -467,7 +467,7 @@ fn trajectory_timeline_renders_in_both_domains_and_preserves_spatial_zoom() {
     harness.deliver_to_first(pointer(PointerAction::Released, tx, ty));
     harness.settle(128);
     assert_eq!(
-        workbench.panes().with_untracked(Vec::len),
+        workbench.view_untracked().panes.with_untracked(Vec::len),
         2,
         "Dropping onto a 2D plot must reuse it"
     );
@@ -3348,6 +3348,7 @@ fn shift_release_cancels_box_zoom_before_mouse_release() {
             let surface_interaction = plot::zgui_surface::SurfaceInteraction {
                 geometry: UnsyncCallback::new(|()| plot::PlotGeometry::with_bounds(0.0,0.0,900.0,600.0,900.0,600.0)),
                 ranges: UnsyncCallback::new(move |()| ranges.get_untracked()),
+                tracked_ranges: UnsyncCallback::new(move |()| ranges.get()),
                 on_update: UnsyncCallback::new(move |update: plot::interaction::RangeUpdate| ranges.update(|ranges| *ranges = update.apply(*ranges))),
                 on_reset: UnsyncCallback::new(|()| {}), on_hover: UnsyncCallback::new(|_| {}),
             };
@@ -3422,7 +3423,7 @@ fn splitter_drag_pushes_other_edge_only_at_minimum_and_restores_it_on_reverse() 
         .into_handler(move || {
             let workbench = Workbench::new(); let first = workbench.pane();
             let second = workbench.add_plot(first.id, false, false); let third = workbench.add_plot(second.id, false, false);
-            workbench.layout().set(plot::workspace::layout::Layout::flat(&[(first.id, 1.0), (second.id, 1.0), (third.id, 1.0)], false));
+            workbench.view_untracked().layout.set(plot::workspace::layout::Layout::flat(&[(first.id, 1.0), (second.id, 1.0), (third.id, 1.0)], false));
             view! { ThemeProvider(scheme = ColorScheme::Dark) { column(class = "page workbench") { row(class = "body") { PlotWorkspace(workbench = workbench) } } } }
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
@@ -3523,7 +3524,7 @@ fn workspace_arrow_guide_previews_and_docks_beside_stacked_panels() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock().target.get_untracked(),
+            workbench.view_untracked().dock.target.get_untracked(),
             Some((third.id, zone))
         );
         let window = &harness.app().windows()[0];
@@ -3596,7 +3597,7 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
             .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench=Workbench::new(); let first=workbench.pane(); let second=workbench.add_plot(first.id,false,false); let third=workbench.add_plot(second.id,false,false); let fourth=workbench.add_plot(second.id,true,false); let source=workbench.add_plot(first.id,false,true);
-                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],false); assert!(layout.split(second.id,fourth.id,true)); assert!(layout.add_plot_tab(first.id,source.id)); workbench.layout().set(layout);
+                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],false); assert!(layout.split(second.id,fourth.id,true)); assert!(layout.add_plot_tab(first.id,source.id)); workbench.view_untracked().layout.set(layout);
                 *captured.borrow_mut()=Some((workbench,first,second,third,fourth,source));
                 view! { ThemeProvider(scheme=ColorScheme::Dark) { column(class="page workbench") { row(class="body") { PlotWorkspace(workbench=workbench) } } } }
             }).unwrap();
@@ -3633,7 +3634,7 @@ fn nested_group_guides_dock_in_middle_without_moving_outer_siblings() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock().group_target.get_untracked(),
+            workbench.view_untracked().dock.group_target.get_untracked(),
             Some((vec![second.id, fourth.id], zone))
         );
         assert!(
@@ -3750,7 +3751,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
             .with_stylesheet(format!("{}\n{}\n{}\n{}",plot::zgui_surface::stylesheet(),plot::zgui_time_series::stylesheet(),plot::zgui_workspace::stylesheet(),crate::theme::stylesheet()))
             .into_handler(move || {
                 let workbench=Workbench::new();let first=workbench.pane();let second=workbench.add_plot(first.id,true,false);let third=workbench.add_plot(second.id,true,false);let outside=if top {third}else{first};let source=workbench.add_plot(outside.id,false,true);
-                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],true);assert!(layout.add_plot_tab(outside.id,source.id));workbench.layout().set(layout);
+                let mut layout=Layout::flat(&[(first.id,1.0),(second.id,1.0),(third.id,1.0)],true);assert!(layout.add_plot_tab(outside.id,source.id));workbench.view_untracked().layout.set(layout);
                 let members=if top {vec![first.id,second.id]}else{vec![second.id,third.id]};*captured.borrow_mut()=Some((workbench,outside,source,members,first,second,third));
                 view!{ThemeProvider(scheme=ColorScheme::Dark){column(class="page workbench"){row(class="body"){PlotWorkspace(workbench=workbench)}}}}
             }).unwrap();
@@ -3786,7 +3787,7 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock().group_target.get_untracked(),
+            workbench.view_untracked().dock.group_target.get_untracked(),
             Some((members.clone(), DropZone::Right))
         );
         let window = &harness.app().windows()[0];
@@ -3811,10 +3812,13 @@ fn three_rows_offer_top_two_and_bottom_two_region_guides() {
             .unwrap();
         let other = opposite.button(DropZone::Right);
         let other_point = ((other.x + 11.0) as f32, (other.y + 11.0) as f32);
-        let generic_target = workbench.dock().target.get_untracked();
+        let generic_target = workbench.view_untracked().dock.target.get_untracked();
         harness.deliver_to_first(pointer(PointerAction::Moved, other_point.0, other_point.1));
         harness.settle(128);
-        assert_eq!(workbench.dock().target.get_untracked(), generic_target);
+        assert_eq!(
+            workbench.view_untracked().dock.target.get_untracked(),
+            generic_target
+        );
         let other_preview = harness.app().windows()[0]
             .box_with_class("dock-preview-source")
             .unwrap();
@@ -3917,10 +3921,17 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
         harness.deliver_to_first(pointer(PointerAction::Moved, x, y));
         harness.settle(128);
         assert_eq!(
-            workbench.dock().target.get_untracked(),
+            workbench.view_untracked().dock.target.get_untracked(),
             Some((second.id, zone))
         );
-        assert!(workbench.dock().group_target.get_untracked().is_none());
+        assert!(
+            workbench
+                .view_untracked()
+                .dock
+                .group_target
+                .get_untracked()
+                .is_none()
+        );
         let window = &harness.app().windows()[0];
         for class in [
             "dock-zone-top",
@@ -3954,7 +3965,12 @@ fn per_dock_targets_keep_edge_and_center_drops_and_preview_neighbor_movement() {
             assert_eq!(second.dock.node.window_bounds().unwrap(), neighbor);
         } else {
             assert_eq!(
-                workbench.layout().get_untracked().tab_ids(first.id).len(),
+                workbench
+                    .view_untracked()
+                    .layout
+                    .get_untracked()
+                    .tab_ids(first.id)
+                    .len(),
                 2
             );
         }
@@ -4260,7 +4276,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
     )));
     harness.settle(256);
     let (workbench, first, second) = saved.borrow().unwrap();
-    let original = workbench.layout().get_untracked();
+    let original = workbench.view_untracked().layout.get_untracked();
     let bounds = second.dock.node.window_bounds().unwrap();
     let scale = second.dock.node.scale();
     let center = (
@@ -4316,7 +4332,12 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
             source.id
         );
         assert!(
-            workbench.dock().target.get_untracked().is_none(),
+            workbench
+                .view_untracked()
+                .dock
+                .target
+                .get_untracked()
+                .is_none(),
             "Self-center remains no-op drop"
         );
         let window = &harness.app().windows()[0];
@@ -4353,7 +4374,7 @@ fn own_tab_group_keeps_docking_guides_visible_over_center() {
         std::thread::sleep(Duration::from_millis(180));
         harness.advance(Duration::from_millis(500));
         harness.settle(256);
-        assert_eq!(workbench.layout().get_untracked(), original);
+        assert_eq!(workbench.view_untracked().layout.get_untracked(), original);
         assert!(
             harness.app().windows()[0]
                 .nodes_with_class("dock-drop-overlay")
@@ -4790,7 +4811,7 @@ fn trajectory_scalar_drops_create_time_plots_and_legend_swap_works() {
     assert!(time.trajectory.with_untracked(Option::is_none));
     wait(&mut harness, &|| time.lines.with_untracked(Vec::len) == 2);
     assert_eq!(
-        workbench.panes().with_untracked(Vec::len),
+        workbench.view_untracked().panes.with_untracked(Vec::len),
         2,
         "A multi-field drop creates one time plot"
     );
@@ -4822,7 +4843,7 @@ fn trajectory_scalar_drops_create_time_plots_and_legend_swap_works() {
     assert!(added.trajectory.with_untracked(Option::is_none));
     assert_eq!(added.lines.get_untracked()[0].id, line);
     assert_eq!(xy.trajectory.get_untracked(), Some(before));
-    assert_eq!(workbench.panes().with_untracked(Vec::len), 3);
+    assert_eq!(workbench.view_untracked().panes.with_untracked(Vec::len), 3);
 }
 
 #[test]
@@ -4876,7 +4897,7 @@ fn saved_workspace_ui_survives_switching_between_ulog_and_tlog() {
         workbench.use_saved_preset(key.clone(), "Review".into(), ApplyAction::Workspace);
         finish(&mut harness, workbench);
         let workspace = workbench.workspace_id();
-        let panes = workbench.panes().get_untracked();
+        let panes = workbench.view_untracked().panes.get_untracked();
         assert_eq!(panes.len(), 1);
         assert!(panes[0].lines.with_untracked(Vec::is_empty));
         for (file, available) in [(matching, true), (other, false), (matching, true)] {
@@ -5181,7 +5202,7 @@ fn field_double_click_renames_and_context_edit_keeps_identity_and_plot_bounds() 
     assert_eq!(pane.lines.get_untracked()[0].source, source);
     assert_eq!(pane.lines.get_untracked()[0].name, "Motor speed");
     assert_eq!(pane.plot.ranges.get_untracked(), ranges);
-    assert_eq!(workbench.panes().with_untracked(Vec::len), 1);
+    assert_eq!(workbench.view_untracked().panes.with_untracked(Vec::len), 1);
     assert!(workbench.drag.state.get_untracked().is_none());
     let field = harness.app().windows()[0]
         .box_with_class("metric-option")
@@ -5276,7 +5297,10 @@ fn view_picker_creates_renames_duplicates_switches_and_closes_views() {
         harness.settle(128);
     }
     click_class(&mut harness, "view-rename");
-    assert_eq!(workbench.view().name.get_untracked(), "Comparison");
+    assert_eq!(
+        workbench.view_untracked().name.get_untracked(),
+        "Comparison"
+    );
     let select = |harness: &mut Harness<zgui::runtime::Runtime>, label: &str| {
         harness.advance(Duration::from_millis(200));
         harness.settle(128);
@@ -5372,7 +5396,7 @@ fn workspace_views_restore_layout_and_isolate_linked_axes() {
         .set_view(plot::Ranges::new((0., 2.), (-3., 3.)))
         .unwrap();
     harness.settle(128);
-    let layout = original.layout().get_untracked();
+    let layout = original.view_untracked().layout.get_untracked();
     let bounds = first.plot.ranges.get_untracked();
     let other = workbench.new_view();
     workbench.pane().links.set(links);
@@ -5392,10 +5416,10 @@ fn workspace_views_restore_layout_and_isolate_linked_axes() {
         bounds,
         "Another view cannot publish linked ranges into hidden plots"
     );
-    workbench.switch_view(original.view().id);
+    workbench.switch_view(original.view_untracked().id);
     harness.settle(128);
     assert_eq!(visible_plots(&harness), 2);
-    assert_eq!(workbench.layout().get_untracked(), layout);
+    assert_eq!(workbench.view_untracked().layout.get_untracked(), layout);
     assert_eq!(first.plot.ranges.get_untracked(), bounds);
     assert_eq!(
         second.plot.ranges.get_untracked().y,
@@ -5426,7 +5450,11 @@ fn background_fields_profiles_and_ffts_stay_in_originating_view() {
     let origin = workbench.bind_view();
     let time = origin.pane();
     origin.add(raw.clone());
-    origin.analysis().sources.set(vec![raw.clone()]);
+    origin
+        .view_untracked()
+        .analysis
+        .sources
+        .set(vec![raw.clone()]);
     origin.run_analysis();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("background.json");
@@ -5442,17 +5470,17 @@ fn background_fields_profiles_and_ffts_stay_in_originating_view() {
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
         harness.settle(128);
-        if !origin.analysis().busy.get_untracked()
+        if !origin.view_untracked().analysis.busy.get_untracked()
             && !workbench.profiles.busy.get_untracked()
             && time.lines.with_untracked(Vec::len) == 2
-            && origin.panes().with_untracked(Vec::len) == 2
+            && origin.view_untracked().panes.with_untracked(Vec::len) == 2
         {
             break;
         }
         assert!(
             Instant::now() < deadline,
             "Background view jobs failed: {}; {}",
-            origin.analysis().message.get_untracked(),
+            origin.view_untracked().analysis.message.get_untracked(),
             workbench.profiles.error.get_untracked()
         );
         std::thread::sleep(Duration::from_millis(2));
@@ -5462,9 +5490,9 @@ fn background_fields_profiles_and_ffts_stay_in_originating_view() {
         workbench.filters_open.get_untracked(),
         "Hidden profile completion cannot close current configuration panel"
     );
-    assert_eq!(workbench.panes().with_untracked(Vec::len), 1);
+    assert_eq!(workbench.view_untracked().panes.with_untracked(Vec::len), 1);
     assert!(workbench.pane().lines.with_untracked(Vec::is_empty));
-    let fft = origin.panes().with_untracked(|panes| {
+    let fft = origin.view_untracked().panes.with_untracked(|panes| {
         panes
             .iter()
             .find(|pane| pane.analysis.with_untracked(Option::is_some))
@@ -5500,22 +5528,22 @@ fn background_fields_profiles_and_ffts_stay_in_originating_view() {
     origin.run_analysis();
     origin.close_plot(fft.id);
     let deadline = Instant::now() + Duration::from_secs(10);
-    while origin.analysis().busy.get_untracked() {
+    while origin.view_untracked().analysis.busy.get_untracked() {
         harness.settle(128);
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(2));
     }
     assert_eq!(
-        origin.panes().with_untracked(Vec::len),
+        origin.view_untracked().panes.with_untracked(Vec::len),
         1,
         "Closed FFT target cannot be recreated by pending update"
     );
-    origin.analysis().target.set(None);
+    origin.view_untracked().analysis.target.set(None);
     origin.run_analysis();
-    workbench.close_view(origin.view().id);
+    workbench.close_view(origin.view_untracked().id);
     harness.settle(128);
     assert_eq!(workbench.views.active.get_untracked(), other);
-    assert!(workbench.for_view(origin.view().id).is_none());
+    assert!(workbench.for_view(origin.view_untracked().id).is_none());
     assert_eq!(workbench.all_panes().len(), 1);
 }
 
@@ -5620,10 +5648,17 @@ fn unified_browser_drops_mixed_sources_and_prepares_profiles_without_losing_fiel
     workbench.queue_field_sources(selected.clone(), Destination::Filter, None);
     assert_eq!(workbench.filter_inputs.with_untracked(Vec::len), 3);
     workbench.filters_open.set(false);
-    workbench.analysis().sources.set(Vec::new());
+    workbench.view_untracked().analysis.sources.set(Vec::new());
     workbench.selected_field.set(Some(raw));
     workbench.analyze_selection();
-    assert_eq!(workbench.analysis().sources.with_untracked(Vec::len), 3);
+    assert_eq!(
+        workbench
+            .view_untracked()
+            .analysis
+            .sources
+            .with_untracked(Vec::len),
+        3
+    );
     assert!(
         workbench
             .analysis()
@@ -5656,7 +5691,7 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     }
     click_class(&mut harness, "create-selection-fft");
     assert!(
-        !workbench.analysis().open.get_untracked(),
+        !workbench.view_untracked().analysis.open.get_untracked(),
         "FFT requires a log and field selection"
     );
     let log = std::sync::Arc::new(
@@ -5695,15 +5730,15 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     }
     click_class(&mut harness, "create-selection-psd");
     assert!(
-        !workbench.analysis().open.get_untracked(),
+        !workbench.view_untracked().analysis.open.get_untracked(),
         "PSD requires field or view selection"
     );
     click_class(&mut harness, "analyze-selection");
     assert!(
-        workbench.analysis().open.get_untracked(),
+        workbench.view_untracked().analysis.open.get_untracked(),
         "Configure opens Analyze without a selection"
     );
-    workbench.analysis().open.set(false);
+    workbench.view_untracked().analysis.open.set(false);
     workbench.profiles.open.set(true);
     harness.settle(128);
     let library = harness.app().windows()[0]
@@ -5792,7 +5827,7 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     }
     harness.settle(128);
     assert_eq!(
-        workbench.panes().with_untracked(Vec::len),
+        workbench.view_untracked().panes.with_untracked(Vec::len),
         2,
         "{}",
         workbench.profiles.error.get_untracked()
@@ -5801,12 +5836,12 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
     workbench.selected_field.set(Some(profile_output.source()));
     harness.settle(128);
     click_class(&mut harness, "analyze-selection");
-    assert!(workbench.analysis().open.get_untracked());
+    assert!(workbench.view_untracked().analysis.open.get_untracked());
     assert_eq!(
-        workbench.analysis().sources.get_untracked(),
+        workbench.view_untracked().analysis.sources.get_untracked(),
         vec!["esc_status/0/esc[5].esc_rpm".to_owned()]
     );
-    workbench.analysis().open.set(false);
+    workbench.view_untracked().analysis.open.set(false);
     workbench.selected_field.set(None);
     harness.settle(128);
     assert!(
@@ -5828,7 +5863,7 @@ fn sidebar_profiles_and_view_buttons_work_in_real_layout() {
         }
         harness.settle(128);
     }
-    assert_eq!(workbench.panes().with_untracked(Vec::len), 2);
+    assert_eq!(workbench.view_untracked().panes.with_untracked(Vec::len), 2);
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 1);
     assert_eq!(
         workbench
@@ -6745,7 +6780,7 @@ fn state_editor_spans_plots_and_scrolls_without_compressing_controls() {
         moved.origin.x.0 + moved.size.width.0
             > second.dock.node.window_bounds().unwrap().origin.x.0
     );
-    assert_eq!(workbench.active().get_untracked(), first.id);
+    assert_eq!(workbench.view_untracked().active.get_untracked(), first.id);
     assert!(
         harness.app().windows()[0]
             .pointer_capture(zgui::vocab::PointerId::MOUSE)
@@ -7269,9 +7304,9 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
                 heatmap:(mode==Mode::Spectrogram).then(||Heatmap{values:vec![Some(0.0),Some(1.0),Some(2.0),Some(3.0)].into(),columns:2,rows:2,x_low:0.0,x_high:10.0,y_low:0.0,y_high:500.0,x_label:"Time (s)".into(),y_label:"Frequency (Hz)".into(),min_db:0.0,max_db:3.0}),
             };
             let time=workbench.add_analysis_panel(result(Mode::Spectrogram));
-            workbench.layout().update(|layout| {assert!(layout.dock_split(time.id,normal.id,DropZone::Right));});
+            workbench.view_untracked().layout.update(|layout| {assert!(layout.dock_split(time.id,normal.id,DropZone::Right));});
             let frequency=workbench.add_analysis_panel(result(Mode::Fft));
-            workbench.layout().update(|layout| {assert!(layout.dock_split(frequency.id,normal.id,DropZone::Bottom));});
+            workbench.view_untracked().layout.update(|layout| {assert!(layout.dock_split(frequency.id,normal.id,DropZone::Bottom));});
             *captured.borrow_mut()=Some((workbench,normal,time,frequency));
             view! { column(class="page workbench") { row(class="body") { PlotWorkspace(workbench=workbench) } } }
         }).unwrap();
@@ -7366,9 +7401,18 @@ fn analysis_panels_share_docking_and_link_only_matching_x_domains() {
     let copy = workbench.pane();
     assert!(copy.analysis.get_untracked().is_some());
     workbench.maximize(copy.id);
-    assert_eq!(workbench.maximized().get_untracked(), Some(copy.id));
+    assert_eq!(
+        workbench.view_untracked().maximized.get_untracked(),
+        Some(copy.id)
+    );
     workbench.close_plot(copy.id);
-    assert_eq!(workbench.panes().with_untracked(|panes| panes.len()), 3);
+    assert_eq!(
+        workbench
+            .view_untracked()
+            .panes
+            .with_untracked(|panes| panes.len()),
+        3
+    );
 }
 
 #[test]
@@ -7400,8 +7444,8 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
                 sources.push(field.key());
                 workbench.derived.update(|fields| fields.push(field));
             }
-            workbench.analysis().open.set(true);
-            workbench.analysis().sources.set(sources);
+            workbench.view_untracked().analysis.open.set(true);
+            workbench.view_untracked().analysis.sources.set(sources);
             let normal = workbench.pane();
             *captured.borrow_mut() = Some((workbench, normal));
             view! { column(class="page workbench") { row(class="body") {
@@ -7432,7 +7476,7 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
         harness.settle(128);
         harness.deliver_to_first(pointer(PointerAction::Released, target.0, target.1));
         let deadline = Instant::now() + Duration::from_secs(10);
-        while workbench.analysis().busy.get_untracked() {
+        while workbench.view_untracked().analysis.busy.get_untracked() {
             assert!(Instant::now() < deadline);
             harness.pump();
             std::thread::sleep(Duration::from_millis(2));
@@ -7446,10 +7490,10 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
     );
     drag(&mut harness, 0, target);
     assert_eq!(
-        workbench.panes().get_untracked().len(),
+        workbench.view_untracked().panes.get_untracked().len(),
         2,
         "{}",
-        workbench.analysis().message.get_untracked()
+        workbench.view_untracked().analysis.message.get_untracked()
     );
     assert!(normal.lines.get_untracked().is_empty());
     let fft = workbench.pane();
@@ -7458,13 +7502,13 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
             .as_ref()
             .is_some_and(|result| result.mode == crate::spectral::Mode::Fft)
     }));
-    let inputs = workbench.analysis().sources.get_untracked();
+    let inputs = workbench.view_untracked().analysis.sources.get_untracked();
     let zoom = plot::Ranges::new((12., 80.), (0.01, 0.2));
     fft.plot.set_view(zoom).unwrap();
     workbench.edit_analysis(fft);
     workbench.run_analysis();
     let deadline = Instant::now() + Duration::from_secs(10);
-    while workbench.analysis().busy.get_untracked() {
+    while workbench.view_untracked().analysis.busy.get_untracked() {
         assert!(Instant::now() < deadline);
         harness.pump();
         std::thread::sleep(Duration::from_millis(2));
@@ -7503,9 +7547,17 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
     harness.deliver_to_first(pointer(PointerAction::Pressed, point.0, point.1));
     harness.deliver_to_first(pointer(PointerAction::Released, point.0, point.1));
     harness.settle(128);
-    assert_eq!(workbench.analysis().mode.get_untracked(), "psd");
+    assert_eq!(
+        workbench.view_untracked().analysis.mode.get_untracked(),
+        "psd"
+    );
     assert!(
-        workbench.analysis().target.get_untracked().is_none(),
+        workbench
+            .view_untracked()
+            .analysis
+            .target
+            .get_untracked()
+            .is_none(),
         "Choosing a new mode must detach existing FFT edit target"
     );
     for class in ["analysis-new", "analysis-edit-selected", "analysis-update"] {
@@ -7516,11 +7568,15 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
         );
     }
     assert!(fft.analysis.get_untracked().unwrap().mode == crate::spectral::Mode::Fft);
-    workbench.analysis().target.set(None);
-    workbench.analysis().sources.set(inputs);
-    workbench.analysis().mode.set("heatmap".into());
+    workbench.view_untracked().analysis.target.set(None);
+    workbench.view_untracked().analysis.sources.set(inputs);
+    workbench
+        .view_untracked()
+        .analysis
+        .mode
+        .set("heatmap".into());
     harness.settle(128);
-    let condition = workbench.analysis().condition_drop;
+    let condition = workbench.view_untracked().analysis.condition_drop;
     let bounds = condition.window_bounds().unwrap();
     drag(
         &mut harness,
@@ -7531,17 +7587,21 @@ fn analysis_field_gestures_create_fft_and_conditioned_heatmap_in_separate_tabs()
         ),
     );
     assert_eq!(
-        workbench.analysis().condition.get_untracked(),
-        workbench.analysis().sources.get_untracked()[1]
+        workbench
+            .view_untracked()
+            .analysis
+            .condition
+            .get_untracked(),
+        workbench.view_untracked().analysis.sources.get_untracked()[1]
     );
-    workbench.analysis().size.set("128".into());
+    workbench.view_untracked().analysis.size.set("128".into());
     harness.settle(128);
     drag(&mut harness, 0, target);
     assert_eq!(
-        workbench.panes().get_untracked().len(),
+        workbench.view_untracked().panes.get_untracked().len(),
         3,
         "{}",
-        workbench.analysis().message.get_untracked()
+        workbench.view_untracked().analysis.message.get_untracked()
     );
     assert!(workbench.pane().analysis.with_untracked(|result| {
         result
@@ -7563,8 +7623,8 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
             let workbench = Workbench::new();
             let pane = workbench.pane();
             pane.plot.set_view(plot::Ranges::new((0., 10.), (-1., 1.))).unwrap();
-            workbench.analysis().open.set(true);
-            workbench.analysis().picking_range.set(true);
+            workbench.view_untracked().analysis.open.set(true);
+            workbench.view_untracked().analysis.picking_range.set(true);
             *captured.borrow_mut()=Some((workbench,pane));
             view! { column(class="page") { column(class="range-test") {AnalysisRange(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} } }
         }).unwrap();
@@ -7592,7 +7652,13 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
     );
     harness.deliver_to_first(pointer(PointerAction::Released, left, y));
     harness.settle(128);
-    assert!(!workbench.analysis().picking_range.get_untracked());
+    assert!(
+        !workbench
+            .view_untracked()
+            .analysis
+            .picking_range
+            .get_untracked()
+    );
     assert!(
         (workbench
             .analysis()
@@ -7620,8 +7686,11 @@ fn analysis_range_drag_sets_ordered_times_without_changing_plot_view() {
         .set_view(plot::Ranges::new((1., 4.), (-1., 1.)))
         .unwrap();
     workbench.use_visible_analysis_range();
-    assert_eq!(workbench.analysis().start.get_untracked(), "1");
-    assert_eq!(workbench.analysis().end.get_untracked(), "4");
+    assert_eq!(
+        workbench.view_untracked().analysis.start.get_untracked(),
+        "1"
+    );
+    assert_eq!(workbench.view_untracked().analysis.end.get_untracked(), "4");
 }
 
 #[test]
@@ -7644,7 +7713,7 @@ fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
                 options:crate::spectral::Options{mode:crate::spectral::Mode::Fft,size:0,window:crate::spectral::Window::Hann,overlap:50,heatmap_bins:40,start:None,end:None,remove_dc:true},
                 series:TimeSeriesSet::new(vec![TimeSeries::new("wave","Wave",data)]).unwrap(),
             });
-            workbench.layout().update(|layout|{assert!(layout.dock_split(fft.id,normal.id,plot::workspace::layout::DropZone::Right));});
+            workbench.view_untracked().layout.update(|layout|{assert!(layout.dock_split(fft.id,normal.id,plot::workspace::layout::DropZone::Right));});
             for pane in [normal,fft]{pane.plot.set_view(plot::Ranges::new((0.,1.),(0.,2.))).unwrap();}
             let palette=RwSignal::new_local(Palette::Slate);
             let input=NodeRef::new();let keys=NodeRef::new();*captured.borrow_mut()=Some((workbench,normal,fft,input,keys,palette));
@@ -8320,7 +8389,10 @@ fn saved_workspace_tree_keeps_views_between_workspaces_and_plots() {
     );
     // Preset tests cover async sample restoration; here the nested tree key must
     // select the intended view, rather than a plot or the whole workspace.
-    assert_eq!(workbench.view().name.get_untracked(), "Saved view");
+    assert_eq!(
+        workbench.view_untracked().name.get_untracked(),
+        "Saved view"
+    );
 }
 
 #[test]

@@ -172,10 +172,10 @@ fn tile_images(
         let mut layers = Vec::new();
         let mut source = tile;
         loop {
-            if let Some(payload) = service.payload(Key::raster_from(source, provider)) {
-                if matches!(payload.as_ref(), Payload::Raster(_)) {
-                    layers.push((camera.place(source, size), payload));
-                }
+            if let Some(payload) = service.payload(Key::raster_from(source, provider))
+                && matches!(payload.as_ref(), Payload::Raster(_))
+            {
+                layers.push((camera.place(source, size), payload));
             }
             if source.z == 0 {
                 break;

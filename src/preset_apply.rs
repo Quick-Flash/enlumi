@@ -47,7 +47,7 @@ impl Workbench {
         self.authoring.pending.set_value(Some(ApplyRequest {
             key: key.clone(),
             name,
-            view: self.bind_view().view().id,
+            view: self.bind_view().view_untracked().id,
             action,
         }));
         if self
@@ -170,7 +170,7 @@ impl Workbench {
         let target = if new {
             let id = self.create_view();
             let target = self.for_view(id).unwrap();
-            target.view().name.set(recipe.name.clone());
+            target.view_untracked().name.set(recipe.name.clone());
             if self.is_current_view() {
                 self.switch_view(id);
             }
@@ -179,13 +179,13 @@ impl Workbench {
             self
         };
         if new {
-            target.view().preset.set(Some(PresetSource {
+            target.view_untracked().preset.set(Some(PresetSource {
                 path: key.path.clone(),
                 name: recipe.name.clone(),
                 baseline: String::new(),
             }));
             target.authoring.restoring.update_value(|pending| {
-                pending.insert(target.view().id, recipe.plots.len());
+                pending.insert(target.view_untracked().id, recipe.plots.len());
             });
         }
         let old = target.layout().get_untracked();
@@ -506,7 +506,7 @@ impl Workbench {
     }
     fn preset_plot_finished(self) {
         self.authoring.restoring.update_value(|pending| {
-            if let Some(count) = pending.get_mut(&self.view().id) {
+            if let Some(count) = pending.get_mut(&self.view_untracked().id) {
                 *count = count.saturating_sub(1);
             }
         });
@@ -517,17 +517,17 @@ impl Workbench {
         let done = self
             .authoring
             .restoring
-            .with_value(|pending| pending.get(&self.view().id) == Some(&0));
+            .with_value(|pending| pending.get(&self.view_untracked().id) == Some(&0));
         if !done {
             return;
         }
         self.authoring.restoring.update_value(|pending| {
-            pending.remove(&self.view().id);
+            pending.remove(&self.view_untracked().id);
         });
         if !self.view_exists() {
             return;
         }
-        if let Some(mut source) = self.view().preset.get_untracked()
+        if let Some(mut source) = self.view_untracked().preset.get_untracked()
             && let Ok(bundle) = crate::preset_capture::capture(
                 self,
                 &crate::preset_capture::CaptureKind::View,
@@ -535,7 +535,7 @@ impl Workbench {
             )
         {
             source.baseline = serde_json::to_string(&bundle.document).unwrap_or_default();
-            self.view().preset.set(Some(source));
+            self.view_untracked().preset.set(Some(source));
         }
     }
     fn restore_preset_appearance(

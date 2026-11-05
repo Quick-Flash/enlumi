@@ -64,9 +64,29 @@ impl Views {
 
 impl Workbench {
     pub fn view(self) -> WorkspaceView {
+        if reactive_graph::graph::Observer::get().is_none() {
+            return self.view_untracked();
+        }
+        self.view_tracked()
+    }
+    pub fn view_tracked(self) -> WorkspaceView {
         self.bound_view.unwrap_or_else(|| {
             let id = self.views.active.get();
             self.views.items.with(|views| {
+                views
+                    .iter()
+                    .find(|view| view.id == id)
+                    .copied()
+                    .expect("Active view exists")
+            })
+        })
+    }
+    /// Resolve current view without registering reactive dependencies.
+    /// Use from callbacks, worker completions, and imperative code.
+    pub fn view_untracked(self) -> WorkspaceView {
+        self.bound_view.unwrap_or_else(|| {
+            let id = self.views.active.get_untracked();
+            self.views.items.with_untracked(|views| {
                 views
                     .iter()
                     .find(|view| view.id == id)
@@ -196,14 +216,14 @@ impl Workbench {
                 .set("Use view name between 1 and 256 bytes".into());
             return;
         }
-        self.bind_view().view().name.set(name.into());
+        self.bind_view().view_untracked().name.set(name.into());
     }
     pub fn duplicate_view(self) -> u64 {
-        let source = self.bind_view().view();
+        let source = self.bind_view().view_untracked();
         let id = self.copy_view(source);
         self.for_view(id)
             .unwrap()
-            .view()
+            .view_untracked()
             .name
             .set(format!("{} copy", source.name.get_untracked()));
         id
@@ -213,7 +233,10 @@ impl Workbench {
         let layout = source.layout.get_untracked();
         let id = self.new_view();
         let target = self.for_view(id).unwrap();
-        target.view().name.set(source.name.get_untracked());
+        target
+            .view_untracked()
+            .name
+            .set(source.name.get_untracked());
         let mut mapped = std::collections::BTreeMap::new();
         let first = target.pane();
         for (index, pane) in original.iter().enumerate() {

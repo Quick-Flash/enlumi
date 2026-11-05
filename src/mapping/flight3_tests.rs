@@ -8,11 +8,9 @@ use zgui_platform_headless::Harness;
 #[test]
 fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
     let _zone = zgui::reactive::enter_non_reactive_zone();
-    let graphics = zgui_render_wgpu::SharedGraphics::new();
-    if let Err(error) = graphics.open_gpu() {
-        eprintln!("Skipping 3D map pixels: {error}");
+    let Some(graphics) = super::super::test_renderer::graphics() else {
         return;
-    }
+    };
     let directory = tempfile::tempdir().unwrap();
     let local = directory.path().to_path_buf();
     let captured = std::rc::Rc::new(std::cell::RefCell::new(None));
@@ -63,10 +61,10 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
                 p[0] > 180 && p[1] < 90 && p[2] > 100
             })
             .count();
-        if colored > 10 || std::time::Instant::now() >= deadline {
-            if let Some(path) = std::env::var_os("ENLUMI_MAP_3D_PREVIEW") {
-                super::super::tests::capture(&pixels, path);
-            }
+        if (colored > 10 || std::time::Instant::now() >= deadline)
+            && let Some(path) = std::env::var_os("ENLUMI_MAP_3D_PREVIEW")
+        {
+            super::super::tests::capture(&pixels, path);
         }
         if colored > 10 {
             break;

@@ -304,11 +304,9 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     };
     use zgui_platform_headless::Harness;
     let _zone = zgui::reactive::enter_non_reactive_zone();
-    let graphics = zgui_render_wgpu::SharedGraphics::new();
-    if let Err(error) = graphics.open_gpu() {
-        eprintln!("Skipping flight map GPU: {error}");
+    let Some(graphics) = super::super::test_renderer::graphics() else {
         return;
-    }
+    };
     let directory = tempfile::tempdir_in("target").unwrap();
     let local = directory.path().to_path_buf();
     let captured = Rc::new(RefCell::new(None));
@@ -760,9 +758,12 @@ fn map_builder_is_explicit_supports_multiple_traces_and_independent_maps() {
     let workbench = window.scope.with(Workbench::new);
     workbench.log.set(Some(log(0.)));
     let first = workbench.pane();
-    let count = workbench.panes().get_untracked().len();
+    let count = workbench.view_untracked().panes.get_untracked().len();
     workbench.new_flight_map();
-    assert_eq!(workbench.panes().get_untracked().len(), count);
+    assert_eq!(
+        workbench.view_untracked().panes.get_untracked().len(),
+        count
+    );
     let blank = workbench
         .trajectory_builder()
         .pane

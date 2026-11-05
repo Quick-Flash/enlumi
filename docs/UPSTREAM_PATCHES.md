@@ -54,7 +54,7 @@ Aggregate: [`enlumi/all-fixes`](https://github.com/Quick-Flash/zgui-plot/tree/en
 `0087b2b2efb5666a26eaf4f1ee8779c61caa04b3`.
 
 Consumed branch: [`master`](https://github.com/Quick-Flash/zgui-plot/tree/master),
-`5537852574b7838c56a553b3debffc8b12ef3c43`. This includes the merged aggregate
+`eb9a799f55686b1a435c4335735eae39b5a8f1a0`. This includes the merged aggregate
 and retained time bands, including rectangle fills and fixed-width boundaries.
 The published commit has the same source tree as local `e7e928cd`, used for
 the retained-band and latest PR #21 benchmarks. Enlumi pins the published Git

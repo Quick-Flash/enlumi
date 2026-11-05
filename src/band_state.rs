@@ -126,7 +126,7 @@ impl Workbench {
                         self.attach_geometry(id, pane, true);
                         self.bands.open.set(false);
                         if self.for_plot(pane.id).is_some_and(|owner| {
-                            owner.view().id == self.views.active.get_untracked()
+                            owner.view_untracked().id == self.views.active.get_untracked()
                         }) {
                             self.edit_geometry_on(pane, id);
                         }

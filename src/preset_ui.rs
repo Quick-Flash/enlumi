@@ -106,7 +106,7 @@ impl Workbench {
         let workbench = self.bind_view();
         match kind {
             CaptureKind::Plot(id) => self.find(*id).and_then(|pane| pane.preset.get_untracked()),
-            CaptureKind::View => workbench.view().preset.get_untracked(),
+            CaptureKind::View => workbench.view_untracked().preset.get_untracked(),
             CaptureKind::Workspace => workbench.workspace().source.get_untracked(),
             CaptureKind::Selection(_) => None,
         }
@@ -143,7 +143,7 @@ impl Workbench {
                     .titles
                     .with_untracked(|titles| titles.get(id).cloned())
                     .unwrap_or("My plot".into()),
-                CaptureKind::View => workbench.view().name.get_untracked(),
+                CaptureKind::View => workbench.view_untracked().name.get_untracked(),
                 CaptureKind::Workspace => workbench.workspace().name.get_untracked(),
             });
         match preset_capture::capture(workbench, &kind, &name) {
@@ -174,7 +174,7 @@ impl Workbench {
                 self.authoring.error.set(String::new());
                 self.authoring.baseline.set_value(None);
                 self.authoring.session.set(Some(SaveSession {
-                    view: workbench.view().id,
+                    view: workbench.view_untracked().id,
                     kind: Some(kind),
                     bundle,
                     origin: None,
@@ -371,7 +371,9 @@ impl Workbench {
                                     pane.preset.set(Some(source));
                                 }
                             }
-                            CaptureKind::View => workbench.view().preset.set(Some(source)),
+                            CaptureKind::View => {
+                                workbench.view_untracked().preset.set(Some(source))
+                            }
                             CaptureKind::Workspace => {
                                 workbench.workspace().source.set(Some(source))
                             }
@@ -430,7 +432,7 @@ impl Workbench {
                     pane.preset.set(Some(source));
                 }
             }
-            CaptureKind::View => workbench.view().preset.set(Some(source)),
+            CaptureKind::View => workbench.view_untracked().preset.set(Some(source)),
             CaptureKind::Workspace => workbench.workspace().source.set(Some(source)),
             CaptureKind::Selection(_) => {}
         }

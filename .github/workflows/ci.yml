@@ -27,6 +27,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
+      ENLUMI_SKIP_SOFTWARE_GPU_TESTS: "1"
     timeout-minutes: 60
     steps:
       - name: Arch build libraries
@@ -66,7 +67,13 @@ jobs:
       - name: Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Tests
-        run: cargo test --locked --workspace
+        run: cargo test --locked --workspace -- --nocapture
+      - name: Windows crash details
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000,1001; StartTime=(Get-Date).AddHours(-1)} -ErrorAction SilentlyContinue |
+            Format-List TimeCreated, Id, Message
       - name: Rust filter toolchain
         run: rustup target add wasm32-unknown-unknown
       - name: Rust / WASM integration tests

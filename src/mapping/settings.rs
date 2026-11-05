@@ -25,19 +25,18 @@ pub(crate) fn update(workbench: Workbench, pane: Pane, edit: impl Fn(&mut Spec))
             edit(spec);
         }
     });
-    if pane.id == 0 {
-        if let Some(target) = workbench
+    if pane.id == 0
+        && let Some(target) = workbench
             .trajectory_builder()
             .target
             .get_untracked()
             .and_then(|id| workbench.find(id))
-        {
-            target.trajectory.update(|spec| {
-                if let Some(spec) = spec {
-                    edit(spec);
-                }
-            });
-        }
+    {
+        target.trajectory.update(|spec| {
+            if let Some(spec) = spec {
+                edit(spec);
+            }
+        });
     }
 }
 pub(crate) fn bind_altitude(workbench: Workbench, pane: Pane, index: usize, source: String) {
@@ -49,11 +48,11 @@ pub(crate) fn bind_altitude(workbench: Workbench, pane: Pane, index: usize, sour
             map.camera = None;
         }
     });
-    if !source.is_empty() {
-        if let Some(target) = workbench.trajectory_builder().target.get_untracked() {
-            workbench.activate(target);
-            workbench.add(source);
-        }
+    if !source.is_empty()
+        && let Some(target) = workbench.trajectory_builder().target.get_untracked()
+    {
+        workbench.activate(target);
+        workbench.add(source);
     }
 }
 #[component]
@@ -79,7 +78,7 @@ pub fn MapSettings(workbench: Workbench, pane: Pane) -> impl IntoView {
         row(class="map-coordinate-units") {
             ActionButton(on:click=move |_|{update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.camera=None;});}){"Fit traces"}
             ActionButton(on:click=move |_|service.retry()){"Retry tiles"}
-            ActionButton(class:setting-active=move ||target(workbench,pane).timeline_link.get(),on:click=move |_|target(workbench,pane).timeline_link.update(|linked|*linked=!*linked)){"Link timeline"}
+            ActionButton(class:setting-active=move ||target(workbench,pane).timeline_link.get(),on:click=move |_|target(workbench,pane).timeline_link.update(|linked|*linked= !*linked)){"Link timeline"}
             if move ||map.get().terrain {ActionButton(on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.orbit=Orbit::default();})){"Reset orbit"}}
         }
         if move ||map.get().terrain {text(class="muted"){"Drag to orbit; middle-drag or Ctrl-drag to pan; wheel to zoom. Local Z uses one terrain height at trace start."}}
@@ -114,13 +113,15 @@ pub fn AltitudeOptions(workbench: Workbench, pane: Pane, index: usize) -> impl I
             row(class="map-coordinate-units") {
                 ActionButton(on:click=move |_|bind_altitude(workbench,pane,index,draft.get_untracked().trim().to_owned())){"Bind Z"}
                 ActionButton(on:click=move |_|bind_altitude(workbench,pane,index,String::new())){"Clear Z"}
-                ActionButton(class:setting-active=move ||altitude.get().local,on:click=move |_|{let local=!altitude.get_untracked().local;update(workbench,pane,|s|{s.altitudes.entry(index).or_default().local=local;if let Some(map)=s.map.as_mut(){map.camera=None;}});}){{move ||if altitude.get().local{"Local Z: terrain at start"}else{"Global elevation"}}}
             }
+            row(class="map-coordinate-units") {for mode in move ||[(true,false,"Local Z offset"),(true,true,"First Z on ground"),(false,false,"Global elevation")],key=|mode|mode.2 {
+                ActionButton(class:setting-active=move ||{let a=altitude.get();a.local==mode.0&&a.at_first==mode.1},on:click=move |_|update(workbench,pane,|s|{let a=s.altitudes.entry(index).or_default();a.local=mode.0;a.at_first=mode.1;if let Some(map)=s.map.as_mut(){map.camera=None;}})){{mode.2}}
+            }}
             row(class="map-coordinate-units") {for unit in move ||[(1.,"Metres"),(0.001,"Millimetres"),(0.3048,"Feet")],key=|unit|unit.1 {
                 ActionButton(class:setting-active=move ||altitude.get().scale.abs()==unit.0,on:click=move |_|update(workbench,pane,|s|{let altitude=s.altitudes.entry(index).or_default();altitude.scale=unit.0*altitude.scale.signum();if let Some(map)=s.map.as_mut(){map.camera=None;}})){{unit.1}}
             }}
-            ActionButton(class:setting-active=move ||altitude.get().scale<0.,on:click=move |_|update(workbench,pane,|s|{let altitude=s.altitudes.entry(index).or_default();altitude.scale=-altitude.scale;if let Some(map)=s.map.as_mut(){map.camera=None;}})){{move ||if altitude.get().scale<0.{"Z increases down"}else{"Z increases up"}}}
-            text(class="muted") {"No Z field: Z=0. Missing altitude samples break trace."}
+            ActionButton(class:setting-active=move ||altitude.get().scale<0.,on:click=move |_|update(workbench,pane,|s|{let altitude=s.altitudes.entry(index).or_default();altitude.scale= -altitude.scale;if let Some(map)=s.map.as_mut(){map.camera=None;}})){{move ||if altitude.get().scale<0.{"Z increases down"}else{"Z increases up"}}}
+            text(class="muted") {"First Z on ground removes starting altitude. Local Z offset adds Z to terrain. Global elevation uses absolute metres. No Z field: Z=0. Missing altitude samples break trace."}
         }
     }}
 }
@@ -154,6 +155,7 @@ mod tests {
                     source: "z".into(),
                     scale: 0.001,
                     local: true,
+                    at_first: true,
                 },
             );
         });

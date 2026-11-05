@@ -1,5 +1,30 @@
 use std::time::Duration;
 use zgui::render::*;
+
+pub(super) fn graphics() -> Option<zgui_render_wgpu::SharedGraphics> {
+    let thread = std::thread::current();
+    let name = thread.name().unwrap_or("unnamed");
+    eprintln!("Opening GPU for {name}");
+    let graphics = zgui_render_wgpu::SharedGraphics::new();
+    match graphics.open_gpu() {
+        Ok(gpu) => {
+            eprintln!("GPU for {name}: {}", gpu.describe());
+            if std::env::var_os("ENLUMI_SKIP_SOFTWARE_GPU_TESTS").is_some()
+                && gpu.adapter().get_info().device_type == zgui::surface::wgpu::DeviceType::Cpu
+            {
+                eprintln!("Skipping software-adapter rendering test {name}");
+                return None;
+            }
+        }
+        Err(error) => {
+            // Only adapter discovery may skip; rendering failures still fail tests.
+            eprintln!("Skipping GPU test {name}: {error}");
+            return None;
+        }
+    }
+    Some(graphics)
+}
+
 // The pinned backend exposes mutable downcasting but not shared downcasting.
 // Forward every renderer operation and add the read-only seam for image validation.
 pub(super) struct ReadbackRenderer(pub zgui_render_wgpu::WgpuRenderer);

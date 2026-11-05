@@ -55,7 +55,7 @@ fn workspace_geometry_conflicts_and_invalid_resources_do_not_block_load_or_reloa
     settle(&window, workbench, || {
         !workbench.profiles.busy.get_untracked()
             && workbench.workspace().name.get_untracked() == "Resilient"
-            && workbench.panes().with_untracked(|panes| {
+            && workbench.view_untracked().panes.with_untracked(|panes| {
                 panes.len() == 2 && panes.iter().all(|p| p.lines.with_untracked(Vec::len) == 1)
             })
     });
@@ -77,7 +77,7 @@ fn workspace_geometry_conflicts_and_invalid_resources_do_not_block_load_or_reloa
             .iter()
             .any(|w| w.contains("Invalid geometry Broken"))
     }));
-    let panes = workbench.panes().get_untracked();
+    let panes = workbench.view_untracked().panes.get_untracked();
     assert_eq!(panes[1].geometry.with_untracked(|ids| ids.len()), 2);
     recipe["geometry"][1]["shape"]["coordinates"] = json!([0, 3, 1, 3]);
     std::fs::write(&path, recipe.to_string()).unwrap();
@@ -337,7 +337,7 @@ fn duplicate_workspace_copies_all_views_without_linking_saved_source() {
     assert!(workbench.workspace().source.with_untracked(Option::is_none));
     let after = workbench.views.items.get_untracked();
     assert_eq!(after.len(), 5);
-    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 3");
     assert_eq!(workbench.pane().plot.ranges.get_untracked(), bounds);
     for (old, new) in before.iter().zip(&after) {
         assert_ne!(old.id, new.id);
@@ -356,7 +356,7 @@ fn duplicate_workspace_copies_all_views_without_linking_saved_source() {
     }
     workbench.rename_view("Comparison".into());
     workbench.switch_workspace(original);
-    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 3");
     assert_eq!(source.plot.ranges.get_untracked(), bounds);
 }
 
@@ -502,7 +502,7 @@ fn workspace_streams_into_selected_layout_without_committing_preview_or_resettin
     settle(&window, workbench, || !workbench.workspace_finishing());
     workbench.use_saved_preset(key, "Streamed".into(), ApplyAction::Workspace);
     settle(&window, workbench, || {
-        workbench.panes().with_untracked(|panes| {
+        workbench.view_untracked().panes.with_untracked(|panes| {
             panes
                 .iter()
                 .all(|pane| !pane.lines.with_untracked(Vec::is_empty))
@@ -607,7 +607,7 @@ fn saved_workspace_restores_five_views_before_log_and_populates_after_log_open()
     });
     let id = workbench.workspaces.active.get_untracked();
     assert_eq!(workbench.views.items.with_untracked(Vec::len), 5);
-    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 3");
     workbench.open(fixture());
     settle(&window, workbench, || {
         !workbench.loading.get_untracked()
@@ -625,7 +625,7 @@ fn saved_workspace_restores_five_views_before_log_and_populates_after_log_open()
     });
     assert_eq!(workbench.workspaces.active.get_untracked(), id);
     assert_eq!(workbench.workspaces.items.with_untracked(Vec::len), 2);
-    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 3");
     let definition = crate::profile::load(&path).unwrap();
     assert_eq!(
         crate::preset_lookup::view(&definition, &crate::preset_lookup::view_key("Tools", 1))
@@ -644,15 +644,15 @@ fn saved_workspace_restores_five_views_before_log_and_populates_after_log_open()
         .views
         .items
         .with_untracked(|views| views.iter().map(|view| view.id).collect::<Vec<_>>());
-    let layout = workbench.layout().get_untracked();
+    let layout = workbench.view_untracked().layout.get_untracked();
     workbench.open(fixture());
     settle(&window, workbench, || {
         !workbench.loading.get_untracked() && !workbench.profiles.busy.get_untracked()
     });
     assert_eq!(workbench.workspace_id(), id);
     assert_eq!(workbench.views.active.get_untracked(), extra);
-    assert_eq!(workbench.active().get_untracked(), plot.id);
-    assert_eq!(workbench.layout().get_untracked(), layout);
+    assert_eq!(workbench.view_untracked().active.get_untracked(), plot.id);
+    assert_eq!(workbench.view_untracked().layout.get_untracked(), layout);
     assert_eq!(
         workbench
             .views
@@ -660,7 +660,10 @@ fn saved_workspace_restores_five_views_before_log_and_populates_after_log_open()
             .with_untracked(|views| views.iter().map(|view| view.id).collect::<Vec<_>>()),
         view_ids
     );
-    assert_eq!(workbench.view().name.get_untracked(), "Session edits");
+    assert_eq!(
+        workbench.view_untracked().name.get_untracked(),
+        "Session edits"
+    );
     let other = workbench
         .workspaces
         .items
@@ -716,7 +719,7 @@ fn unopened_saved_workspace_still_loads_after_replacing_the_log() {
                     })
             })
     });
-    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 3");
 }
 
 #[test]
