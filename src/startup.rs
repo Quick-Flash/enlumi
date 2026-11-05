@@ -82,7 +82,7 @@ const USER_DRIVER_VARIABLES: [&str; 5] = [
 /// zgui hides lavapipe when any hardware driver manifest exists. A hardware driver that cannot
 /// present (for example Haswell Vulkan) then leaves no usable adapter.
 #[cfg(target_os = "linux")]
-fn software_retry_allowed(get: impl Fn(&str) -> Option<String>) -> bool {
+fn software_retry_allowed(get: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
     let disabled_by_user =
         get("VK_LOADER_DRIVERS_DISABLE").is_some_and(|value| value != ZGUI_DISABLE_VALUE);
     get(SOFTWARE_RETRY_MARKER).is_none()
@@ -96,7 +96,7 @@ pub fn retry_with_software_vulkan() {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::process::CommandExt;
-        if !software_retry_allowed(|name| std::env::var(name).ok()) {
+        if !software_retry_allowed(|name| std::env::var_os(name)) {
             return;
         }
         let Ok(exe) = std::env::current_exe() else {
@@ -124,13 +124,16 @@ pub fn retry_with_software_vulkan() {
 
 #[cfg(all(test, target_os = "linux"))]
 mod software_retry_tests {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
     use super::software_retry_allowed;
 
-    fn with(set: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+    fn with(set: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<OsString> {
         move |name| {
             set.iter()
                 .find(|(key, _)| *key == name)
-                .map(|(_, value)| (*value).to_owned())
+                .map(|(_, value)| OsString::from(*value))
         }
     }
 
@@ -169,5 +172,11 @@ mod software_retry_tests {
             "VK_LOADER_DRIVERS_DISABLE",
             "*intel*"
         )])));
+    }
+
+    #[test]
+    fn retry_respects_a_non_utf8_driver_choice() {
+        let get = |name: &str| (name == "VK_DRIVER_FILES").then(|| OsString::from_vec(vec![0xff]));
+        assert!(!software_retry_allowed(get));
     }
 }
