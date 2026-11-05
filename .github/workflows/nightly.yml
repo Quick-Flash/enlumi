@@ -76,7 +76,13 @@ jobs:
           CARGO_NET_RETRY: "5"
         run: bash .github/scripts/fetch-dependencies.sh
       - name: Tests
-        run: cargo test --locked --workspace
+        run: cargo test --locked --workspace -- --nocapture
+      - name: Windows crash details
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000,1001; StartTime=(Get-Date).AddHours(-1)} -ErrorAction SilentlyContinue |
+            Format-List TimeCreated, Id, Message
       - name: Build portable bundle and check compiler without system Rust
         run: cargo xtask bundle
       - name: Compress portable bundle

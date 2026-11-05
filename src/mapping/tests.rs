@@ -67,13 +67,9 @@ fn offline_preview_renders_and_releases_hidden_gpu_panes() {
     };
     let probe = Probe::default();
     let saved = probe.clone();
-    let graphics = zgui_render_wgpu::SharedGraphics::new();
-    // Headless CI may have no usable adapter. Only device discovery may skip;
-    // render validation, shader and lifecycle failures still fail the test.
-    if let Err(error) = graphics.open_gpu() {
-        eprintln!("Skipping real-GPU map preview check: {error}");
+    let Some(graphics) = super::test_renderer::graphics() else {
         return;
-    }
+    };
     let handler = app()
         .with_size(1200., 760.)
         .with_stylesheet(stylesheet())
@@ -535,11 +531,9 @@ fn map_and_terrain_render_local_xyz_and_reuse_textures_while_navigating() {
         tiles::Config,
     };
     let _zone = zgui::reactive::enter_non_reactive_zone();
-    let graphics = zgui_render_wgpu::SharedGraphics::new();
-    if let Err(error) = graphics.open_gpu() {
-        eprintln!("Skipping map/terrain pixels: {error}");
+    let Some(graphics) = super::test_renderer::graphics() else {
         return;
-    }
+    };
     // Live checks opt in to one fixed visible view only; CI uses generated data.
     let live = std::env::var_os("ENLUMI_MAP_LIVE").is_some();
     let directory = tempfile::Builder::new()
