@@ -34,6 +34,8 @@ pub struct Altitude {
     pub source: String,
     pub scale: f64,
     pub local: bool,
+    /// Subtract first valid aligned altitude before anchoring to terrain.
+    pub at_first: bool,
 }
 impl Default for Altitude {
     fn default() -> Self {
@@ -41,6 +43,7 @@ impl Default for Altitude {
             source: String::new(),
             scale: 1.,
             local: true,
+            at_first: false,
         }
     }
 }

@@ -239,7 +239,7 @@ pub fn prepare(
             .map(|&time| plot::PlotPoint { x: time, y: 0. })
             .collect::<Vec<_>>();
         let mut aligned = z.map(|z| crate::filter_multi::Aligned::new(z, &reference));
-        let points = trace
+        let mut points = trace
             .track
             .points
             .iter()
@@ -255,7 +255,19 @@ pub fn prepare(
                 ]
             })
             .collect::<Vec<_>>();
-        let origin = [trace.track.endpoints.0.x, trace.track.endpoints.0.y];
+        let mut origin = [trace.track.endpoints.0.x, trace.track.endpoints.0.y];
+        if altitude.local
+            && altitude.at_first
+            && let Some(first) = points
+                .iter()
+                .find(|p| p.iter().all(|v| v.is_finite()))
+                .copied()
+        {
+            origin = [first[0], first[1]];
+            for point in &mut points {
+                point[2] -= first[2];
+            }
+        }
         paths.push(Path3 {
             id: trace.id,
             origin,
@@ -285,13 +297,11 @@ pub fn prepare(
     }
     Ok(paths.into())
 }
-pub fn install(
-    workbench: Workbench,
-    pane: Pane,
-) -> (
+type PreparedPaths = (
     Signal<Arc<[Path3]>, LocalStorage>,
     Signal<bool, LocalStorage>,
-) {
+);
+pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
     let output = RwSignal::new_local(Arc::<[Path3]>::from([]));
     let generation = RwSignal::new_local(0_u64);
     let ready = RwSignal::new_local(false);
@@ -379,6 +389,7 @@ pub fn install(
     )
 }
 
+type RenderKey = (usize, [u64; 2], u32, u32, Vec<(u64, u32)>, Option<u64>, u64);
 pub struct Renderer {
     pipeline: zgui::surface::wgpu::RenderPipeline,
     viewport: zgui::surface::wgpu::Buffer,
@@ -386,7 +397,7 @@ pub struct Renderer {
     buffer: Option<zgui::surface::wgpu::Buffer>,
     count: u32,
     held_paths: Option<Arc<[Path3]>>,
-    key: Option<(usize, [u64; 2], u32, u32, Vec<(u64, u32)>, Option<u64>, u64)>,
+    key: Option<RenderKey>,
 }
 impl Renderer {
     pub fn new(
@@ -643,6 +654,74 @@ mod tests {
         assert!(pick_time(&scene, camera, orbit, size, [0., 0.]).is_none());
     }
     #[test]
+    fn first_altitude_on_ground_uses_first_valid_sample_and_preserves_height_changes() {
+        let lines = vec![
+            line(
+                1,
+                "x",
+                &[(0., 0.), (1., 10.), (2., 20.), (3., 30.), (4., 40.)],
+            ),
+            line(2, "y", &[(0., 0.), (4., 40.)]),
+            line(
+                3,
+                "z",
+                &[
+                    (0., f64::NAN),
+                    (1., -1200000.),
+                    (2., -1210000.),
+                    (3., f64::NAN),
+                    (4., -1220000.),
+                ],
+            ),
+        ];
+        let tracks = Tracks::prepare(
+            &lines,
+            &Spec {
+                x: "x".into(),
+                y: "y".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let mut altitudes = BTreeMap::from([(
+            "y".into(),
+            Altitude {
+                source: "z".into(),
+                scale: -0.001,
+                local: true,
+                at_first: true,
+            },
+        )]);
+        let prepare_paths = |altitudes: &BTreeMap<String, Altitude>| {
+            prepare(
+                &tracks,
+                &lines,
+                altitudes,
+                &Default::default(),
+                &Default::default(),
+            )
+            .unwrap()
+        };
+        let paths = prepare_paths(&altitudes);
+        let path = &paths[0];
+        assert!(path.points[0][2].is_nan());
+        assert_eq!(path.origin, [10., 10.]);
+        assert_eq!(path.points[1][2], 0.);
+        assert_eq!(path.points[2][2], 10.);
+        assert!(path.points[3][2].is_nan());
+        assert_eq!(path.points[4][2], 20.);
+        assert_eq!(path.at(1.5).unwrap()[2], 5.);
+        assert!(path.at(2.5).is_none());
+
+        altitudes.get_mut("y").unwrap().at_first = false;
+        assert_eq!(prepare_paths(&altitudes)[0].points[1][2], 1200.);
+        altitudes.get_mut("y").unwrap().local = false;
+        altitudes.get_mut("y").unwrap().at_first = true;
+        let absolute = prepare_paths(&altitudes);
+        assert!(!absolute[0].local);
+        assert_eq!(absolute[0].points[1][2], 1200.);
+    }
+    #[test]
     fn altitude_aligns_to_xy_times_and_preserves_invalid_segments() {
         let lines = vec![
             line(1, "x", &[(0., 0.), (1., 1.), (2., 2.), (3., 3.), (4., 4.)]),
@@ -661,6 +740,7 @@ mod tests {
                 source: "z".into(),
                 scale: 0.001,
                 local: true,
+                at_first: false,
             },
         )]);
         let paths = prepare(

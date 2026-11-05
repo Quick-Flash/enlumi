@@ -63,10 +63,10 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
                 p[0] > 180 && p[1] < 90 && p[2] > 100
             })
             .count();
-        if colored > 10 || std::time::Instant::now() >= deadline {
-            if let Some(path) = std::env::var_os("ENLUMI_MAP_3D_PREVIEW") {
-                super::super::tests::capture(&pixels, path);
-            }
+        if (colored > 10 || std::time::Instant::now() >= deadline)
+            && let Some(path) = std::env::var_os("ENLUMI_MAP_3D_PREVIEW")
+        {
+            super::super::tests::capture(&pixels, path);
         }
         if colored > 10 {
             break;

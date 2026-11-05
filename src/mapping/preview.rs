@@ -162,6 +162,7 @@ pub fn Preview(
 }
 
 #[component]
+#[allow(clippy::too_many_arguments)] // Independent component props.
 pub(crate) fn MapView(
     camera: RwSignal<Camera, LocalStorage>,
     gpu: bool,

@@ -149,10 +149,10 @@ impl Workbench {
             spec.local = pair.local;
             spec.gps_scale = pair.gps_scale;
         }
-        if let Some(altitude) = incoming_altitude {
-            if let Some(slot) = spec.pairs().iter().position(|pair| pair.y == incoming_y) {
-                spec.altitudes.insert(slot, altitude);
-            }
+        if let Some(altitude) = incoming_altitude
+            && let Some(slot) = spec.pairs().iter().position(|pair| pair.y == incoming_y)
+        {
+            spec.altitudes.insert(slot, altitude);
         }
         if let Err(error) = spec.validate() {
             self.status.set(error);

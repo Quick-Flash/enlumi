@@ -17,6 +17,7 @@ struct Drag {
 }
 
 #[component]
+#[allow(clippy::too_many_arguments)] // Independent component props.
 pub fn TerrainView(
     camera: RwSignal<Camera, LocalStorage>,
     orbit: RwSignal<Orbit, LocalStorage>,
@@ -217,8 +218,8 @@ pub fn TerrainView(
                     event.capture_pointer();event.prevent_default();
                 },
                 on:pointer_move=move |event| {
-                    if drag.get_value().is_none() {
-                        if let Some(changed)=on_hover {let hit=plot::zgui_renderer::local_position(&host,event.position).and_then(|(x,y)|hover_index.with_untracked(|index|index.nearest([x,y])));changed.run(hit);}
+                    if drag.get_value().is_none() && let Some(changed)=on_hover {
+                        let hit=plot::zgui_renderer::local_position(&host,event.position).and_then(|(x,y)|hover_index.with_untracked(|index|index.nearest([x,y])));changed.run(hit);
                     }
                     if let Some(initial)=drag.get_value()
                         &&let Some((x,y))=plot::zgui_renderer::local_position(&host,event.position) {
