@@ -1,5 +1,6 @@
 use crate::action_button::ActionButtonProps;
 use crate::state::Workbench;
+use reactive_graph::graph::untrack;
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
@@ -65,9 +66,10 @@ pub fn FilterSourceRow(
             class:filter-input-dragging = move || workbench.filter_input_ui.drag.get().is_some_and(|drag| drag.from == index() && drag.moving && !drag.settling),
             style:transform = move || Some(workbench.filter_input_offset(index())),
             on:pointer_down = move |event| {
-                if !reorderable() || event.button != Some(zgui::vocab::PointerButton::Primary) { return; }
-                workbench.start_filter_input_drag(index(), event.position.x.0, event.position.y.0);
-                if workbench.filter_input_ui.drag.get_untracked().is_some_and(|drag| drag.from == index() && !drag.settling) {
+                if !untrack(reorderable) || event.button != Some(zgui::vocab::PointerButton::Primary) { return; }
+                let index = untrack(index);
+                workbench.start_filter_input_drag(index, event.position.x.0, event.position.y.0);
+                if workbench.filter_input_ui.drag.get_untracked().is_some_and(|drag| drag.from == index && !drag.settling) {
                     event.capture_pointer(); event.prevent_default(); event.stop_propagation();
                 }
             },
@@ -79,7 +81,7 @@ pub fn FilterSourceRow(
             },
             on:pointer_cancel = move |event| { event.release_pointer(); workbench.finish_filter_input_drag(true); },
             on:key_down = move |event| {
-                if !reorderable() { return; }
+                if !untrack(reorderable) { return; }
                 use zgui::vocab::{Key, NamedKey};
                 match event.key {
                     Key::Named(NamedKey::Escape) => workbench.finish_filter_input_drag(true),
@@ -96,7 +98,7 @@ pub fn FilterSourceRow(
                     text(class = "filter-io-label") { "Output" }
                     Input(value = name, class = "filter-output-name", a11y:label = move || zgui::vocab::SharedString::from(source.with_value(|source| format!("Output name for {source}"))))
                 }
-                ActionButton(icon = true, class = "remove-filter-source", a11y:label = "Remove filter source", on:pointer_down = move |event| event.stop_propagation(), on:click = move |_| workbench.remove_filter_input(index())) { "\u{00d7}" }
+                ActionButton(icon = true, class = "remove-filter-source", a11y:label = "Remove filter source", on:pointer_down = move |event| event.stop_propagation(), on:click = move |_| workbench.remove_filter_input(untrack(index))) { "\u{00d7}" }
             }
         }
     }

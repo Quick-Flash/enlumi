@@ -327,8 +327,8 @@ pub fn TrajectoryPlot(
 }
 
 fn hovered_time(pane: Pane) -> Option<f64> {
-    let hit = pane.plot.hover.get()?;
-    pane.trajectory_data.with(|data| {
+    let hit = pane.plot.hover.get_untracked()?;
+    pane.trajectory_data.with_untracked(|data| {
         data.as_ref()?
             .traces
             .iter()

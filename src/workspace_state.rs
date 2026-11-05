@@ -57,13 +57,18 @@ impl Workspaces {
 impl Workbench {
     pub fn workspace(self) -> Workspace {
         let id = self.workspace_id();
-        self.workspaces.items.with(|items| {
+        let find = |items: &Vec<Workspace>| {
             items
                 .iter()
                 .find(|item| item.id == id)
                 .cloned()
                 .expect("Workspace exists")
-        })
+        };
+        if reactive_graph::graph::Observer::get().is_some() {
+            self.workspaces.items.with(find)
+        } else {
+            self.workspaces.items.with_untracked(find)
+        }
     }
     pub fn workspace_id(self) -> u64 {
         if let Some(view) = self.bound_view
@@ -83,7 +88,11 @@ impl Workbench {
                 })
                 .unwrap_or_else(|| self.workspaces.active.get_untracked());
         }
-        self.workspaces.active.get()
+        if reactive_graph::graph::Observer::get().is_some() {
+            self.workspaces.active.get()
+        } else {
+            self.workspaces.active.get_untracked()
+        }
     }
     pub fn workspace_views(self, id: u64) -> Vec<WorkspaceView> {
         if self.workspaces.active.get_untracked() == id {
