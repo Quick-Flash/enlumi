@@ -6990,10 +6990,11 @@ dependencies = [
 [[package]]
 name = "zgui-plot"
 version = "0.1.0"
-source = "git+https://github.com/Quick-Flash/zgui-plot?rev=593de21da884d987db4d4335bc72f7582bc0df23#593de21da884d987db4d4335bc72f7582bc0df23"
+source = "git+https://github.com/Quick-Flash/zgui-plot?rev=195b5646d336ce86f0f432ed3450bb72274098cf#195b5646d336ce86f0f432ed3450bb72274098cf"
 dependencies = [
  "arboard",
  "kurbo",
+ "reactive_graph",
  "resvg",
  "zgui",
  "zgui-profile",
