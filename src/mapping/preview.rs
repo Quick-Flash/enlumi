@@ -272,6 +272,7 @@ pub(crate) fn MapView(
     let interaction = SurfaceInteraction {
         geometry: UnsyncCallback::new(move |()| Camera::geometry(size.get_untracked())),
         ranges: UnsyncCallback::new(move |()| camera.get_untracked().ranges(size.get_untracked())),
+        tracked_ranges: UnsyncCallback::new(move |()| camera.get().ranges(size.get_untracked())),
         on_update: UnsyncCallback::new(move |update: RangeUpdate| {
             // PlotSurface coalesces input in frame callbacks. Read its current
             // gesture as an imperative snapshot, without a signal subscription.

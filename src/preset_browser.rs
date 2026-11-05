@@ -25,7 +25,7 @@ impl Workbench {
         }
         self.authoring.browse.set(Some(BrowseRequest {
             target,
-            view: self.bind_view().view().id,
+            view: self.bind_view().view_untracked().id,
             filter,
         }));
     }

@@ -232,7 +232,7 @@ fn replacement_preserves_workspaces_views_plots_and_appearance_with_new_data() {
         titles.insert(first.id, "My plot".into());
     });
     let tab = workbench.add_plot(first.id, false, true);
-    let layout = workbench.layout().get_untracked();
+    let layout = workbench.view_untracked().layout.get_untracked();
     let second_view = workbench.new_view();
     let second_pane = workbench.pane();
     add_line(second_pane, 102, "sensor/0/value", &old);
@@ -244,7 +244,7 @@ fn replacement_preserves_workspaces_views_plots_and_appearance_with_new_data() {
 
     replace(workbench, log(3.0, false, true));
     assert_eq!(workbench.workspace_id(), second_workspace);
-    assert_eq!(workbench.active().get_untracked(), other.id);
+    assert_eq!(workbench.view_untracked().active.get_untracked(), other.id);
     assert_eq!(workbench.workspaces.items.with_untracked(Vec::len), 2);
     assert_eq!(first.lines.with_untracked(Vec::len), 1);
     assert_eq!(first.lines.get_untracked()[0].data.samples()[0].y, 3.0);
@@ -274,9 +274,9 @@ fn replacement_preserves_workspaces_views_plots_and_appearance_with_new_data() {
     assert!(!workbench.profiles.warnings.get_untracked().is_empty());
     workbench.select_workspace(first_workspace);
     assert_eq!(workbench.views.active.get_untracked(), second_view);
-    workbench.switch_view(first_view.view().id);
-    assert_eq!(workbench.active().get_untracked(), tab.id);
-    assert_eq!(workbench.layout().get_untracked(), layout);
+    workbench.switch_view(first_view.view_untracked().id);
+    assert_eq!(workbench.view_untracked().active.get_untracked(), tab.id);
+    assert_eq!(workbench.view_untracked().layout.get_untracked(), layout);
     assert!(workbench.find(tab.id).is_some());
 }
 
@@ -398,7 +398,7 @@ fn replacement_recomputes_spectral_plots_without_replacing_their_ids() {
     });
     let line_id = pane.lines.get_untracked()[0].id;
     replace(workbench, log(3.0, false, false));
-    assert_eq!(workbench.active().get_untracked(), pane.id);
+    assert_eq!(workbench.view_untracked().active.get_untracked(), pane.id);
     assert_eq!(pane.lines.get_untracked()[0].id, line_id);
     let updated = pane.lines.get_untracked()[0].data.clone();
     let old_peak = data
@@ -493,7 +493,7 @@ fn failed_open_leaves_the_current_layout_and_plot_data_intact() {
     workbench.log.set(Some(old.clone()));
     add_line(workbench.pane(), 100, "sensor/0/value", &old);
     let tab = workbench.add_plot(workbench.pane().id, false, true);
-    let layout = workbench.layout().get_untracked();
+    let layout = workbench.view_untracked().layout.get_untracked();
     let directory = tempfile::tempdir().unwrap();
     workbench.open(directory.path().join("missing.ulg"));
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -503,8 +503,8 @@ fn failed_open_leaves_the_current_layout_and_plot_data_intact() {
         std::thread::sleep(Duration::from_millis(2));
     }
     assert!(Arc::ptr_eq(&workbench.log.get_untracked().unwrap(), &old));
-    assert_eq!(workbench.active().get_untracked(), tab.id);
-    assert_eq!(workbench.layout().get_untracked(), layout);
+    assert_eq!(workbench.view_untracked().active.get_untracked(), tab.id);
+    assert_eq!(workbench.view_untracked().layout.get_untracked(), layout);
     assert_eq!(
         workbench.all_panes()[0].lines.get_untracked()[0]
             .data

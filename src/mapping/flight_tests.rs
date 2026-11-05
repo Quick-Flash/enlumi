@@ -758,9 +758,12 @@ fn map_builder_is_explicit_supports_multiple_traces_and_independent_maps() {
     let workbench = window.scope.with(Workbench::new);
     workbench.log.set(Some(log(0.)));
     let first = workbench.pane();
-    let count = workbench.panes().get_untracked().len();
+    let count = workbench.view_untracked().panes.get_untracked().len();
     workbench.new_flight_map();
-    assert_eq!(workbench.panes().get_untracked().len(), count);
+    assert_eq!(
+        workbench.view_untracked().panes.get_untracked().len(),
+        count
+    );
     let blank = workbench
         .trajectory_builder()
         .pane

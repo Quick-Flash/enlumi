@@ -28,27 +28,33 @@ fn views_restore_bounds_and_duplicate_independent_plot_state() {
         .unwrap();
     let second = first.add_plot(pane.id, true, false);
     first.maximize(second.id);
-    first.analysis().start.set("0.25".into());
-    let layout = first.layout().get_untracked();
+    first.view_untracked().analysis.start.set("0.25".into());
+    let layout = first.view_untracked().layout.get_untracked();
     let other = workbench.new_view();
-    assert_eq!(workbench.panes().with_untracked(Vec::len), 1);
+    assert_eq!(workbench.view_untracked().panes.with_untracked(Vec::len), 1);
     workbench
         .pane()
         .plot
         .set_view(Ranges::new((10., 20.), (30., 40.)))
         .unwrap();
     workbench.rename_view("Frequency".into());
-    workbench.switch_view(first.view().id);
-    assert_eq!(workbench.layout().get_untracked(), layout);
-    assert_eq!(workbench.maximized().get_untracked(), Some(second.id));
+    workbench.switch_view(first.view_untracked().id);
+    assert_eq!(workbench.view_untracked().layout.get_untracked(), layout);
+    assert_eq!(
+        workbench.view_untracked().maximized.get_untracked(),
+        Some(second.id)
+    );
     assert_eq!(workbench.pane().id, second.id);
     assert_eq!(
         pane.plot.ranges.get_untracked(),
         Ranges::new((0.2, 0.8), (-2., 4.))
     );
-    assert_eq!(workbench.analysis().start.get_untracked(), "0.25");
+    assert_eq!(
+        workbench.view_untracked().analysis.start.get_untracked(),
+        "0.25"
+    );
     let copy = workbench.duplicate_view();
-    let duplicated = workbench.panes().get_untracked();
+    let duplicated = workbench.view_untracked().panes.get_untracked();
     assert_eq!(duplicated.len(), 2);
     assert!(
         duplicated
@@ -71,7 +77,7 @@ fn views_restore_bounds_and_duplicate_independent_plot_state() {
         pane.plot.ranges.get_untracked()
     );
     assert!(matches!(
-        workbench.layout().get_untracked(),
+        workbench.view_untracked().layout.get_untracked(),
         Layout::Split { stacked: true, .. }
     ));
     copied
@@ -86,15 +92,15 @@ fn views_restore_bounds_and_duplicate_independent_plot_state() {
     assert!(workbench.find(copied.id).is_none());
     assert!(workbench.find(pane.id).is_some());
     workbench.switch_view(other);
-    assert_eq!(workbench.view().name.get_untracked(), "Frequency");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "Frequency");
     assert_eq!(
         workbench.pane().plot.ranges.get_untracked(),
         Ranges::new((10., 20.), (30., 40.))
     );
     workbench.close_view(other);
-    workbench.close_view(first.view().id);
+    workbench.close_view(first.view_untracked().id);
     assert_eq!(workbench.views.items.with_untracked(Vec::len), 1);
-    assert_eq!(workbench.view().name.get_untracked(), "View 1");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 1");
     assert!(workbench.pane().lines.with_untracked(Vec::is_empty));
 }
 
@@ -104,23 +110,23 @@ fn blank_workspaces_and_views_use_numbered_names() {
     let workbench = window.scope.with(Workbench::new);
     let first_workspace = workbench.workspace_id();
     assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 1");
-    assert_eq!(workbench.view().name.get_untracked(), "View 1");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 1");
     workbench.new_view();
-    assert_eq!(workbench.view().name.get_untracked(), "View 2");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 2");
     workbench.new_view();
-    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 3");
 
     workbench.new_blank_workspace();
     assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 2");
-    assert_eq!(workbench.view().name.get_untracked(), "View 1");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 1");
     workbench.new_view();
-    assert_eq!(workbench.view().name.get_untracked(), "View 2");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 2");
     workbench.new_blank_workspace();
     assert_eq!(workbench.workspace().name.get_untracked(), "Workspace 3");
 
     workbench.switch_workspace(first_workspace);
     workbench.new_view();
-    assert_eq!(workbench.view().name.get_untracked(), "View 4");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 4");
 }
 
 #[test]
@@ -129,9 +135,9 @@ fn numbered_names_skip_existing_custom_names() {
     let workbench = window.scope.with(Workbench::new);
     workbench.rename_view("View 2".into());
     workbench.new_view();
-    assert_eq!(workbench.view().name.get_untracked(), "View 1");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 1");
     workbench.new_view();
-    assert_eq!(workbench.view().name.get_untracked(), "View 3");
+    assert_eq!(workbench.view_untracked().name.get_untracked(), "View 3");
 
     workbench.new_workspace("Workspace 2".into());
     workbench.new_blank_workspace();

@@ -1332,6 +1332,7 @@ dependencies = [
  "px4-ulog",
  "quick-xml",
  "rayon",
+ "reactive_graph",
  "resvg",
  "rfd",
  "rustfft",
@@ -6989,7 +6990,7 @@ dependencies = [
 [[package]]
 name = "zgui-plot"
 version = "0.1.0"
-source = "git+https://github.com/Quick-Flash/zgui-plot?rev=eb9a799f55686b1a435c4335735eae39b5a8f1a0#eb9a799f55686b1a435c4335735eae39b5a8f1a0"
+source = "git+https://github.com/Quick-Flash/zgui-plot?rev=593de21da884d987db4d4335bc72f7582bc0df23#593de21da884d987db4d4335bc72f7582bc0df23"
 dependencies = [
  "arboard",
  "kurbo",

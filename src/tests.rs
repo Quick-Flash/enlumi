@@ -161,12 +161,14 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     window
         .scope
         .with(|| workbench.drop_analysis_sources(vec![sources[0].clone()], Some(normal.id)));
-    settle(&window, || !workbench.analysis().busy.get_untracked());
+    settle(&window, || {
+        !workbench.view_untracked().analysis.busy.get_untracked()
+    });
     assert_eq!(
-        workbench.panes().get_untracked().len(),
+        workbench.view_untracked().panes.get_untracked().len(),
         2,
         "{}",
-        workbench.analysis().message.get_untracked()
+        workbench.view_untracked().analysis.message.get_untracked()
     );
     let fft = workbench.pane();
     let id = fft.lines.get_untracked()[0].id;
@@ -179,8 +181,10 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     window
         .scope
         .with(|| workbench.drop_analysis_sources(vec![sources[1].clone()], Some(normal.id)));
-    settle(&window, || !workbench.analysis().busy.get_untracked());
-    assert_eq!(workbench.panes().get_untracked().len(), 2);
+    settle(&window, || {
+        !workbench.view_untracked().analysis.busy.get_untracked()
+    });
+    assert_eq!(workbench.view_untracked().panes.get_untracked().len(), 2);
     assert_eq!(fft.lines.get_untracked().len(), 2);
     assert_eq!(normal.lines.get_untracked().len(), 1);
     assert_eq!(
@@ -190,12 +194,14 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     assert!(!workbench.can_place_line(fft.id, id, normal.id));
     window.scope.with(|| {
         workbench.edit_analysis(fft);
-        workbench.analysis().remove_dc.set(false);
+        workbench.view_untracked().analysis.remove_dc.set(false);
         workbench.run_analysis();
     });
     let updated_view = plot::Ranges::new((10., 20.), (-4., 8.));
     fft.plot.set_view(updated_view).unwrap();
-    settle(&window, || !workbench.analysis().busy.get_untracked());
+    settle(&window, || {
+        !workbench.view_untracked().analysis.busy.get_untracked()
+    });
     assert_eq!(fft.plot.ranges.get_untracked(), updated_view);
     assert_eq!(
         fft.drawing.get_untracked()[&id].connection,
@@ -203,7 +209,13 @@ fn analysis_drops_reuse_spectral_plots_preserve_styles_and_keep_time_fields_sepa
     );
     assert!(!fft.analysis.get_untracked().unwrap().options.remove_dc);
     window.scope.with(|| workbench.edit_analysis(fft));
-    assert!(!workbench.analysis().remove_dc.get_untracked());
+    assert!(
+        !workbench
+            .view_untracked()
+            .analysis
+            .remove_dc
+            .get_untracked()
+    );
     let second = window
         .scope
         .with(|| workbench.add_analysis_panel(fft.analysis.get_untracked().unwrap()));
@@ -237,10 +249,31 @@ fn analysis_selection_stays_separate_and_conditioner_is_not_a_spectral_input() {
         ["@analysis/raw"]
     );
     workbench.set_analysis_condition(vec!["rpm".into()]);
-    assert_eq!(workbench.analysis().condition.get_untracked(), "rpm");
-    assert!(workbench.analysis().sources.get_untracked().is_empty());
+    assert_eq!(
+        workbench
+            .view_untracked()
+            .analysis
+            .condition
+            .get_untracked(),
+        "rpm"
+    );
+    assert!(
+        workbench
+            .view_untracked()
+            .analysis
+            .sources
+            .get_untracked()
+            .is_empty()
+    );
     workbench.set_analysis_condition(vec!["x".into(), "y".into()]);
-    assert_eq!(workbench.analysis().condition.get_untracked(), "rpm");
+    assert_eq!(
+        workbench
+            .view_untracked()
+            .analysis
+            .condition
+            .get_untracked(),
+        "rpm"
+    );
 }
 
 #[test]
@@ -577,7 +610,7 @@ fn filtering_and_plot_state_survive_transient_settings_owner() {
         .with(|| workbench.place_line(pane.id, moving, second.id, None));
     assert_eq!(second.lines.get_untracked().len(), 1);
     assert_eq!(pane.lines.get_untracked().len(), 1);
-    assert_eq!(workbench.active().get_untracked(), second.id);
+    assert_eq!(workbench.view_untracked().active.get_untracked(), second.id);
     assert_eq!(second.drawing.get_untracked()[&moving], appearance);
     assert!(!pane.drawing.get_untracked().contains_key(&moving));
 }
@@ -635,26 +668,51 @@ fn docking_tabs_split_close_duplicate_and_maximize_preserve_data() {
         .scope
         .with(|| workbench.add_plot(first.id, false, true));
     assert_eq!(
-        workbench.layout().get_untracked().tab_ids(first.id),
+        workbench
+            .view_untracked()
+            .layout
+            .get_untracked()
+            .tab_ids(first.id),
         [first.id, tab.id]
     );
     workbench.activate(first.id);
-    assert!(!workbench.layout().get_untracked().is_visible(tab.id));
-    workbench.layout().update(|layout| {
+    assert!(
+        !workbench
+            .view_untracked()
+            .layout
+            .get_untracked()
+            .is_visible(tab.id)
+    );
+    workbench.view_untracked().layout.update(|layout| {
         assert!(layout.dock_split(tab.id, first.id, DropZone::Bottom));
     });
-    assert!(workbench.layout().get_untracked().is_visible(tab.id));
+    assert!(
+        workbench
+            .view_untracked()
+            .layout
+            .get_untracked()
+            .is_visible(tab.id)
+    );
     workbench.maximize(first.id);
-    assert_eq!(workbench.maximized().get_untracked(), Some(first.id));
-    workbench.layout().update(|layout| {
+    assert_eq!(
+        workbench.view_untracked().maximized.get_untracked(),
+        Some(first.id)
+    );
+    workbench.view_untracked().layout.update(|layout| {
         if let plot::workspace::layout::Layout::Split { ratio, .. } = layout {
             *ratio = 0.8;
         }
     });
     workbench.equalize_panels();
-    assert!(workbench.maximized().get_untracked().is_none());
+    assert!(
+        workbench
+            .view_untracked()
+            .maximized
+            .get_untracked()
+            .is_none()
+    );
     assert!(matches!(
-        workbench.layout().get_untracked(),
+        workbench.view_untracked().layout.get_untracked(),
         plot::workspace::layout::Layout::Split { ratio: 0.5, .. }
     ));
     assert_eq!(first.lines.get_untracked()[0].id, original.id);
@@ -688,7 +746,7 @@ fn docking_tabs_split_close_duplicate_and_maximize_preserve_data() {
     workbench.close_plot(copy.id);
     workbench.close_plot(tab.id);
     workbench.close_plot(first.id);
-    assert_eq!(workbench.panes().get_untracked().len(), 1);
+    assert_eq!(workbench.view_untracked().panes.get_untracked().len(), 1);
     assert!(workbench.pane().lines.get_untracked().is_empty());
 }
 

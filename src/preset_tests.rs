@@ -317,7 +317,7 @@ fn save_overwrites_unlinked_views_and_workspaces_but_save_as_checks_collisions()
         workbench.save_preset(kind.clone());
         settle(&window, || !workbench.authoring.busy.get_untracked());
         assert!(workbench.authoring.error.with_untracked(String::is_empty));
-        workbench.view().preset.set(None);
+        workbench.view_untracked().preset.set(None);
         workbench.workspace().source.set(None);
         workbench.add_plot(workbench.pane().id, true, false);
         workbench.save_preset(kind.clone());
@@ -440,13 +440,13 @@ fn view_capture_deduplicates_dependencies_and_excludes_runtime_state() {
         ids.insert(80);
     });
     add_line(workbench, SOURCE, data);
-    workbench.analysis().start.set("99".into());
+    workbench.view_untracked().analysis.start.set("99".into());
     let before = capture(workbench, &CaptureKind::View, "Portable").unwrap();
     first
         .plot
         .set_view(Ranges::new((0.3, 0.6), (-100., 100.)))
         .unwrap();
-    workbench.analysis().start.set("200".into());
+    workbench.view_untracked().analysis.start.set("200".into());
     let after = capture(workbench, &CaptureKind::View, "Portable").unwrap();
     assert_eq!(before.document, after.document);
     assert_eq!(before.document["signals"].as_array().unwrap().len(), 1);
@@ -606,8 +606,8 @@ fn view_restore_remaps_layout_routes_background_work_and_append_keeps_bounds() {
         crate::preset_ui::ApplyAction::NewView,
     );
     let restored = workbench.bind_view();
-    assert_ne!(restored.view().id, original.view().id);
-    assert_eq!(restored.panes().with_untracked(Vec::len), 3);
+    assert_ne!(restored.view_untracked().id, original.view_untracked().id);
+    assert_eq!(restored.view_untracked().panes.with_untracked(Vec::len), 3);
     let unrelated = workbench.new_view();
     settle(&window, || {
         workbench
@@ -618,13 +618,13 @@ fn view_restore_remaps_layout_routes_background_work_and_append_keeps_bounds() {
     assert_eq!(workbench.views.active.get_untracked(), unrelated);
     assert_eq!(workbench.pane().lines.with_untracked(Vec::len), 0);
     assert_eq!(
-        restored.panes().with_untracked(|panes| panes
+        restored.view_untracked().panes.with_untracked(|panes| panes
             .iter()
             .filter(|pane| !pane.lines.with_untracked(Vec::is_empty))
             .count()),
         2
     );
-    let source = restored.view().preset.get_untracked().unwrap();
+    let source = restored.view_untracked().preset.get_untracked().unwrap();
     assert!(!restored.preset_modified(&CaptureKind::View, &source));
     assert_eq!(first.plot.ranges.get_untracked(), bounds);
     original.use_saved_preset(
@@ -633,16 +633,16 @@ fn view_restore_remaps_layout_routes_background_work_and_append_keeps_bounds() {
         crate::preset_ui::ApplyAction::AppendView,
     );
     settle(&window, || {
-        original.panes().with_untracked(|panes| {
+        original.view_untracked().panes.with_untracked(|panes| {
             panes
                 .iter()
                 .map(|pane| pane.lines.with_untracked(Vec::len))
                 .sum::<usize>()
         }) == 4
     });
-    assert_eq!(original.panes().with_untracked(Vec::len), 6);
+    assert_eq!(original.view_untracked().panes.with_untracked(Vec::len), 6);
     let mut dividers = Vec::new();
-    original.layout().get_untracked().geometry(
+    original.view_untracked().layout.get_untracked().geometry(
         plot::workspace::layout::Rect {
             width: 1200.,
             height: 800.,
@@ -949,8 +949,8 @@ fn analysis_capture_omits_intervals_and_restore_uses_current_selection() {
     let definition: profile::Profile = serde_json::from_value(bundle.document).unwrap();
     let recipe = definition.plot_presets[0].clone();
     let key = prepare(workbench, definition, Path::new("C:/spectrum-test.json"));
-    workbench.analysis().start.set(String::new());
-    workbench.analysis().end.set(String::new());
+    workbench.view_untracked().analysis.start.set(String::new());
+    workbench.view_untracked().analysis.end.set(String::new());
     workbench.apply_plot_preset(&key, &recipe, None).unwrap();
     let restored = workbench.pane();
     settle(&window, || {
@@ -960,7 +960,14 @@ fn analysis_capture_omits_intervals_and_restore_uses_current_selection() {
     assert_eq!(result.options.start, None);
     assert_eq!(result.options.end, None);
     assert!(result.options.remove_dc);
-    assert!(workbench.analysis().start.get_untracked().is_empty());
+    assert!(
+        workbench
+            .view_untracked()
+            .analysis
+            .start
+            .get_untracked()
+            .is_empty()
+    );
     assert!(restored.lines.with_untracked(|lines| {
         lines
             .iter()

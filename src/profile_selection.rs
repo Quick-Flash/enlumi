@@ -114,7 +114,7 @@ impl Workbench {
         self.profiles
             .pending_drop
             .set_value(Some(crate::profile_state::PendingDrop {
-                view: self.bind_view().view().id,
+                view: self.bind_view().view_untracked().id,
                 sources,
                 target,
                 filter_slot,
