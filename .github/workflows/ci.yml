@@ -27,6 +27,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
+      ENLUMI_SKIP_SOFTWARE_GPU_TESTS: "1"
     timeout-minutes: 60
     steps:
       - name: Arch build libraries

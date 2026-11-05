@@ -7,7 +7,15 @@ pub(super) fn graphics() -> Option<zgui_render_wgpu::SharedGraphics> {
     eprintln!("Opening GPU for {name}");
     let graphics = zgui_render_wgpu::SharedGraphics::new();
     match graphics.open_gpu() {
-        Ok(gpu) => eprintln!("GPU for {name}: {}", gpu.describe()),
+        Ok(gpu) => {
+            eprintln!("GPU for {name}: {}", gpu.describe());
+            if std::env::var_os("ENLUMI_SKIP_SOFTWARE_GPU_TESTS").is_some()
+                && gpu.adapter().get_info().device_type == zgui::surface::wgpu::DeviceType::Cpu
+            {
+                eprintln!("Skipping software-adapter rendering test {name}");
+                return None;
+            }
+        }
         Err(error) => {
             // Only adapter discovery may skip; rendering failures still fail tests.
             eprintln!("Skipping GPU test {name}: {error}");
