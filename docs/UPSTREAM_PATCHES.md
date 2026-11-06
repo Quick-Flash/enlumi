@@ -1,6 +1,6 @@
 # UI fork changes
 
-Enlumi consumes pinned Git commits from the Quick-Flash forks. UI source copies
+Enlumi consumes Git branches from the Quick-Flash forks, with exact commits pinned in Cargo.lock. UI source copies
 and local path patches are no longer needed. MAVLink XML remains vendored for
 reproducible offline code generation.
 
@@ -15,10 +15,10 @@ Plaizier's configured Git identity.
 Fork: [Quick-Flash/zgui](https://github.com/Quick-Flash/zgui).
 Base: [upstream PR #21](https://github.com/zortax/zgui/pull/21),
 `be5596501fa92877485879e5ba184c9b63e5ebf6`.
-Aggregate: [`enlumi/wayland-dnd-actions`](https://github.com/Quick-Flash/zgui/tree/enlumi/wayland-dnd-actions),
-`abc660ae5d6d39953412c8f5c32801bfb35ef341`. This includes the prior aggregate changes, bounded asynchronous
-FIFO presentation for native Wayland, and choosing the copy action when a
-Wayland drag enters.
+Consumed branch: [`enlumi/wayland-async-fifo`](https://github.com/Quick-Flash/zgui/tree/enlumi/wayland-async-fifo),
+`facad3dae62f44c36b80bb3c5e6b7c37fa3effaa`. This includes the prior aggregate changes, bounded asynchronous
+FIFO presentation for native Wayland, choosing the copy action when a Wayland drag enters,
+and untracked snapshot reads in toggle and resize event handlers.
 The focused branches below retain their original base, `951a0ea3`.
 
 | Branch | Change |
@@ -54,11 +54,10 @@ Aggregate: [`enlumi/all-fixes`](https://github.com/Quick-Flash/zgui-plot/tree/en
 `0087b2b2efb5666a26eaf4f1ee8779c61caa04b3`.
 
 Consumed branch: [`master`](https://github.com/Quick-Flash/zgui-plot/tree/master),
-`eb9a799f55686b1a435c4335735eae39b5a8f1a0`. This includes the merged aggregate
-and retained time bands, including rectangle fills and fixed-width boundaries.
-The published commit has the same source tree as local `e7e928cd`, used for
-the retained-band and latest PR #21 benchmarks. Enlumi pins the published Git
-revision; no sibling checkout is required.
+`528e5836e38fb85d108025b5f98f767b6041278d`. This includes the merged aggregate,
+retained time bands, tracked range linking, and snapshot reads for styles, pointer
+state, tab renaming, and divider events. Cargo.lock pins the published commit;
+no sibling checkout is required.
 
 The old vendoring notes named `aef14a9ce0c8097f8347239a423c151e1641077c`;
 that object was unavailable in the local fork, Cargo cache, and GitHub fork.
