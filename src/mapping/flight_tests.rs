@@ -350,7 +350,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     )));
     harness.settle(128);
     let (workbench, pane, original, service) = captured.borrow().unwrap();
-    let pump = |h: &mut Harness<zgui::runtime::Runtime>, until: &dyn Fn() -> bool| {
+    let pump = |h: &mut Harness<zgui::runtime::Runtime>, stage: &str, until: &dyn Fn() -> bool| {
         let deadline = Instant::now() + Duration::from_secs(20);
         loop {
             h.advance(Duration::from_millis(17));
@@ -360,12 +360,24 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
             }
             assert!(
                 Instant::now() < deadline,
-                "Normal flight map did not settle"
+                "Normal flight map did not settle during {stage}; tracks={}, camera={:?}, overlay={}, tiles={}",
+                pane.trajectory_data
+                    .with_untracked(|data| data.as_ref().map_or(0, |data| data.traces.len())),
+                pane.trajectory.with_untracked(|spec| spec
+                    .as_ref()
+                    .and_then(|spec| spec.map)
+                    .and_then(|map| map.camera)),
+                observed
+                    .0
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|probe| probe.paths.with_untracked(|paths| !paths.is_empty())),
+                service.status(),
             );
             std::thread::sleep(Duration::from_millis(5));
         }
     };
-    pump(&mut harness, &|| {
+    pump(&mut harness, "initial track and camera", &|| {
         pane.trajectory_data.with_untracked(Option::is_some)
             && pane
                 .trajectory
@@ -376,27 +388,38 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
                 .as_ref()
                 .is_some_and(|p| p.paths.with_untracked(|p| !p.is_empty()))
     });
-    // Generate only the currently demanded visible local PNGs; no HTTP requests.
-    for key in service.requested() {
-        assert!(!key.dem);
-        let path = directory
-            .path()
-            .join("osm")
-            .join(key.z.to_string())
-            .join(key.x.to_string())
-            .join(format!("{}.png", key.y));
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        let image = image::RgbaImage::from_fn(256, 256, |x, y| {
-            image::Rgba(if x % 64 < 2 || y % 64 < 2 {
-                [95, 115, 125, 255]
-            } else {
-                [35, 65, 70, 255]
-            })
-        });
-        image.save(path).unwrap();
-    }
-    service.retry();
-    pump(&mut harness, &|| service.complete());
+    // Camera fitting and layout can change tile demand on later frames.
+    pump(&mut harness, "local basemap tiles", &|| {
+        let mut created = false;
+        for key in service.requested() {
+            assert!(!key.dem);
+            let path = directory
+                .path()
+                .join("osm")
+                .join(key.z.to_string())
+                .join(key.x.to_string())
+                .join(format!("{}.png", key.y));
+            if path.exists() {
+                continue;
+            }
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let image = image::RgbaImage::from_fn(256, 256, |x, y| {
+                image::Rgba(if x % 64 < 2 || y % 64 < 2 {
+                    [95, 115, 125, 255]
+                } else {
+                    [35, 65, 70, 255]
+                })
+            });
+            image.save(path).unwrap();
+            created = true;
+        }
+        // A missing-file result may arrive after fixtures were written and retried.
+        let failed = service.failed();
+        if created || failed {
+            service.retry();
+        }
+        !created && !failed && service.complete()
+    });
     let data = pane.trajectory_data.get_untracked().unwrap();
     assert!(data.traces[0].track.geographic.is_some());
     let canvas = observed.0.borrow().as_ref().unwrap().canvas.clone();
@@ -577,7 +600,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     ));
     bind(workbench, pane, 1, 1);
     harness.settle(64);
-    pump(&mut harness, &|| {
+    pump(&mut harness, "additional geographic trace", &|| {
         pane.trajectory_data
             .with_untracked(|d| d.as_ref().is_some_and(|d| !Arc::ptr_eq(d, &data)))
             && pane
@@ -623,7 +646,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     crate::trajectory_axes::local_pair(builder.pane, 2).unwrap();
     builder.target.set(Some(pane.id));
     workbench.drop_trajectory_pair(2, pane.id);
-    pump(&mut harness, &|| {
+    pump(&mut harness, "local-coordinate fields", &|| {
         pane.lines.with_untracked(|lines| {
             lines
                 .iter()
@@ -656,7 +679,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
         harness.advance(Duration::from_millis(17));
         harness.settle(64);
     }
-    pump(&mut harness, &|| {
+    pump(&mut harness, "local-coordinate origin", &|| {
         pane.trajectory_data
             .with_untracked(|d| d.as_ref().is_some_and(|d| d.traces.len() == 3))
     });
@@ -697,7 +720,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     workbench.log.set(Some(new_log));
     workbench.restore_log_session(session);
     harness.settle(64);
-    pump(&mut harness, &|| {
+    pump(&mut harness, "replacement log", &|| {
         pane.trajectory_data
             .with_untracked(|d| d.as_ref().is_some_and(|d| !Arc::ptr_eq(d, &selected)))
             && pane

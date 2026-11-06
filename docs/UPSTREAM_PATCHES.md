@@ -16,9 +16,10 @@ Fork: [Quick-Flash/zgui](https://github.com/Quick-Flash/zgui).
 Base: [upstream PR #21](https://github.com/zortax/zgui/pull/21),
 `be5596501fa92877485879e5ba184c9b63e5ebf6`.
 Consumed branch: [`enlumi/wayland-async-fifo`](https://github.com/Quick-Flash/zgui/tree/enlumi/wayland-async-fifo),
-`facad3dae62f44c36b80bb3c5e6b7c37fa3effaa`. This includes the prior aggregate changes, bounded asynchronous
+`6398a0a8bc56bc6bf90a440be88dbaafd90d5e6b`. This includes the prior aggregate changes, bounded asynchronous
 FIFO presentation for native Wayland, choosing the copy action when a Wayland drag enters,
-and untracked snapshot reads in toggle and resize event handlers.
+untracked snapshot reads in toggle and resize event handlers, and original input-event
+timestamps in event contexts.
 The focused branches below retain their original base, `951a0ea3`.
 
 | Branch | Change |
@@ -54,9 +55,10 @@ Aggregate: [`enlumi/all-fixes`](https://github.com/Quick-Flash/zgui-plot/tree/en
 `0087b2b2efb5666a26eaf4f1ee8779c61caa04b3`.
 
 Consumed branch: [`master`](https://github.com/Quick-Flash/zgui-plot/tree/master),
-`528e5836e38fb85d108025b5f98f767b6041278d`. This includes the merged aggregate,
+`668686f4ff7c69482a234beb2550ded282c37123`. This includes the merged aggregate,
 retained time bands, tracked range linking, and snapshot reads for styles, pointer
-state, tab renaming, and divider events. Cargo.lock pins the published commit;
+state, tab renaming, and divider events. Tab double-click detection uses input-event
+timestamps instead of processing time. Cargo.lock pins the published commit;
 no sibling checkout is required.
 
 The old vendoring notes named `aef14a9ce0c8097f8347239a423c151e1641077c`;

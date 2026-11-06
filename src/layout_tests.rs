@@ -6866,8 +6866,32 @@ fn plot_tab_pointer_rename_and_keyboard_commit_cancel_blur() {
         });
         harness.settle(128);
     };
-    click_class(&mut harness, "plot-tab-select");
-    click_class(&mut harness, "plot-tab-select");
+    let click_tab = |harness: &mut Harness<zgui::runtime::Runtime>, millis| {
+        let rect = harness.app().windows()[0]
+            .box_with_class("plot-tab-select")
+            .unwrap();
+        for action in [PointerAction::Pressed, PointerAction::Released] {
+            let mut event = pointer(
+                action,
+                rect.origin.x.0 + rect.size.width.0 / 2.,
+                rect.origin.y.0 + rect.size.height.0 / 2.,
+            );
+            if let SurfaceEvent::Pointer { timestamp, .. } = &mut event {
+                *timestamp = Timestamp::from_origin(Duration::from_millis(millis));
+            }
+            harness.deliver_to_first(event);
+        }
+        harness.settle(128);
+    };
+    click_tab(&mut harness, 100);
+    click_tab(&mut harness, 700);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("plot-tab-name")
+            .is_empty(),
+        "Clicks 600 ms apart must not open tab editor even when processed together"
+    );
+    click_tab(&mut harness, 800);
     harness.advance(Duration::from_millis(20));
     harness.settle(128);
     assert!(
