@@ -1,0 +1,4 @@
+#!/bin/sh
+# Mirrors CI checks that run on one platform: fmt, clippy, tests, WASM e2e.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+exec cargo xtask pre-push

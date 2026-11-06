@@ -62,6 +62,15 @@ jobs:
           CARGO_HTTP_TIMEOUT: "120"
           CARGO_NET_RETRY: "5"
         run: bash .github/scripts/fetch-dependencies.sh
+      - name: Git hooks are executable, LF-only, valid shell
+        shell: bash
+        run: |
+          test -n "$(git ls-files .githooks)"
+          git ls-files --stage .githooks | awk '$1 != "100755" { bad = 1; print "not executable: " $4 } END { exit bad }'
+          if grep -l $'\r' .githooks/*; then echo "CRLF in hook"; exit 1; fi
+          for hook in .githooks/*; do sh -n "$hook"; done
+          cargo xtask install-hooks
+          test "$(git config core.hooksPath)" = ".githooks"
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
