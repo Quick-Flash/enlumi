@@ -51,26 +51,27 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
         "update-mavlink" if args.len() <= 1 => mavlink::update(args.first().map(String::as_str)),
         "test" => cargo(&["test", "--locked", "--workspace"], args),
         "check" => cargo(&["check", "--locked", "--workspace"], args),
-        "pre-commit" if args.is_empty() => {
-            cargo(&["fmt", "--all", "--", "--check"], &[])?;
-            cargo(&["check", "--locked", "--workspace"], &[])?;
+        "pre-commit" if args.is_empty() => pre_commit(),
+        "pre-push" if args.is_empty() => {
+            require_wasm_target()?;
+            pre_commit()?;
             cargo(
                 &[
-                    "clippy",
+                    "test",
                     "--locked",
-                    "--workspace",
-                    "--all-targets",
+                    "-p",
+                    "enlumi",
+                    "script_e2e",
                     "--",
-                    "-D",
-                    "warnings",
+                    "--ignored",
                 ],
                 &[],
-            )?;
-            cargo(&["test", "--locked", "--workspace"], &[])
+            )
         }
+        "install-hooks" if args.is_empty() => install_hooks(),
         "help" | "-h" | "--help" => {
             println!(
-                "cargo xtask [run-gui | run-gui-release | build | build-release | bundle | test | check | pre-commit | update-mavlink [version] | perf-summary <frames.csv> | perf-trace <latency.jsonl>]"
+                "cargo xtask [run-gui | run-gui-release | build | build-release | bundle | test | check | pre-commit | pre-push | install-hooks | update-mavlink [version] | perf-summary <frames.csv> | perf-trace <latency.jsonl>]"
             );
             println!("No command: interactive menu. GUI commands accept log path after --.");
             Ok(())
@@ -81,12 +82,74 @@ fn dispatch(command: &str, args: &[String]) -> Result<(), String> {
     }
 }
 
+fn pre_commit() -> Result<(), String> {
+    cargo(&["fmt", "--all", "--", "--check"], &[])?;
+    cargo(&["check", "--locked", "--workspace"], &[])?;
+    cargo(
+        &[
+            "clippy",
+            "--locked",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        &[],
+    )?;
+    cargo(&["test", "--locked", "--workspace"], &[])
+}
+
+fn require_wasm_target() -> Result<(), String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask belongs to enlumi workspace");
+    let output = Command::new("rustup")
+        .current_dir(root)
+        .args(["target", "list", "--installed"])
+        .output()
+        .map_err(|error| format!("cannot start rustup: {error}"))?;
+    if String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .any(|line| line.trim() == "wasm32-unknown-unknown")
+    {
+        Ok(())
+    } else {
+        Err(
+            "missing target wasm32-unknown-unknown; run: rustup target add wasm32-unknown-unknown"
+                .into(),
+        )
+    }
+}
+
+fn install_hooks() -> Result<(), String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask belongs to enlumi workspace");
+    let status = Command::new("git")
+        .current_dir(root)
+        .args(["config", "core.hooksPath", ".githooks"])
+        .status()
+        .map_err(|error| format!("cannot start git: {error}"))?;
+    if status.success() {
+        println!("core.hooksPath = .githooks (pre-commit, pre-push active)");
+        Ok(())
+    } else {
+        Err(format!("git config failed: {status}"))
+    }
+}
+
 fn cargo(args: &[&str], extra: &[String]) -> Result<(), String> {
     println!("running: cargo {} {}", args.join(" "), extra.join(" "));
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("xtask belongs to enlumi workspace");
-    let status = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+    let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+    // CI skips rendering tests on software adapters; local runs match unless the caller overrides.
+    if args.first() == Some(&"test") && env::var_os("ENLUMI_SKIP_SOFTWARE_GPU_TESTS").is_none() {
+        command.env("ENLUMI_SKIP_SOFTWARE_GPU_TESTS", "1");
+    }
+    let status = command
         .current_dir(root)
         .args(args)
         .args(extra)
@@ -109,6 +172,8 @@ fn menu() -> Result<(), String> {
         "test",
         "check",
         "pre-commit",
+        "pre-push",
+        "install-hooks",
         "update-mavlink",
     ];
     println!("Enlumi xtask");
