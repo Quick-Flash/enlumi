@@ -180,13 +180,17 @@ impl Workbench {
             }));
     }
     pub fn filter_input_offset(self, index: usize) -> String {
-        format!(
-            "translateY({}px)",
-            self.filter_input_ui.drag.with(|drag| drag
-                .as_ref()
+        let offset = |drag: &Option<InputDrag>| {
+            drag.as_ref()
                 .filter(|drag| index < drag.original.len())
-                .map_or(0.0, |drag| drag.offset(index)))
-        )
+                .map_or(0.0, |drag| drag.offset(index))
+        };
+        let offset = if reactive_graph::graph::Observer::get().is_some() {
+            self.filter_input_ui.drag.with(offset)
+        } else {
+            self.filter_input_ui.drag.with_untracked(offset)
+        };
+        format!("translateY({}px)", offset)
     }
     pub fn finish_filter_input_drag(self, cancel: bool) {
         let Some(mut drag) = self.filter_input_ui.drag.get_untracked() else {

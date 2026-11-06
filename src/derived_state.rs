@@ -52,6 +52,9 @@ impl Workbench {
         if source.starts_with("@trajectory/pair/") {
             return "X/Y pair".into();
         }
+        if reactive_graph::graph::Observer::get().is_none() {
+            return self.field_name_untracked(source);
+        }
         let source = source.strip_prefix("@analysis/").unwrap_or(source);
         if let Some(drag) = crate::profile::identity::Drag::parse(source) {
             return drag.item.name().into();

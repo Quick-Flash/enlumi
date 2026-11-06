@@ -323,8 +323,14 @@ impl Workbench {
             self.preset_plot_finished();
             return;
         }
-        let preserve_bounds =
-            pane.loading.with_untracked(Option::is_some) && !pane.plot.auto_fit.get_untracked();
+        // Fitting a map clears its camera, including a camera restored from the recipe.
+        let preserve_bounds = (pane.loading.with_untracked(Option::is_some)
+            && !pane.plot.auto_fit.get_untracked())
+            || recipe
+                .trajectory
+                .as_ref()
+                .and_then(|spec| spec.map.as_ref())
+                .is_some_and(|map| map.camera.is_some());
         let generation = self.generation.get_untracked();
         let interval = (
             self.analysis().start.get_untracked().parse().ok(),

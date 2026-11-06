@@ -216,7 +216,8 @@ fn log(offset: f64) -> Arc<crate::log::LogStore> {
 }
 
 #[test]
-fn normal_map_workspace_recipe_keeps_binding_and_camera() {
+fn normal_map_workspace_recipe_keeps_binding_and_camera() -> Result<(), Box<dyn std::error::Error>>
+{
     let _zone = zgui::reactive::enter_non_reactive_zone();
     let window = zgui_testkit_view::Window::open();
     let workbench = window.scope.with(Workbench::new);
@@ -254,18 +255,25 @@ fn normal_map_workspace_recipe_keeps_binding_and_camera() {
         workbench,
         &crate::preset_capture::CaptureKind::Workspace,
         "GPS flight",
-    )
-    .unwrap();
-    let directory = tempfile::tempdir().unwrap();
+    )?;
+    let directory = tempfile::tempdir()?;
     let path = directory.path().join("flight.json");
-    crate::preset_store::save(bundle, &path, false, None).unwrap();
-    let definition = Arc::new(crate::profile::load(&path).unwrap());
+    crate::preset_store::save(bundle, &path, false, None)?;
+    let definition = Arc::new(crate::profile::load(&path)?);
     let saved = definition.workspace_presets[0].views[0].plots[0]
         .trajectory
         .as_ref()
-        .unwrap();
-    assert_eq!(saved.map, source.map);
-    assert!(saved.gps_scale.is_some());
+        .ok_or("Saved workspace omitted trajectory")?;
+    if saved.map != source.map {
+        return Err(format!(
+            "Saved camera changed: saved={:?}, expected={:?}",
+            saved.map, source.map
+        )
+        .into());
+    }
+    if saved.gps_scale.is_none() {
+        return Err("Saved workspace omitted GPS scale".into());
+    }
     let restored = window.scope.with(Workbench::new);
     restored.log.set(workbench.log.get_untracked());
     restored.open_saved_workspace(crate::workspace_state::SavedWorkspace {
@@ -275,18 +283,30 @@ fn normal_map_workspace_recipe_keeps_binding_and_camera() {
         definition,
     });
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-    while restored.pane().trajectory.with_untracked(Option::is_none) {
+    while restored.workspace().loading.with_untracked(Option::is_some)
+        || restored.profiles.busy.get_untracked()
+        || restored.pane().loading.with_untracked(Option::is_some)
+        || restored.pane().trajectory.with_untracked(Option::is_none)
+    {
         window.frame();
-        assert!(
-            std::time::Instant::now() < deadline,
-            "Saved map workspace did not restore"
-        );
+        if std::time::Instant::now() >= deadline {
+            return Err(format!(
+                "Saved map workspace did not restore: {}",
+                restored.status.get_untracked()
+            )
+            .into());
+        }
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    assert_eq!(
-        restored.pane().trajectory.get_untracked().unwrap().map,
-        source.map
-    );
+    let actual = restored.pane().trajectory.get_untracked().unwrap().map;
+    if actual != source.map {
+        return Err(format!(
+            "Restored camera changed: restored={actual:?}, expected={:?}",
+            source.map
+        )
+        .into());
+    }
+    Ok(())
 }
 
 #[test]

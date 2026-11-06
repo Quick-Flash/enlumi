@@ -1,10 +1,17 @@
 use crate::state::{Pane, Workbench};
+use reactive_graph::graph::untrack;
 use zgui::prelude::*;
 
 pub use plot::zgui_series::LegendDrag;
 impl Workbench {
     // Field IDs grow from zero; complemented geometry IDs occupy upper half.
     pub fn legend_keys(self, pane: Pane) -> Vec<u64> {
+        if reactive_graph::graph::Observer::get().is_none() {
+            return untrack(|| self.legend_keys_tracked(pane));
+        }
+        self.legend_keys_tracked(pane)
+    }
+    fn legend_keys_tracked(self, pane: Pane) -> Vec<u64> {
         let mut keys = pane
             .view_lines
             .with(|lines| lines.iter().map(|line| line.id).collect::<Vec<_>>());
