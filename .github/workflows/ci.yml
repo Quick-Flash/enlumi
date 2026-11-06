@@ -65,6 +65,7 @@ jobs:
       - name: Git hooks are executable, LF-only, valid shell
         shell: bash
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           test -n "$(git ls-files .githooks)"
           git ls-files --stage .githooks | awk '$1 != "100755" { bad = 1; print "not executable: " $4 } END { exit bad }'
           if grep -l $'\r' .githooks/*; then echo "CRLF in hook"; exit 1; fi
