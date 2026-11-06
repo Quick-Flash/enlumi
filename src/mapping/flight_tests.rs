@@ -283,7 +283,11 @@ fn normal_map_workspace_recipe_keeps_binding_and_camera() -> Result<(), Box<dyn 
         definition,
     });
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-    while restored.pane().trajectory.with_untracked(Option::is_none) {
+    while restored.workspace().loading.with_untracked(Option::is_some)
+        || restored.profiles.busy.get_untracked()
+        || restored.pane().loading.with_untracked(Option::is_some)
+        || restored.pane().trajectory.with_untracked(Option::is_none)
+    {
         window.frame();
         if std::time::Instant::now() >= deadline {
             return Err(format!(
