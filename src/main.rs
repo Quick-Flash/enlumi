@@ -124,12 +124,18 @@ mod signal_provenance;
 mod spectral;
 mod startup;
 mod state;
+mod state_band_key;
 mod state_bands;
+mod state_key;
+mod state_tint;
+mod state_tint_options;
+mod state_trace_overlay;
 mod theme;
 mod theme_picker;
 #[cfg(test)]
 mod theme_tests;
 mod timeline;
+mod trace_color;
 mod trajectory;
 mod trajectory_axes;
 mod trajectory_plot;

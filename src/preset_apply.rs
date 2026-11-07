@@ -552,6 +552,7 @@ impl Workbench {
         instance: &crate::profile_instance::AppliedProfile,
     ) {
         pane.background.set(recipe.background);
+        pane.state_tint.set(recipe.state_tint);
         let mut order = BTreeMap::new();
         for line in pane.lines.get_untracked() {
             let source = line
@@ -783,11 +784,13 @@ pub fn available_plots(instance: &crate::profile_instance::AppliedProfile) -> Ve
         plots.push(PlotPreset {
             name: view.name.clone(),
             background: None,
+            state_tint: false,
             lines: prepared
                 .fields
                 .iter()
                 .enumerate()
                 .map(|(index, (source, _))| PresetLine {
+                    coloring: None,
                     source: source.clone(),
                     color: crate::line_colors::PALETTE[index % crate::line_colors::PALETTE.len()],
                     width: 1.5,
@@ -815,6 +818,13 @@ pub fn available_plots(instance: &crate::profile_instance::AppliedProfile) -> Ve
 }
 
 pub(crate) fn apply_line_appearance(pane: Pane, id: u64, style: &PresetLine) {
+    pane.trace_colors.update(|colors| {
+        if let Some(color) = style.coloring {
+            colors.insert(id, color);
+        } else {
+            colors.remove(&id);
+        }
+    });
     use plot::{
         line_draw::{Connection, LineDraw, LinePattern},
         plot_data::{MarkerShape, SeriesStyle},

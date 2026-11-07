@@ -1,4 +1,7 @@
+use crate::state_tint_options::StateTintOptionsProps;
 use crate::{
+    mapping::color_settings::ColorSettingsProps,
+    mapping::settings::MapBackendProps,
     preset_capture::CaptureKind,
     state::{Pane, Workbench},
 };
@@ -215,14 +218,17 @@ pub fn PlotMenuEditor(
         actions.extra = Some(UnsyncCallback::new(move |_| workbench.edit_analysis(pane)));
         actions.extra_label = "FFT / PSD settings";
     }
+    let spatial = Memo::new(move |_| pane.trajectory.with(Option::is_some));
     view! {Dialog(open=open,on_open_change=UnsyncCallback::new(move |opened|{
         if opened && !pane.view_lines.with_untracked(|lines|lines.iter().any(|line|Some(line.id)==pane.selected.get_untracked())) && let Some(id)=pane.view_lines.with_untracked(|lines|lines.first().map(|line|line.id)){pane.selected.set(Some(id));}
     })) {
         if move ||legend_trigger {DialogTrigger(size=ButtonSize::Xs,variant=ButtonVariant::Ghost,class="plot-settings-trigger plot-gear",a11y:label="Plot line settings") {{gear().into_view()}}}
         DialogContent(class="plot-settings-surface plot-editor-surface") {
-        column(class="plot-settings-content") {
+        column(class="plot-settings-content",class:trace-gradient-active=move ||crate::trace_color::current(pane,crate::trace_color::selected(pane)).mode!=crate::trace_color::Mode::Solid) {
             DialogTitle(class="settings-title") {{format!("Plot {} line settings",pane.id)}}
-            {move ||if pane.trajectory.with(Option::is_some) {AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),fixed_connection=plot::line_draw::Connection::Linear,on_extra=UnsyncCallback::new(move |()|open.set(false)))})}else{AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),on_extra=UnsyncCallback::new(move |()|open.set(false)))})}}
+            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {MapBackend(workbench=workbench,pane=pane) ColorSettings(workbench=workbench,pane=pane)}
+            if move ||pane.analysis.with(Option::is_none) {StateTintOptions(workbench=workbench,pane=pane)}
+            {move ||if spatial.get() {AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),fixed_connection=plot::line_draw::Connection::Linear,on_extra=UnsyncCallback::new(move |()|open.set(false)))})}else{AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),on_extra=UnsyncCallback::new(move |()|open.set(false)))})}}
             DialogClose(class="settings-done",size=ButtonSize::Sm,variant=ButtonVariant::Outline) {"Done"}
         }
     }}}

@@ -323,10 +323,14 @@ impl Capture {
                     })
                 })
                 .unwrap_or_default();
-            if let Some(line) = original {
+            if let Some(line) = &original {
                 line_ids.insert(line.id, format!("line:{token}"));
             }
             lines.push(PresetLine {
+                coloring: original.as_ref().and_then(|line| {
+                    pane.trace_colors
+                        .with_untracked(|colors| colors.get(&line.id).copied())
+                }),
                 source: token,
                 color: style.color,
                 width: style.width,
@@ -472,6 +476,7 @@ impl Capture {
         Ok(PlotPreset {
             name: name.into(),
             background: pane.background.get_untracked(),
+            state_tint: pane.state_tint.get_untracked(),
             lines,
             geometry,
             geometry_style,

@@ -343,6 +343,14 @@ impl Workbench {
                 original
             };
             source.display().copy_appearance(target.display(), id, &[]);
+            if let Some(color) = source
+                .trace_colors
+                .with_untracked(|colors| colors.get(&id).copied())
+            {
+                target.trace_colors.update(|colors| {
+                    colors.insert(id, color);
+                });
+            }
             target.plot.styles.update(|styles| {
                 if let Some(style) = styles.get_mut(&id.to_string()) {
                     style.color = color;

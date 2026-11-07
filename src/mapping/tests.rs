@@ -748,6 +748,44 @@ fn map_and_terrain_render_local_xyz_and_reuse_textures_while_navigating() {
         pixels.max_difference(&read_pixels(&harness)) > 10,
         "Orbit changes the projected terrain"
     );
+    // Regional zooms must retain terrain across the upper viewport, beyond the
+    // old fixed distance past focus. Use generated local tiles, never network.
+    let near_camera = model.camera.get_untracked();
+    let near_orbit = model.orbit.get_untracked();
+    model.camera.set(Camera {
+        zoom: 8.,
+        ..near_camera
+    });
+    model.orbit.set(super::terrain::Orbit::default());
+    harness.settle(128);
+    load_map_fixture(&mut harness, model, directory.path(), false);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        harness.advance(Duration::from_millis(17));
+        harness.settle(64);
+        let frame = read_pixels(&harness);
+        let left = (region.origin.x.0 + region.size.width.0 * 0.2) as i32;
+        let right = (region.origin.x.0 + region.size.width.0 * 0.8) as i32;
+        let y = (region.origin.y.0 + 40.) as i32;
+        let terrain = (left..right)
+            .filter(|&x| {
+                let p = frame.rgba(x, y);
+                p[1] > p[0].saturating_add(10) && p[1] > p[2].saturating_add(10)
+            })
+            .count();
+        if terrain > (right - left) as usize / 2 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Zoomed-out upper viewport must contain terrain, got {terrain} pixels"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    model.camera.set(near_camera);
+    model.orbit.set(near_orbit);
+    harness.settle(128);
+    load_map_fixture(&mut harness, model, directory.path(), false);
     // Both supported pan gestures preserve zoom and orbit.
     let orbit_before_pan = model.orbit.get_untracked();
     for (button, modifiers) in [

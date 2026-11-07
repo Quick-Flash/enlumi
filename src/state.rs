@@ -55,6 +55,8 @@ pub struct Pane {
     pub hidden_geometry: RwSignal<BTreeSet<u64>, LocalStorage>,
     pub selected: RwSignal<Option<u64>, LocalStorage>,
     pub drawing: RwSignal<BTreeMap<u64, plot::line_draw::LineDraw>, LocalStorage>,
+    pub trace_colors: RwSignal<BTreeMap<u64, crate::trace_color::TraceColor>, LocalStorage>,
+    pub state_tint: RwSignal<bool, LocalStorage>,
     pub plot: TimeSeriesState,
     pub series: Signal<TimeSeriesSet, LocalStorage>,
     pub view_lines: Signal<Vec<plot::zgui_series::SeriesLine>, LocalStorage>,
@@ -125,6 +127,8 @@ impl Pane {
             view_lines,
             selected: RwSignal::new_local(None),
             drawing: RwSignal::new_local(BTreeMap::new()),
+            trace_colors: RwSignal::new_local(BTreeMap::new()),
+            state_tint: RwSignal::new_local(false),
             plot: TimeSeriesState::default(),
             series,
         }
@@ -201,6 +205,9 @@ impl Pane {
                 .update(|lines| lines.retain(|line| line.id != id));
         }
         self.display().remove_appearance(id);
+        self.trace_colors.update(|colors| {
+            colors.remove(&id);
+        });
     }
 }
 
@@ -718,6 +725,14 @@ impl Workbench {
         copy.plot.hidden.set(copied_hidden);
         copy.plot.styles.set(styles);
         copy.drawing.set(drawing);
+        copy.trace_colors
+            .set(source.trace_colors.with_untracked(|colors| {
+                colors
+                    .iter()
+                    .filter_map(|(id, color)| ids.get(id).map(|new| (*new, *color)))
+                    .collect()
+            }));
+        copy.state_tint.set(source.state_tint.get_untracked());
         copy.plot.ranges.set(source.plot.ranges.get_untracked());
         copy.plot.auto_fit.set(source.plot.auto_fit.get_untracked());
         copy.links.set(source.links.get_untracked());

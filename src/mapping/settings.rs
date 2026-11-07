@@ -7,7 +7,7 @@ use crate::{
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
-fn target(workbench: Workbench, pane: Pane) -> Pane {
+pub(super) fn target(workbench: Workbench, pane: Pane) -> Pane {
     if pane.id == 0 {
         workbench
             .trajectory_builder()
@@ -38,6 +38,16 @@ pub(crate) fn update(workbench: Workbench, pane: Pane, edit: impl Fn(&mut Spec))
             }
         });
     }
+    if pane.id != 0 {
+        let builder = workbench.trajectory_builder();
+        if builder.target.get_untracked() == Some(pane.id) {
+            builder.pane.trajectory.update(|spec| {
+                if let Some(spec) = spec {
+                    edit(spec);
+                }
+            });
+        }
+    }
 }
 pub(crate) fn bind_altitude(workbench: Workbench, pane: Pane, index: usize, source: String) {
     update(workbench, pane, |spec| {
@@ -48,12 +58,39 @@ pub(crate) fn bind_altitude(workbench: Workbench, pane: Pane, index: usize, sour
             map.camera = None;
         }
     });
-    if !source.is_empty()
-        && let Some(target) = workbench.trajectory_builder().target.get_untracked()
-    {
-        workbench.activate(target);
+    let target = target(workbench, pane);
+    if !source.is_empty() && target.id != 0 {
+        workbench.activate(target.id);
         workbench.add(source);
     }
+}
+pub(crate) fn set_provider(workbench: Workbench, pane: Pane, provider: Provider) {
+    let edit = |spec: &mut Spec| {
+        if let Some(map) = spec.map.as_mut() {
+            map.provider = provider;
+        }
+    };
+    update(workbench, pane, edit);
+}
+#[component]
+pub fn MapBackend(
+    workbench: Workbench,
+    pane: Pane,
+    #[prop(default = false)] compact: bool,
+) -> impl IntoView {
+    install_stylesheet("enlumi-map", include_str!("preview.css"));
+    let provider = Memo::new(move |_| {
+        target(workbench, pane)
+            .trajectory
+            .with(|s| s.as_ref().and_then(|s| s.map).unwrap_or_default().provider)
+    });
+    view! {column(class="map-backend-settings") {
+        if move ||!compact {text {"Map backend"}}
+        Select(value=Binding::controlled(Signal::derive_local(move ||provider.get().key().to_owned()),move |key:String|if let Some(provider)=Provider::parse(&key){set_provider(workbench,pane,provider);})) {
+            SelectTrigger(class="map-backend-trigger",label="Map backend"){{move ||provider.get().label()}}
+            SelectContent {for provider in move ||Provider::ALL,key=|p|p.key(){SelectItem(value=provider.key()){{provider.label()}}}}
+        }
+    }}
 }
 #[component]
 pub fn MapSettings(workbench: Workbench, pane: Pane) -> impl IntoView {
@@ -66,13 +103,10 @@ pub fn MapSettings(workbench: Workbench, pane: Pane) -> impl IntoView {
     });
     let service = workbench.shared_map_tiles();
     view! {column(class="map-sidebar-settings") {
-        Select(value=Binding::controlled(Signal::derive_local(move ||map.get().provider.key().to_owned()), move |key:String|if let Some(provider)=Provider::parse(&key){update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.provider=provider;});})) {
-            SelectTrigger(label="Map provider"){SelectValue()}
-            SelectContent {for provider in move ||Provider::ALL,key=|p|p.key(){SelectItem(value=provider.key()){{provider.label()}}}}
-        }
+        MapBackend(workbench=workbench,pane=pane)
         row(class="map-coordinate-units") {
-            ActionButton(class:setting-active=move ||!map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.terrain=false;})){"2D map"}
-            ActionButton(class:setting-active=move ||map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){if !map.terrain{map.camera=None;}map.terrain=true;})){"3D map"}
+            ActionButton(class:setting-active=move ||!map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.set_terrain(false);})){"2D map"}
+            ActionButton(class:setting-active=move ||map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.set_terrain(true);})){"3D map"}
             ActionButton(class:setting-active=move ||map.get().offline,on:click=move |_|{let next=!map.get_untracked().offline;update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.offline=next;});}){{move ||if map.get().offline{"Offline tiles only"}else{"Online tiles"}}}
         }
         row(class="map-coordinate-units") {
@@ -88,7 +122,12 @@ pub fn MapSettings(workbench: Workbench, pane: Pane) -> impl IntoView {
     }}
 }
 #[component]
-pub fn AltitudeOptions(workbench: Workbench, pane: Pane, index: usize) -> impl IntoView {
+pub fn AltitudeOptions(
+    workbench: Workbench,
+    pane: Pane,
+    index: usize,
+    #[prop(default = false)] force: bool,
+) -> impl IntoView {
     let node = NodeRef::new();
     pane.altitude_slots.update_value(|slots| {
         slots.insert(index, node);
@@ -106,7 +145,7 @@ pub fn AltitudeOptions(workbench: Workbench, pane: Pane, index: usize) -> impl I
     let draft = RwSignal::new_local(altitude.get_untracked().source);
     let sync = zgui::reactive::RenderEffect::new(move |_| draft.set(altitude.get().source));
     on_cleanup_local(move || drop(sync));
-    view! {if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some_and(|m|m.terrain))) {
+    view! {if move ||force||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some_and(|m|m.terrain||m.coloring==super::telemetry::ColorBy::Altitude))) {
         column(class="map-altitude-options",node_ref=node) {
             text {"Z / altitude"}
             Input(a11y:label="Z field ID",placeholder="Drop Z field here, or enter field ID",value=Binding::controlled(Signal::derive_local(move ||draft.get()),move |value:String|draft.set(value)),on:key_down=move |e|{if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter){bind_altitude(workbench,pane,index,draft.get_untracked().trim().to_owned());}})
@@ -129,6 +168,128 @@ pub fn AltitudeOptions(workbench: Workbench, pane: Pane, index: usize) -> impl I
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn line_settings_choose_independent_2d_and_3d_map_backends() {
+        use crate::{plot_menu::PlotMenuEditorProps, theme::AppThemeProps};
+        use std::{cell::RefCell, rc::Rc};
+        use zgui::{
+            geom::{CssPx, DevicePx, Point, Size},
+            platform::SurfaceEvent,
+            render::Renderer,
+            vocab::{Modifiers, PointerAction, PointerButton, PointerEvent, Timestamp},
+        };
+        use zgui_platform_headless::Harness;
+        let captured = Rc::new(RefCell::new(None));
+        let saved = captured.clone();
+        let handler = app()
+            .with_size(900., 700.)
+            .with_stylesheet(super::super::preview::stylesheet())
+            .with_renderer(Box::new(|_, target| {
+                let mut renderer = zgui_testkit_scene::CaptureRenderer::new();
+                renderer.configure(target);
+                Ok(Box::new(renderer))
+            }))
+            .into_handler(move || {
+                let workbench = Workbench::new();
+                let first = workbench.pane();
+                let second = workbench.add_plot(first.id, true, false);
+                for (pane, terrain) in [(first, false), (second, true)] {
+                    pane.trajectory.set(Some(Spec {
+                        map: Some(super::super::flight::Config {
+                            terrain,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }));
+                }
+                workbench.edit_trajectory(first);
+                let first_open = RwSignal::new_local(true);
+                let second_open = RwSignal::new_local(false);
+                *saved.borrow_mut() = Some((workbench, first, second, first_open, second_open));
+                view! {AppTheme(palette=crate::theme::Palette::Forest) {
+                    column(class="page workbench") {
+                        PlotMenuEditor(workbench=workbench,pane=first,open=first_open)
+                        PlotMenuEditor(workbench=workbench,pane=second,open=second_open)
+                    }
+                }}
+            })
+            .unwrap();
+        let mut harness = Harness::new(handler.into_runtime());
+        harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+            DevicePx(900.),
+            DevicePx(700.),
+        )));
+        harness.settle(128);
+        let (workbench, first, second, first_open, second_open) = captured.borrow().unwrap();
+        let click = |harness: &mut Harness<zgui::runtime::Runtime>, class: &str, label: &str| {
+            let window = &harness.app().windows()[0];
+            let node = window
+                .nodes_with_class(class)
+                .into_iter()
+                .find(|node| window.dom().text_content(*node).contains(label))
+                .unwrap();
+            let bounds = zgui::view::ViewHost::window_box(window.host().as_ref(), node).unwrap();
+            for action in [PointerAction::Pressed, PointerAction::Released] {
+                let mut event = PointerEvent::mouse(Point::new(
+                    CssPx(bounds.origin.x.0 + bounds.size.width.0 / 2.),
+                    CssPx(bounds.origin.y.0 + bounds.size.height.0 / 2.),
+                ));
+                event.button = Some(PointerButton::Primary);
+                harness.deliver_to_first(SurfaceEvent::Pointer {
+                    action,
+                    event,
+                    modifiers: Modifiers::NONE,
+                    timestamp: Timestamp::ORIGIN,
+                });
+            }
+            harness.settle(128);
+        };
+        let provider = |pane: Pane| {
+            pane.trajectory
+                .get_untracked()
+                .unwrap()
+                .map
+                .unwrap()
+                .provider
+        };
+        click(&mut harness, "map-backend-trigger", "OpenStreetMap");
+        click(&mut harness, "zui-select__item", "Google Satellite");
+        assert_eq!(provider(first), Provider::GoogleSatellite);
+        assert_eq!(provider(second), Provider::OpenStreetMap);
+        assert_eq!(
+            provider(workbench.trajectory_builder().pane),
+            Provider::GoogleSatellite
+        );
+        first_open.set(false);
+        harness.settle(128);
+        harness.advance(std::time::Duration::from_secs(1));
+        second_open.set(true);
+        harness.settle(128);
+        click(&mut harness, "map-backend-trigger", "OpenStreetMap");
+        click(&mut harness, "zui-select__item", "Esri World Imagery");
+        assert_eq!(provider(first), Provider::GoogleSatellite);
+        assert_eq!(provider(second), Provider::EsriImagery);
+        assert_eq!(
+            provider(workbench.trajectory_builder().pane),
+            Provider::GoogleSatellite
+        );
+        for pane in [first, second] {
+            let spec = pane.trajectory.get_untracked().unwrap();
+            let restored: Spec =
+                serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
+            assert_eq!(restored.map, spec.map);
+        }
+        let window = &harness.app().windows()[0];
+        assert!(
+            window
+                .nodes_with_class("map-backend-trigger")
+                .into_iter()
+                .any(|node| window
+                    .dom()
+                    .text_content(node)
+                    .contains("Esri World Imagery"))
+        );
+    }
     #[test]
     fn sidebar_settings_update_open_map_and_survive_serialization() {
         let window = zgui_testkit_view::Window::open();

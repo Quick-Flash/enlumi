@@ -8,6 +8,8 @@ pub struct PlotPreset {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<[u8; 3]>,
+    #[serde(default)]
+    pub state_tint: bool,
     pub lines: Vec<PresetLine>,
     #[serde(default)]
     pub geometry: Vec<String>,
@@ -25,6 +27,8 @@ pub struct PlotPreset {
 #[serde(deny_unknown_fields)]
 pub struct PresetLine {
     pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coloring: Option<crate::trace_color::TraceColor>,
     pub color: [u8; 4],
     pub width: f64,
     pub radius: f64,
@@ -201,6 +205,9 @@ fn validate_plot(plot: &PlotPreset) -> Result<(), String> {
     }
     let mut seen = BTreeSet::new();
     for line in &plot.lines {
+        if line.coloring.is_some_and(|color| !color.valid()) {
+            return Err("Gradient limits must be finite and increasing".into());
+        }
         if !seen.insert(&line.source)
             || !line.width.is_finite()
             || !(0.1..=20.).contains(&line.width)

@@ -1,4 +1,4 @@
-//! Retained map/height textures; orbiting uploads only view/tile uniforms.
+//! Retained map/height textures; patterned tracks also refresh screen-space dash phases on orbit.
 use super::{
     camera::{Camera, WORLD},
     terrain::{MAX_RENDER_TILES, Orbit, Scene, ground_scale},
@@ -401,8 +401,7 @@ impl Renderer {
             .unwrap()
             .1
             .create_view(&Default::default());
-        self.paths
-            .prepare(gpu, scene, camera, orbit.exaggeration, css);
+        self.paths.prepare(gpu, scene, camera, orbit, css);
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("map.terrain"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {

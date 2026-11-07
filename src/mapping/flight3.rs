@@ -98,9 +98,15 @@ pub fn pick_time(
     }
     best.1
 }
-pub(crate) fn vertices(scene: &Scene, camera: Camera, exaggeration: f32) -> Vec<[f32; 9]> {
+pub(crate) fn vertices(
+    scene: &Scene,
+    camera: Camera,
+    orbit: super::terrain::Orbit,
+    size: [f64; 2],
+) -> Vec<[f32; 11]> {
     let scale = super::terrain::ground_scale(camera);
     let base = f64::from(scene.center_height(camera));
+    let projection = super::hover::Projection::new(scene, camera, orbit, size);
     let mut vertices = Vec::new();
     for path in scene.paths.iter() {
         let Some(origin) = scene.path_base(path) else {
@@ -109,7 +115,8 @@ pub(crate) fn vertices(scene: &Scene, camera: Camera, exaggeration: f32) -> Vec<
         let vertex = |point: [f64; 3], color: [u8; 4]| {
             [
                 ((point[0] - camera.center[0]) * scale) as f32,
-                ((point[2] + f64::from(origin) - base) * f64::from(exaggeration) + 0.5) as f32,
+                ((point[2] + f64::from(origin) - base) * f64::from(orbit.exaggeration) + 0.5)
+                    as f32,
                 ((camera.center[1] - point[1]) * scale) as f32,
                 f32::from(color[0]) / 255.,
                 f32::from(color[1]) / 255.,
@@ -117,22 +124,152 @@ pub(crate) fn vertices(scene: &Scene, camera: Camera, exaggeration: f32) -> Vec<
                 f32::from(color[3]) / 255.,
                 path.width,
                 0.,
+                0.,
+                0.,
             ]
         };
+        if scene.ground_projection {
+            let stride = path.points.len().div_ceil(4096).max(1);
+            let mut previous = None;
+            for (index, &point) in path.points.iter().enumerate() {
+                if !point.iter().all(|v| v.is_finite()) {
+                    previous = None;
+                    continue;
+                }
+                let endpoint = previous.is_none()
+                    || index == 0
+                    || index + 1 == path.points.len()
+                    || path
+                        .points
+                        .get(index + 1)
+                        .is_some_and(|p| !p.iter().all(|v| v.is_finite()));
+                if index % stride != 0 && !endpoint {
+                    continue;
+                }
+                let height = scene
+                    .tiles
+                    .iter()
+                    .find_map(|tile| tile.mesh_height_at([point[0], point[1]]));
+                let Some(height) = height else {
+                    previous = None;
+                    continue;
+                };
+                let mut v = vertex(
+                    [point[0], point[1], f64::from(height - origin)],
+                    [0, 0, 0, 125],
+                );
+                v[7] = 1.5;
+                if let Some(start) = previous {
+                    vertices.extend([start, v]);
+                }
+                previous = Some(v);
+            }
+        }
         if path.drawing.pattern != plot::line_draw::LinePattern::None {
-            for pair in path.points.windows(2) {
+            let pattern = match path.drawing.pattern {
+                plot::line_draw::LinePattern::Dashed => 1.,
+                plot::line_draw::LinePattern::Dotted => 2.,
+                plot::line_draw::LinePattern::DashDot => 3.,
+                _ => 0.,
+            };
+            let mut phase = 0.;
+            // Keep dash phase continuous across samples, measured in CSS pixels.
+            for (index, pair) in path.points.windows(2).enumerate() {
                 if pair.iter().flatten().all(|v| v.is_finite()) {
-                    vertices.extend(pair.iter().map(|&point| vertex(point, path.color)));
+                    let (ta, tb) = (path.times[index], path.times[index + 1]);
+                    let scalar = |offset: usize| {
+                        scene
+                            .colors
+                            .samples
+                            .get(&path.id)
+                            .and_then(|values| values.get(index + offset))
+                            .copied()
+                            .unwrap_or(f64::NAN)
+                    };
+                    let (a, b) = (scalar(0), scalar(1));
+                    let mut cuts = if scene.colors.tints.is_empty() {
+                        Vec::new()
+                    } else {
+                        crate::state_tint::cuts(&scene.colors.tints, ta, tb)
+                    };
+                    if a.is_finite()
+                        && b.is_finite()
+                        && a != b
+                        && let Some(range) = scene
+                            .colors
+                            .scales
+                            .get(&path.id)
+                            .map(|scale| scale.gradient.range)
+                            .or_else(|| {
+                                scene
+                                    .colors
+                                    .scales
+                                    .is_empty()
+                                    .then_some(scene.colors.range)
+                                    .flatten()
+                            })
+                    {
+                        for limit in range {
+                            let at = (limit - a) / (b - a);
+                            if at > 0. && at < 1. {
+                                cuts.push(at);
+                            }
+                        }
+                    }
+                    let defaults = [0., 1.];
+                    let cuts = if cuts.is_empty() {
+                        &defaults[..]
+                    } else {
+                        cuts.extend(defaults);
+                        cuts.sort_unstable_by(f64::total_cmp);
+                        cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+                        &cuts[..]
+                    };
+                    for cut in cuts.windows(2) {
+                        let middle = ta + (tb - ta) * (cut[0] + cut[1]) / 2.;
+                        let point = |t: f64| {
+                            std::array::from_fn(|axis| {
+                                pair[0][axis] + (pair[1][axis] - pair[0][axis]) * t
+                            })
+                        };
+                        for &at in cut {
+                            let value = if a.is_finite() && b.is_finite() {
+                                a + (b - a) * at
+                            } else {
+                                f64::NAN
+                            };
+                            let mut v = vertex(
+                                point(at),
+                                scene.colors.shade(path.id, value, middle, path.color),
+                            );
+                            v[9] = phase as f32;
+                            v[10] = pattern;
+                            vertices.push(v);
+                        }
+                        if pattern != 0. {
+                            if let (Some((a, _)), Some((b, _))) = (
+                                projection.point(point(cut[0]), origin),
+                                projection.point(point(cut[1]), origin),
+                            ) {
+                                phase += (b[0] - a[0]).hypot(b[1] - a[1]);
+                            } else {
+                                phase = 0.;
+                            }
+                        }
+                    }
+                } else {
+                    phase = 0.;
                 }
             }
         }
         if path.drawing.markers {
-            for &point in path
+            for (index, &point) in path
                 .points
                 .iter()
-                .filter(|p| p.iter().all(|v| v.is_finite()))
+                .enumerate()
+                .filter(|(_, p)| p.iter().all(|v| v.is_finite()))
             {
-                let mut marker = vertex(point, path.color);
+                let mut marker = vertex(point, scene.colors.color(path.id, index, path.color));
                 marker[7] = path.radius * 2.;
                 marker[8] = match path.marker {
                     plot::plot_data::MarkerShape::Circle => 1.,
@@ -173,9 +310,24 @@ pub(crate) fn vertices(scene: &Scene, camera: Camera, exaggeration: f32) -> Vec<
             }
         }
         if let Some(point) = current {
+            if scene.ground_projection
+                && let Some(height) = scene
+                    .tiles
+                    .iter()
+                    .find_map(|tile| tile.mesh_height_at([point[0], point[1]]))
+            {
+                let mut a = vertex(
+                    [point[0], point[1], f64::from(height - origin)],
+                    [255, 255, 255, 115],
+                );
+                let mut b = vertex(point, [255, 255, 255, 115]);
+                a[7] = 1.;
+                b[7] = 1.;
+                vertices.extend([a, b]);
+            }
             let mut marker = vertex(point, [255, 215, 60, 255]);
-            marker[7] = 10.;
-            marker[8] = 1.;
+            marker[7] = 13.;
+            marker[8] = 6.;
             vertices.extend([marker, marker]);
         }
     }
@@ -389,7 +541,18 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
     )
 }
 
-type RenderKey = (usize, [u64; 2], u32, u32, Vec<(u64, u32)>, Option<u64>, u64);
+type RenderKey = (
+    usize,
+    [u64; 2],
+    u32,
+    u32,
+    Vec<(u64, u32)>,
+    Option<u64>,
+    u64,
+    Option<([u32; 16], [u64; 2])>,
+    usize,
+    (bool, u64),
+);
 pub struct Renderer {
     pipeline: zgui::surface::wgpu::RenderPipeline,
     viewport: zgui::surface::wgpu::Buffer,
@@ -397,6 +560,7 @@ pub struct Renderer {
     buffer: Option<zgui::surface::wgpu::Buffer>,
     count: u32,
     held_paths: Option<Arc<[Path3]>>,
+    held_colors: Option<Arc<super::telemetry::Coloring>>,
     key: Option<RenderKey>,
 }
 impl Renderer {
@@ -449,7 +613,7 @@ impl Renderer {
                 entry_point: Some("vertex"),
                 compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 48,
+                    array_stride: 72,
                     step_mode: wgpu::VertexStepMode::Instance,
                     attributes: &[
                         wgpu::VertexAttribute {
@@ -476,6 +640,16 @@ impl Renderer {
                             format: wgpu::VertexFormat::Float32,
                             offset: 44,
                             shader_location: 4,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 48,
+                            shader_location: 5,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x4,
+                            offset: 56,
+                            shader_location: 6,
                         },
                     ],
                 }],
@@ -509,6 +683,7 @@ impl Renderer {
             buffer: None,
             count: 0,
             held_paths: None,
+            held_colors: None,
             key: None,
         }
     }
@@ -517,7 +692,7 @@ impl Renderer {
         gpu: &zgui::surface::GpuShare,
         scene: &Scene,
         camera: Camera,
-        exaggeration: f32,
+        orbit: super::terrain::Orbit,
         css: [f64; 2],
     ) {
         use zgui::surface::wgpu;
@@ -547,20 +722,45 @@ impl Renderer {
             scene.paths.as_ptr() as usize,
             camera.center.map(f64::to_bits),
             scene.center_height(camera).to_bits(),
-            exaggeration.to_bits(),
+            orbit.exaggeration.to_bits(),
             bases,
             scene.time.map(f64::to_bits),
             camera.zoom.to_bits(),
+            if scene.paths.iter().any(|path| {
+                matches!(
+                    path.drawing.pattern,
+                    plot::line_draw::LinePattern::Dashed
+                        | plot::line_draw::LinePattern::Dotted
+                        | plot::line_draw::LinePattern::DashDot
+                )
+            }) {
+                Some((
+                    orbit.matrix(camera, css).map(f32::to_bits),
+                    css.map(f64::to_bits),
+                ))
+            } else {
+                None
+            },
+            Arc::as_ptr(&scene.colors) as usize,
+            (
+                scene.ground_projection,
+                if scene.ground_projection {
+                    scene.revision
+                } else {
+                    0
+                },
+            ),
         );
         if self.key.as_ref() == Some(&key) {
             return;
         }
         self.key = Some(key);
         self.held_paths = Some(scene.paths.clone());
+        self.held_colors = Some(scene.colors.clone());
         self.count = 0;
-        let vertices = vertices(scene, camera, exaggeration);
+        let vertices = vertices(scene, camera, orbit, css);
         self.count = (vertices.len() / 2) as u32;
-        let mut bytes = Vec::with_capacity(self.count as usize * 48);
+        let mut bytes = Vec::with_capacity(self.count as usize * 72);
         for pair in vertices.chunks_exact(2) {
             for value in pair[0][..3]
                 .iter()
@@ -571,6 +771,12 @@ impl Renderer {
             }
             let point = pair[0][8];
             bytes.extend_from_slice(&point.to_ne_bytes());
+            for value in &pair[0][9..11] {
+                bytes.extend_from_slice(&value.to_ne_bytes());
+            }
+            for value in &pair[1][3..7] {
+                bytes.extend_from_slice(&value.to_ne_bytes());
+            }
         }
         if bytes.is_empty() {
             self.buffer = None;
@@ -787,7 +993,8 @@ mod tests {
                 center: [0., 0.],
                 zoom: 14.,
             },
-            1.,
+            super::super::terrain::Orbit::default(),
+            [800., 600.],
         );
         let samples = geometry
             .chunks_exact(2)
@@ -831,6 +1038,9 @@ mod tests {
         );
     }
 }
+#[cfg(test)]
+#[path = "flight3_style_tests.rs"]
+mod style_tests;
 
 #[cfg(test)]
 #[path = "flight3_tests.rs"]

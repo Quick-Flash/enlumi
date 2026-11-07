@@ -37,11 +37,13 @@ pub(crate) fn register_canvases(path: CanvasHandle, markers: CanvasHandle) {
 }
 
 pub(crate) fn install(
+    workbench: crate::state::Workbench,
     pane: Pane,
     host: NodeRef,
     camera: RwSignal<Camera, LocalStorage>,
     provider: RwSignal<Provider, LocalStorage>,
     service: Service,
+    colors: Signal<std::sync::Arc<super::telemetry::Coloring>, LocalStorage>,
 ) {
     let canvases = Canvases(StoredValue::new_local(None));
     provide_local_context(canvases);
@@ -65,7 +67,7 @@ pub(crate) fn install(
                 |[r, g, b]| format!("#{r:02x}{g:02x}{b:02x}"),
             );
             let mut description = plot::PlotDescription::new(w, h, &background);
-            crate::trajectory_plot::describe_legend(pane, &mut description);
+            crate::trajectory_plot::describe_legend(workbench, pane, &mut description);
             let mut svg = plot::zgui_svg::scenes_to_svg(&[], &description)?;
             let tag = format!(
                 "<rect x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" fill=\"{background}\"/>"
@@ -80,6 +82,12 @@ pub(crate) fn install(
                     .rfind("</svg>")
                     .ok_or("Map export SVG was not generated")?;
                 svg.insert_str(index, &super::scale::svg_rulers(scale, h));
+            }
+            if let Some(index) = svg.rfind("</svg>") {
+                svg.insert_str(
+                    index,
+                    &super::color_legend::svg(&colors.get_untracked(), w, h),
+                );
             }
             let mut sources = frame
                 .providers
@@ -117,7 +125,7 @@ pub(crate) fn install(
             |[r, g, b]| format!("#{r:02x}{g:02x}{b:02x}"),
         );
         let mut description = plot::PlotDescription::new(w, h, &background);
-        crate::trajectory_plot::describe_legend(pane, &mut description);
+        crate::trajectory_plot::describe_legend(workbench, pane, &mut description);
         let selected_provider = provider.get_untracked();
         let images = tile_images(camera, [w, h], service, pane.id, selected_provider)?;
         let attribution = selected_provider.attribution();
@@ -137,6 +145,12 @@ pub(crate) fn install(
                 .rfind("</svg>")
                 .ok_or("Map export SVG was not generated")?;
             svg.insert_str(index, &ruler);
+            if let Some(index) = svg.rfind("</svg>") {
+                svg.insert_str(
+                    index,
+                    &super::color_legend::svg(&colors.get_untracked(), w, h),
+                );
+            }
             let total = h + 26.;
             Ok(format!(
                 "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}\" height=\"{total}\" viewBox=\"0 0 {w} {total}\">{svg}<rect x=\"0\" y=\"{h}\" width=\"{w}\" height=\"26\" fill=\"{background}\"/><text x=\"8\" y=\"{footer}\" font-family=\"sans-serif\" font-size=\"11\" fill=\"white\">{attribution}</text></svg>",

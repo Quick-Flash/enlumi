@@ -22,6 +22,8 @@ pub struct Scene {
     pub revision: u64,
     pub paths: Arc<[super::flight3::Path3]>,
     pub time: Option<f64>,
+    pub colors: Arc<super::telemetry::Coloring>,
+    pub ground_projection: bool,
     path_bases: std::collections::BTreeMap<(u64, u64, u64), f32>,
     anchor: Option<Tile>,
     base: f32,
@@ -34,6 +36,35 @@ pub fn contains(parent: TileId, child: TileId) -> bool {
         && child.y >> (child.z - parent.z) == parent.y
 }
 impl Tile {
+    pub(crate) fn mesh_height_at(&self, point: [f64; 2]) -> Option<f32> {
+        let span = WORLD / f64::from(1_u32 << self.id.z);
+        let u = (point[0] + WORLD / 2.) / span - self.id.x as f64;
+        let v = (WORLD / 2. - point[1]) / span - f64::from(self.id.y);
+        if !(0. ..=1.).contains(&u) || !(0. ..=1.).contains(&v) {
+            return None;
+        }
+        let x = (u * 48.).min(48. - 1e-9);
+        let y = (v * 48.).min(48. - 1e-9);
+        let sample = |dx: f64, dy: f64| {
+            self.height_at(Camera {
+                center: [
+                    -WORLD / 2. + (self.id.x as f64 + (x.floor() + dx) / 48.) * span,
+                    WORLD / 2. - (f64::from(self.id.y) + (y.floor() + dy) / 48.) * span,
+                ],
+                zoom: 0.,
+            })
+        };
+        let a = sample(0., 0.)?;
+        let b = sample(1., 0.)?;
+        let c = sample(0., 1.)?;
+        let d = sample(1., 1.)?;
+        let (fx, fy) = (x.fract() as f32, y.fract() as f32);
+        Some(if fx + fy <= 1. {
+            a + (b - a) * fx + (c - a) * fy
+        } else {
+            d + (c - d) * (1. - fx) + (b - d) * (1. - fy)
+        })
+    }
     fn complete(&self) -> bool {
         self.raster.is_some() && self.elevation.is_some()
     }
@@ -209,6 +240,8 @@ impl Scene {
             anchor_zoom,
             paths: previous.paths.clone(),
             time: previous.time,
+            colors: previous.colors.clone(),
+            ground_projection: previous.ground_projection,
             path_bases: previous.path_bases.clone(),
         }
     }
@@ -457,14 +490,22 @@ impl Orbit {
         let forward = normalize(eye.map(|v| -v));
         let right = normalize(cross(forward, [0., 1., 0.]));
         let up = cross(right, forward);
+        let top_down = pitch.sin() - pitch.cos() * tan_y;
+        let footprint = if top_down > 0. {
+            1.1 * distance * pitch.cos() * tan_y / top_down
+        } else {
+            // Sky above the horizon has no ground footprint to preserve.
+            0.
+        };
         Pose {
             eye,
             forward,
             right,
             up,
             near: (distance / 1000.).max(0.01),
-            // Keep coverage beyond the focus independent of dolly/zoom.
-            far: distance + self.visibility_metres(),
+            // Cover the viewport's ground footprint when dollying out. A fixed
+            // distance beyond focus clips the upper screen at regional zooms.
+            far: distance + self.visibility_metres().max(footprint),
             tan_x: tan_y * size[0].max(1.) / size[1].max(1.),
             tan_y,
         }
@@ -812,7 +853,8 @@ mod retention_tests {
             center: origin,
             zoom: 12.,
         };
-        let vertices = super::super::flight3::vertices(&scene, camera, 1.);
+        let vertices =
+            super::super::flight3::vertices(&scene, camera, Orbit::default(), [800., 600.]);
         assert_eq!(vertices[0][1], 1200.5);
         assert_eq!(vertices[1][1], 1200.5);
         let upgraded = Scene::assembled(
@@ -822,13 +864,15 @@ mod retention_tests {
             1,
         );
         assert_eq!(upgraded.path_base(&path), Some(1200.));
-        let vertices = super::super::flight3::vertices(&upgraded, camera, 1.);
+        let vertices =
+            super::super::flight3::vertices(&upgraded, camera, Orbit::default(), [800., 600.]);
         assert!((vertices[0][1] + upgraded.center_height(camera) - 1200.5).abs() < 0.001);
         let mut global = path;
         global.local = false;
         global.points = Arc::from([[0., 0., 1800.], [100., 100., 1900.]]);
         scene.paths = Arc::from([global]);
-        let vertices = super::super::flight3::vertices(&scene, camera, 1.);
+        let vertices =
+            super::super::flight3::vertices(&scene, camera, Orbit::default(), [800., 600.]);
         assert_eq!(vertices[0][1], 1800.5);
         assert_eq!(vertices[1][1], 1900.5);
     }
@@ -1023,7 +1067,7 @@ mod retention_tests {
 mod camera_invariant_tests {
     use super::*;
     #[test]
-    fn resize_keeps_camera_position_and_zoom_keeps_visibility_distance() {
+    fn resize_keeps_camera_position_and_zoom_keeps_ground_in_view() {
         let camera = Camera {
             center: super::super::camera::project(7.6586, 45.9763).unwrap(),
             zoom: 12.,
@@ -1048,7 +1092,22 @@ mod camera_invariant_tests {
         for zoom in [8., 12., 16., 19.] {
             let p = orbit.pose(Camera { zoom, ..camera }, [800., 600.]);
             let distance = dot(p.eye, p.eye).sqrt();
-            assert!((p.far - distance - orbit.visibility_metres()).abs() < 1e-6);
+            assert!(p.far - distance >= orbit.visibility_metres() - 1e-6);
+            if zoom >= 12. {
+                assert!((p.far - distance - orbit.visibility_metres()).abs() < 1e-6);
+            }
+        }
+        for zoom in [3., 5., 8., 12., 19.] {
+            let camera = Camera { zoom, ..camera };
+            for pitch in [25., 30., 45., 85.] {
+                let orbit = Orbit { pitch, ..orbit };
+                for point in [[0., 0.], [800., 0.], [400., 300.], [0., 600.]] {
+                    assert!(
+                        orbit.ground_at(camera, [800., 600.], point).is_some(),
+                        "Ground below horizon must survive far clipping at zoom {zoom}, pitch {pitch}, pixel {point:?}"
+                    );
+                }
+            }
         }
     }
 }

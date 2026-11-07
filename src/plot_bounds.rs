@@ -10,7 +10,7 @@ impl Pane {
         {
             self.trajectory.update(|s| {
                 if let Some(map) = s.as_mut().and_then(|s| s.map.as_mut()) {
-                    map.camera = None;
+                    map.fit();
                 }
             });
             return;

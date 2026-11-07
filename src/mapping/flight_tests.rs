@@ -1,4 +1,41 @@
 use super::*;
+#[test]
+fn map_modes_remember_independent_cameras_and_old_configs_load() {
+    let flat = Camera {
+        center: [100., 200.],
+        zoom: 14.,
+    };
+    let spatial = Camera {
+        center: [300., 400.],
+        zoom: 9.,
+    };
+    let mut config: Config =
+        serde_json::from_str(r#"{"camera":{"center":[100.0,200.0],"zoom":14.0}}"#).unwrap();
+    assert_eq!(config.camera, Some(flat));
+    config.set_terrain(true);
+    assert!(config.camera.is_none());
+    config.remember_camera(spatial);
+    config.orbit.bearing = 77.;
+    config.set_terrain(false);
+    assert_eq!(config.camera, Some(flat));
+    config.set_terrain(true);
+    assert_eq!(config.camera, Some(spatial));
+    assert_eq!(config.orbit.bearing, 77.);
+    let restored: Config = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+    assert_eq!(restored, config);
+    config.follow = true;
+    config.fit();
+    assert_eq!(config.camera, None);
+    assert!(!config.follow);
+    assert_eq!(config.camera_2d, Some(flat));
+    config.set_terrain(false);
+    assert_eq!(config.camera, Some(flat));
+    config.camera_3d = Some(Camera {
+        zoom: f64::NAN,
+        ..spatial
+    });
+    assert!(config.validate().is_err());
+}
 use crate::{state::Line, trajectory::Tracks};
 use std::sync::Arc;
 
