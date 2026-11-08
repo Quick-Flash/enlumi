@@ -13,6 +13,16 @@ cargo xtask run-gui
 cargo xtask pre-commit
 ```
 
+Install the tracked git hooks once per clone (worktrees share the setting):
+
+```sh
+cargo xtask install-hooks
+```
+
+`pre-commit` runs `cargo xtask pre-commit` (fmt, check, clippy, tests). `pre-push` adds the
+Rust / WASM `script_e2e` tests. `rust-toolchain.toml` pins the `wasm32-unknown-unknown` target, so rustup installs it on first use.
+CI also runs `cargo xtask bundle` and a 5-platform matrix; hooks cannot cover those.
+
 Individual checks:
 
 ```sh
