@@ -23,11 +23,8 @@ fn main() {
     tlog::build();
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=build/revision.rs");
-    println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_PLATFORM");
     println!("cargo:rerun-if-env-changed=ENLUMI_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
-    let platform = std::env::var("ENLUMI_BUILD_PLATFORM").unwrap_or_default();
-    println!("cargo:rustc-env=ENLUMI_BUILD_PLATFORM={platform}");
     // Watch actual ref files, including worktrees and packed refs.
     for name in [
         Some("HEAD".to_owned()),

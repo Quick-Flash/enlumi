@@ -22,9 +22,6 @@ jobs:
         include:
           - os: ubuntu-22.04
             platform: linux-x86_64
-          - os: ubuntu-latest
-            platform: arch-linux-x86_64
-            container: archlinux:base-devel
           - os: windows-latest
             platform: windows-x86_64
           - os: macos-15
@@ -32,9 +29,7 @@ jobs:
           - os: macos-15-intel
             platform: macos-x86_64
     runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container }}
     env:
-      ENLUMI_BUILD_PLATFORM: ${{ matrix.platform }}
       ENLUMI_BUILD_COMMIT: ${{ github.sha }}
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -42,18 +37,11 @@ jobs:
       ENLUMI_SKIP_SOFTWARE_GPU_TESTS: "1"
     timeout-minutes: 60
     steps:
-      - name: Arch build libraries
-        if: matrix.container != ''
-        working-directory: .
-        run: |
-          pacman -Syu --noconfirm --needed git rustup python pkgconf \
-            libx11 libxkbcommon libxkbcommon-x11 wayland libxcb libxcursor \
-            libxi libxrandr fontconfig ttf-dejavu
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
       - name: Linux build libraries
-        if: runner.os == 'Linux' && matrix.container == ''
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential pkg-config \
@@ -65,7 +53,7 @@ jobs:
       - name: Rust dependency cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          shared-key: ${{ matrix.os }}-${{ matrix.container }}
+          shared-key: ${{ matrix.os }}
           add-job-id-key: "false"
           cache-bin: "false"
           cache-on-failure: "true"
@@ -148,7 +136,6 @@ jobs:
           Windows: ZIP. Linux/macOS: tar.gz. Choose matching architecture.
           Builds are unsigned; macOS builds are not notarized.
           Linux: linux-x86_64 targets Ubuntu 22.04+ compatible systems.
-          Arch Linux / rolling Arch derivatives: choose arch-linux-x86_64.
 
           Experimental build. Previous nightlies remain available.
           EOF

@@ -39,16 +39,16 @@ ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 syn = { version = "3.0.9", features = ["full"] }
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 wasmtime = { version = "49", default-features = false, features = ["cranelift", "runtime", "std"] }
-# Follow Quick-Flash/zgui branch enlumi/wayland-async-fifo; Cargo.lock pins exact commits.
-zgui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-image = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
+# Follow Quick-Flash/zgui branch enlumi/pr-stack; Cargo.lock pins exact commits.
+zgui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-image = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
 zgui-editor = { git = "https://github.com/Quick-Flash/zgui-editor", rev = "a5f84d76cd3f7e28860ea637f1e244501b524844", features = ["lang-rust"] }
-zgui-ui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
+zgui-ui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-ui-primitives = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-zgui-platform-wayland = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
+zgui-platform-wayland = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
 
 [build-dependencies]
 mavlink-bindgen = { version = "0.19.1", default-features = false, features = ["mav2-message-extensions"] }
@@ -63,12 +63,12 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 
 [dev-dependencies]
 accesskit = "0.24"
-zgui-render-wgpu = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-render-vector-vello = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-profile = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-testkit-view = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
+zgui-render-wgpu = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-render-vector-vello = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-profile = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-testkit-view = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
 
 [target.'cfg(windows)'.dependencies]
 zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
@@ -80,9 +80,9 @@ ureq = { version = "3.4.2", default-features = false, features = ["native-tls"] 
 # Keep upstream dependencies from editor/plot on the same framework fork.
 # PR branches and aggregate revisions: docs/UPSTREAM_PATCHES.md.
 [patch."https://github.com/zortax/zgui"]
-zgui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-css = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-interned = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-profile = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-text-style = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
-zgui-ui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/wayland-async-fifo" }
+zgui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-css = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-interned = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-profile = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-text-style = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
+zgui-ui = { git = "https://github.com/Quick-Flash/zgui", branch = "enlumi/pr-stack" }
