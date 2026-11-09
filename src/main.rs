@@ -131,6 +131,7 @@ mod state_tint;
 mod state_tint_options;
 mod state_trace_overlay;
 mod theme;
+mod theme_editor;
 mod theme_picker;
 #[cfg(test)]
 mod theme_tests;
@@ -169,6 +170,10 @@ use app::WorkbenchAppProps;
 use zgui::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "backend-replay")]
+    if std::env::var_os("ENLUMI_REPLAY_LOG").is_some() {
+        return native_performance_replay::run();
+    }
     if std::env::args_os()
         .nth(1)
         .is_some_and(|arg| arg == "--map-preview")
@@ -229,6 +234,9 @@ mod tests;
 mod derived_tests;
 #[cfg(test)]
 mod layout_tests;
+
+#[cfg(feature = "backend-replay")]
+mod native_performance_replay;
 
 #[cfg(test)]
 mod file_drop_tests;

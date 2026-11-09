@@ -12,7 +12,11 @@ use crate::{
     workspace::PlotWorkspaceProps,
 };
 use crate::{preset_browser::PresetBrowserProps, preset_dialog::PresetDialogProps};
-use crate::{theme::AppThemeProps, theme_picker::ThemePickerProps};
+use crate::{
+    theme::AppThemeProps,
+    theme_editor::{ThemeEditor, ThemeEditorPanelProps, ThemeEditorRestoreProps},
+    theme_picker::ThemePickerProps,
+};
 use crate::{
     update_controls::UpdateControlsProps, update_notice::UpdateNoticeProps,
     update_state::UpdateState,
@@ -34,6 +38,8 @@ pub fn WorkbenchApp(
         workbench.open(path);
     }
     let palette = RwSignal::new_local(preferences.load());
+    let themes = RwSignal::new_local(preferences.themes());
+    let theme_editor = ThemeEditor::new();
     #[cfg(test)]
     let updates = use_local_context::<UpdateState>().unwrap_or_else(UpdateState::new);
     #[cfg(not(test))]
@@ -117,13 +123,14 @@ pub fn WorkbenchApp(
                     }) {"Analyze"}
                     ActionButton(class="create-2d-plot",class:setting-active=move ||workbench.trajectory_builder().open.get()&&!workbench.trajectory_builder().pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked()&&!workbench.trajectory_builder().pane.trajectory.with_untracked(|s|s.as_ref().is_some_and(|s|s.map.is_some())){workbench.trajectory_builder().open.set(false);}else{workbench.new_trajectory(false);}}) {"2D plot"}
                     ActionButton(class="create-flight-map",class:setting-active=move ||workbench.trajectory_builder().open.get()&&workbench.trajectory_builder().pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked()&&workbench.trajectory_builder().pane.trajectory.with_untracked(|s|s.as_ref().is_some_and(|s|s.map.is_some())){workbench.trajectory_builder().open.set(false);}else{workbench.new_flight_map();}}) {"Map"}
-                    ThemePicker(palette = palette, preferences = preferences.clone())
+                    ThemePicker(palette = palette, themes = themes, editor = theme_editor, preferences = preferences.clone())
                     row(class="toolbar-brand") {
                         GithubLink(workbench = workbench)
                         Fps()
                     }
                 }
                 PresetDialog(workbench=workbench)
+                ThemeEditorRestore(editor = theme_editor, palette = palette)
                 PresetBrowser(workbench=workbench)
                 UpdateNotice(state = updates)
                 row(class = "body") {
@@ -148,6 +155,7 @@ pub fn WorkbenchApp(
                         }
                     }
                     if move || workbench.filters_open.get() { FilterWorkspace(workbench = workbench) }
+                    if move || theme_editor.open.get() { ThemeEditorPanel(editor = theme_editor, palette = palette, themes = themes, preferences = preferences.clone()) }
                 }
             }
             }

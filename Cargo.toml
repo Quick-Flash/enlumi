@@ -14,6 +14,9 @@ publish = false
 members = [".", "xtask"]
 resolver = "3"
 
+[features]
+backend-replay = []
+
 [dependencies]
 async-channel = "2.5"
 base64 = "0.22.1"

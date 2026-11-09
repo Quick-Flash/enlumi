@@ -7833,7 +7833,7 @@ fn measurement_keyboard_drags_snap_on_time_and_fft_plots_and_ignore_typing() {
             "{text}"
         );
         for choice in Palette::ALL {
-            palette.set(choice);
+            palette.set(choice.clone());
             harness.settle(128);
             let [r, g, b, _] = choice.measurement_fill();
             let svg = workbench.capture_screenshot(Some(pane)).unwrap();
@@ -8587,7 +8587,7 @@ fn legend_alignment_readout_and_backgrounds_follow_the_selected_theme() {
         "An empty cursor readout must not paint a plot-wide bar"
     );
     for theme in Palette::ALL {
-        palette.set(theme);
+        palette.set(theme.clone());
         harness.settle(128);
         let color = crate::plot_appearance::css(theme.plot_background());
         for pane in [first, second] {
@@ -8627,4 +8627,85 @@ fn legend_alignment_readout_and_backgrounds_follow_the_selected_theme() {
                 crate::plot_appearance::css(Palette::Forest.plot_background())
             ))
     );
+}
+
+#[test]
+fn theme_editor_previews_restores_on_close_and_saves() {
+    use crate::theme::{AppThemeProps, Palette};
+    use crate::theme_editor::{ThemeEditor, ThemeEditorPanelProps, ThemeEditorRestoreProps};
+    let saved = Rc::new(RefCell::new(None));
+    let captured = saved.clone();
+    let handler = app()
+        .with_size(900., 700.)
+        .with_renderer(Box::new(|_, target| {
+            let mut renderer = CaptureRenderer::new();
+            renderer.configure(target);
+            Ok(Box::new(renderer))
+        }))
+        .with_stylesheet(crate::theme::stylesheet())
+        .into_handler(move || {
+            let palette = RwSignal::new_local(Palette::Forest);
+            let themes = RwSignal::new_local(Palette::ALL.to_vec());
+            let editor = ThemeEditor::new();
+            *captured.borrow_mut() = Some((palette, themes, editor));
+            view! { AppTheme(palette = palette) {
+                ThemeEditorRestore(editor = editor, palette = palette)
+                if move || editor.open.get() { ThemeEditorPanel(editor = editor, palette = palette, themes = themes, preferences = crate::preferences::ThemePreference::disabled()) }
+            }}
+        })
+        .unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.settle(128);
+    let (palette, themes, editor) = saved.borrow().unwrap();
+    let control = |editor: ThemeEditor| {
+        editor
+            .tokens()
+            .iter()
+            .position(|(token, _)| token == "--app-control")
+            .unwrap()
+    };
+
+    editor.begin(Palette::Forest);
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("theme-editor")
+            .is_some(),
+        "Customize opens the editor"
+    );
+    editor.set_token(control(editor), "#123456".into());
+    harness.settle(128);
+    assert!(
+        palette
+            .with_untracked(|palette| palette.declarations().contains("--app-control: #123456;")),
+        "Edits preview on the whole app"
+    );
+    click_class(&mut harness, "theme-editor-cancel");
+    assert_eq!(
+        palette.get_untracked(),
+        Palette::Forest,
+        "Cancel restores the theme"
+    );
+
+    editor.begin(Palette::Forest);
+    harness.settle(128);
+    editor.open.set(false);
+    harness.settle(128);
+    assert_eq!(
+        palette.get_untracked(),
+        Palette::Forest,
+        "Closing without saving restores the theme"
+    );
+
+    editor.begin(Palette::Forest);
+    harness.settle(128);
+    editor.set_token(control(editor), "#654321".into());
+    harness.settle(128);
+    click_class(&mut harness, "theme-editor-save");
+    assert!(!editor.open.get_untracked(), "Save closes the editor");
+    let current = palette.get_untracked();
+    assert_eq!(current.id(), "custom:Forest custom");
+    assert!(current.declarations().contains("--app-control: #654321;"));
+    // Preferences are disabled, so nothing is written and only built-ins are listed.
+    assert_eq!(themes.get_untracked(), Palette::ALL.to_vec());
 }

@@ -1,8 +1,9 @@
 //! Palette persistence and platform configuration directory.
-use crate::theme::Palette;
+use crate::theme::{CustomTheme, Palette};
 use std::{
     io::{self, Write},
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 #[derive(Clone, Default)]
@@ -15,24 +16,93 @@ impl ThemePreference {
     pub fn disabled() -> Self {
         Self(None)
     }
+    /// Built-in palettes followed by the user's custom themes, by name.
+    pub fn themes(&self) -> Vec<Palette> {
+        let mut custom: Vec<Palette> = self
+            .themes_directory()
+            .and_then(|directory| std::fs::read_dir(directory).ok())
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                if path.extension()? != "css" {
+                    return None;
+                }
+                let name = path
+                    .file_stem()?
+                    .to_str()
+                    .filter(|name| valid_theme_name(name))?;
+                let css = std::fs::read_to_string(&path).ok()?;
+                Some(Palette::Custom(Rc::new(CustomTheme::new(name, &css))))
+            })
+            .collect();
+        custom.sort_by_key(|theme| theme.name().to_lowercase());
+        Palette::ALL.into_iter().chain(custom).collect()
+    }
     pub fn load(&self) -> Palette {
-        self.0
+        let Some(id) = self
+            .0
             .as_ref()
             .and_then(|path| std::fs::read_to_string(path).ok())
-            .and_then(|text| Palette::from_id(text.trim()))
+        else {
+            return Palette::default();
+        };
+        self.themes()
+            .into_iter()
+            .find(|palette| palette.id() == id.trim())
             .unwrap_or_default()
     }
-    pub fn save(&self, palette: Palette) -> io::Result<()> {
+    pub fn save(&self, palette: &Palette) -> io::Result<()> {
         let Some(path) = &self.0 else {
             return Ok(());
         };
-        let parent = path.parent().unwrap_or(Path::new("."));
-        std::fs::create_dir_all(parent)?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
-        writeln!(file, "{}", palette.id())?;
-        file.persist(path).map_err(|error| error.error)?;
-        Ok(())
+        write_atomic(path, &format!("{}\n", palette.id()))
     }
+    /// Writes `<config>/themes/<name>.css` and returns the theme as it will load.
+    pub fn save_custom(&self, name: &str, tokens: &[(String, String)]) -> io::Result<Palette> {
+        let name = name.trim();
+        if !valid_theme_name(name) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Theme names use 1 to 64 letters, digits, spaces, '-' or '_'",
+            ));
+        }
+        let css: String = tokens
+            .iter()
+            .map(|(token, value)| format!("{token}: {value};\n"))
+            .collect();
+        if let Some(directory) = self.themes_directory() {
+            write_atomic(&directory.join(format!("{name}.css")), &css)?;
+        }
+        Ok(Palette::Custom(Rc::new(CustomTheme::new(name, &css))))
+    }
+    pub fn delete_custom(&self, name: &str) -> io::Result<()> {
+        match self.themes_directory() {
+            Some(directory) if valid_theme_name(name) => {
+                std::fs::remove_file(directory.join(format!("{name}.css")))
+            }
+            _ => Ok(()),
+        }
+    }
+    fn themes_directory(&self) -> Option<PathBuf> {
+        Some(self.0.as_ref()?.parent()?.join("themes"))
+    }
+}
+pub fn valid_theme_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name == name.trim()
+        && name
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_'))
+}
+fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
+    let parent = path.parent().unwrap_or(Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let mut file = tempfile::NamedTempFile::new_in(parent)?;
+    file.write_all(text.as_bytes())?;
+    file.persist(path).map_err(|error| error.error)?;
+    Ok(())
 }
 /// Folder of the last opened log, kept so the file dialog starts there on platforms whose
 /// native dialog does not remember it.
@@ -149,7 +219,7 @@ mod tests {
         let preferences = ThemePreference(Some(path.clone()));
         assert_eq!(preferences.load(), Palette::Slate);
         for palette in Palette::ALL {
-            preferences.save(palette).unwrap();
+            preferences.save(&palette).unwrap();
             assert_eq!(ThemePreference(Some(path.clone())).load(), palette);
             assert_eq!(
                 std::fs::read_to_string(&path).unwrap(),
@@ -161,6 +231,33 @@ mod tests {
             1
         );
         std::fs::write(path, "unknown-theme").unwrap();
+        assert_eq!(preferences.load(), Palette::Slate);
+    }
+    #[test]
+    fn custom_themes_roundtrip_list_and_delete() {
+        let directory = tempfile::tempdir().unwrap();
+        let preferences = ThemePreference(Some(directory.path().join("theme")));
+        let tokens = vec![
+            ("--app-accent".to_owned(), "#ff7a59".to_owned()),
+            ("--app-measurement-fill".to_owned(), "#11223344".to_owned()),
+        ];
+        let saved = preferences.save_custom("Night Owl", &tokens).unwrap();
+        assert_eq!(saved.id(), "custom:Night Owl");
+        let themes = preferences.themes();
+        assert_eq!(themes.len(), Palette::ALL.len() + 1);
+        assert_eq!(themes.last(), Some(&saved));
+        assert_eq!(saved.measurement_fill(), [0x11, 0x22, 0x33, 0x44]);
+        // Tokens the theme leaves out keep the default palette's value.
+        assert_eq!(saved.plot_background(), Palette::Slate.plot_background());
+
+        preferences.save(&saved).unwrap();
+        assert_eq!(preferences.load(), saved);
+
+        assert!(preferences.save_custom("../escape", &tokens).is_err());
+        assert!(preferences.save_custom("", &tokens).is_err());
+
+        preferences.delete_custom("Night Owl").unwrap();
+        assert_eq!(preferences.themes().len(), Palette::ALL.len());
         assert_eq!(preferences.load(), Palette::Slate);
     }
 }
