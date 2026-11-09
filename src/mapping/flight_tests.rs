@@ -624,11 +624,11 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
         "Resize preserves map scale and center"
     );
     workbench.activate(original.id);
-    harness.settle(128);
-    assert!(
-        service.requested().is_empty(),
-        "Hidden map must release demand"
-    );
+    // Demand is released when the hidden pane next renders, which a slow runner may not reach
+    // within a fixed number of settles.
+    pump(&mut harness, "hidden map releasing demand", &|| {
+        service.requested().is_empty()
+    });
     workbench.activate(pane.id);
     harness.settle(128);
     assert!(Arc::ptr_eq(
@@ -774,8 +774,9 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
         .points[0];
     assert!((after.x - before.x).abs() > 100_000.);
     workbench.close_plot(pane.id);
-    harness.settle(128);
-    assert!(service.requested().is_empty());
+    pump(&mut harness, "closed map releasing demand", &|| {
+        service.requested().is_empty()
+    });
 }
 
 #[test]
