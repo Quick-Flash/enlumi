@@ -18,21 +18,21 @@ Consumed branch: [`enlumi/pr-stack`](https://github.com/Quick-Flash/zgui/tree/en
 [upstream PR #33](https://github.com/zortax/zgui/pull/33) (`wayland-speedup`, native Wayland
 presentation pacing) with the focused branches below applied on top.
 
-Each focused branch starts at upstream `main` (`a73861ea`) and is submitted as its own upstream PR.
+Each focused branch starts at upstream `main` (`a73861ea`) and is submitted as its own upstream PR, pushed to the fork as `pr/<name>`.
 
 | Branch | Change |
 | --- | --- |
-| `enlumi/text-scrolling` | Reveal native field caret; autoscroll horizontal selection drags. |
-| `enlumi/text-input-focus` | Enable native text input after newly focused fields receive layout bounds. |
-| `enlumi/file-drop-routing` | Route external drops to the element under the pointer without requiring focus. |
-| `enlumi/wayland-file-drop` | Decode local file URIs safely; preserve filename bytes and isolate asynchronous drag sessions. |
-| `enlumi/window-state` | Refresh maximized/fullscreen signals even when content size stays unchanged. |
-| `enlumi/wayland-window-state` | Restore normal dimensions when the compositor supplies no restore size. |
-| `enlumi/wayland-dnd-actions` | Set the drag action on `wl_data_device.enter`; compositors send `source_actions` first, so file drops were cancelled. |
-| `enlumi/input-event-timestamp` | Dispatch pointer, wheel and key events with their own timestamp instead of the queue drain time. |
-| `enlumi/resizable-untracked` | Read resizable divider travel untracked in input handlers. |
-| `enlumi/toggle-group-untracked` | Read toggle group state untracked in the click handler. |
-| `enlumi/frame-reporting` | Report completed frame timings to probes (used by `ENLUMI_PERF_LOG`); coalesce dense paint damage. |
+| [#38](https://github.com/zortax/zgui/pull/38) `enlumi/text-scrolling` | Reveal native field caret; autoscroll horizontal selection drags. |
+| [#39](https://github.com/zortax/zgui/pull/39) `enlumi/text-input-focus` | Enable native text input after newly focused fields receive layout bounds. |
+| [#40](https://github.com/zortax/zgui/pull/40) `enlumi/file-drop-routing` | Route external drops to the element under the pointer without requiring focus. |
+| [#41](https://github.com/zortax/zgui/pull/41) `enlumi/wayland-file-drop` | Decode local file URIs safely; preserve filename bytes and isolate asynchronous drag sessions. |
+| [#42](https://github.com/zortax/zgui/pull/42) `enlumi/window-state` | Refresh maximized/fullscreen signals even when content size stays unchanged. |
+| [#43](https://github.com/zortax/zgui/pull/43) `enlumi/wayland-window-state` | Restore normal dimensions when the compositor supplies no restore size. |
+| [#44](https://github.com/zortax/zgui/pull/44) `enlumi/wayland-dnd-actions` | Set the drag action on `wl_data_device.enter`; compositors send `source_actions` first, so file drops were cancelled. |
+| [#45](https://github.com/zortax/zgui/pull/45) `enlumi/input-event-timestamp` | Dispatch pointer, wheel and key events with their own timestamp instead of the queue drain time. |
+| [#46](https://github.com/zortax/zgui/pull/46) `enlumi/resizable-untracked` | Read resizable divider travel untracked in input handlers. |
+| [#47](https://github.com/zortax/zgui/pull/47) `enlumi/toggle-group-untracked` | Read toggle group state untracked in the click handler. |
+| [#48](https://github.com/zortax/zgui/pull/48) `enlumi/frame-reporting` | Report completed frame timings to probes (used by `ENLUMI_PERF_LOG`); coalesce dense paint damage. |
 
 The renderer latency marks (`enlumi/renderer-timing`) and the bounded FIFO worker
 (`enlumi/wayland-async-fifo`) are no longer consumed; PR #33 replaced the worker.
