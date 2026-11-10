@@ -30,8 +30,7 @@ filters. No separate Rust installation is needed to use them.
 Each push to `master` starts a nightly build. Downloads publish after all platform
 checks pass. Builds are unsigned; macOS builds are not notarized.
 
-Linux archives include Ubuntu 22.04+ (`linux-x86_64`) and rolling Arch Linux
-(`arch-linux-x86_64`) builds. Choose matching distribution.
+The Linux archive (`linux-x86_64`) targets Ubuntu 22.04+ compatible systems.
 
 On Linux, Wayland sessions use the native Wayland backend automatically, with
 Enlumi's title bar and resize handles. Drag a log onto the title bar or anywhere
@@ -75,9 +74,6 @@ sudo apt-get install -y build-essential pkg-config libx11-dev libxkbcommon-dev \
 sudo pacman -Syu --needed base-devel rustup git libx11 libxkbcommon \
   libxkbcommon-x11 wayland libxcb libxcursor libxi libxrandr fontconfig ttf-dejavu
 ```
-
-Set `ENLUMI_BUILD_PLATFORM=arch-linux-x86_64` when making Arch portable bundles
-so built-in updater keeps selecting Arch archives.
 
 From repository root:
 

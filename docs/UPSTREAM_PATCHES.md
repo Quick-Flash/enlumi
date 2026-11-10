@@ -13,26 +13,29 @@ Plaizier's configured Git identity.
 ## Framework
 
 Fork: [Quick-Flash/zgui](https://github.com/Quick-Flash/zgui).
-Base: [upstream PR #21](https://github.com/zortax/zgui/pull/21),
-`be5596501fa92877485879e5ba184c9b63e5ebf6`.
-Consumed branch: [`enlumi/wayland-async-fifo`](https://github.com/Quick-Flash/zgui/tree/enlumi/wayland-async-fifo),
-`facad3dae62f44c36b80bb3c5e6b7c37fa3effaa`. This includes the prior aggregate changes, bounded asynchronous
-FIFO presentation for native Wayland, choosing the copy action when a Wayland drag enters,
-and untracked snapshot reads in toggle and resize event handlers.
-The focused branches below retain their original base, `951a0ea3`.
+Consumed branch: [`enlumi/pr-stack`](https://github.com/Quick-Flash/zgui/tree/enlumi/pr-stack),
+`dd7fadf2a25f3acb285a0d8d955ac9414ecf811e`. It is
+[upstream PR #33](https://github.com/zortax/zgui/pull/33) (`wayland-speedup`, native Wayland
+presentation pacing) with the focused branches below applied on top.
+
+Each focused branch starts at upstream `main` (`a73861ea`) and is submitted as its own upstream PR.
 
 | Branch | Change |
 | --- | --- |
 | `enlumi/text-scrolling` | Reveal native field caret; autoscroll horizontal selection drags. |
 | `enlumi/text-input-focus` | Enable native text input after newly focused fields receive layout bounds. |
 | `enlumi/file-drop-routing` | Route external drops to the element under the pointer without requiring focus. |
-| `enlumi/window-state` | Refresh maximized/fullscreen signals even when content size stays unchanged. |
 | `enlumi/wayland-file-drop` | Decode local file URIs safely; preserve filename bytes and isolate asynchronous drag sessions. |
+| `enlumi/window-state` | Refresh maximized/fullscreen signals even when content size stays unchanged. |
 | `enlumi/wayland-window-state` | Restore normal dimensions when the compositor supplies no restore size. |
-| `enlumi/frame-reporting` | Report completed frame timings/counters to passive probes and coalesce dense paint damage. |
-| `enlumi/renderer-timing` | Expose opt-in surface, submission, retirement, and upload latency boundaries. |
-| `enlumi/wayland-async-fifo` | Present native Wayland frames on a bounded worker; keep UI responsive while FIFO pacing waits for compositor readiness. |
 | `enlumi/wayland-dnd-actions` | Set the drag action on `wl_data_device.enter`; compositors send `source_actions` first, so file drops were cancelled. |
+| `enlumi/input-event-timestamp` | Dispatch pointer, wheel and key events with their own timestamp instead of the queue drain time. |
+| `enlumi/resizable-untracked` | Read resizable divider travel untracked in input handlers. |
+| `enlumi/toggle-group-untracked` | Read toggle group state untracked in the click handler. |
+| `enlumi/frame-reporting` | Report completed frame timings to probes (used by `ENLUMI_PERF_LOG`); coalesce dense paint damage. |
+
+The renderer latency marks (`enlumi/renderer-timing`) and the bounded FIFO worker
+(`enlumi/wayland-async-fifo`) are no longer consumed; PR #33 replaced the worker.
 
 ## Editor
 
@@ -54,9 +57,10 @@ Aggregate: [`enlumi/all-fixes`](https://github.com/Quick-Flash/zgui-plot/tree/en
 `0087b2b2efb5666a26eaf4f1ee8779c61caa04b3`.
 
 Consumed branch: [`master`](https://github.com/Quick-Flash/zgui-plot/tree/master),
-`528e5836e38fb85d108025b5f98f767b6041278d`. This includes the merged aggregate,
+`668686f4ff7c69482a234beb2550ded282c37123`. This includes the merged aggregate,
 retained time bands, tracked range linking, and snapshot reads for styles, pointer
-state, tab renaming, and divider events. Cargo.lock pins the published commit;
+state, tab renaming, and divider events. Tab double-click detection uses input-event
+timestamps instead of processing time. Cargo.lock pins the published commit;
 no sibling checkout is required.
 
 The old vendoring notes named `aef14a9ce0c8097f8347239a423c151e1641077c`;

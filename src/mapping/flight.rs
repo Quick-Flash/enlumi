@@ -88,6 +88,10 @@ pub(crate) fn set_origin_at(pane: Pane, index: usize, origin: [f64; 2]) -> Resul
 pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<Camera>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera_2d: Option<Camera>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera_3d: Option<Camera>,
     #[serde(default)]
     pub provider: Provider,
     #[serde(default)]
@@ -95,9 +99,48 @@ pub struct Config {
     #[serde(default)]
     pub terrain: bool,
     #[serde(default)]
+    pub follow: bool,
+    #[serde(default)]
+    pub ground_projection: bool,
+    #[serde(default)]
+    pub coloring: super::telemetry::ColorBy,
+    #[serde(default)]
     pub orbit: super::terrain::Orbit,
 }
 impl Config {
+    pub fn remember_camera(&mut self, camera: Camera) {
+        self.camera = Some(camera);
+        if self.terrain {
+            self.camera_3d = Some(camera);
+        } else {
+            self.camera_2d = Some(camera);
+        }
+    }
+    pub fn set_terrain(&mut self, terrain: bool) {
+        if self.terrain == terrain {
+            return;
+        }
+        if self.terrain {
+            self.camera_3d = self.camera;
+        } else {
+            self.camera_2d = self.camera;
+        }
+        self.terrain = terrain;
+        self.camera = if terrain {
+            self.camera_3d
+        } else {
+            self.camera_2d
+        };
+    }
+    pub fn fit(&mut self) {
+        self.camera = None;
+        self.follow = false;
+        if self.terrain {
+            self.camera_3d = None;
+        } else {
+            self.camera_2d = None;
+        }
+    }
     pub fn validate(self) -> Result<(), String> {
         let o = self.orbit;
         if !o.bearing.is_finite()
@@ -110,11 +153,15 @@ impl Config {
         {
             return Err("Invalid terrain orbit settings".into());
         }
-        if let Some(c) = self.camera
-            && (!c.center.iter().all(|v| v.is_finite())
-                || c.center[1].abs() > WORLD / 2.
-                || !c.zoom.is_finite()
-                || !(0. ..=super::camera::MAX_ZOOM).contains(&c.zoom))
+        if [self.camera, self.camera_2d, self.camera_3d]
+            .into_iter()
+            .flatten()
+            .any(|c| {
+                !c.center.iter().all(|v| v.is_finite())
+                    || c.center[1].abs() > WORLD / 2.
+                    || !c.zoom.is_finite()
+                    || !(0. ..=super::camera::MAX_ZOOM).contains(&c.zoom)
+            })
         {
             return Err("Invalid map camera".into());
         }
@@ -255,6 +302,7 @@ pub fn FlightMap(
     visible: Signal<bool, LocalStorage>,
 ) -> impl IntoView {
     install_stylesheet("enlumi-map", include_str!("preview.css"));
+    install_stylesheet("enlumi-trajectory", include_str!("../trajectory.css"));
     let service = workbench.shared_map_tiles();
     let camera = RwSignal::new_local(
         pane.trajectory
@@ -289,7 +337,17 @@ pub fn FlightMap(
             })
             .unwrap_or_default()
     });
+    let active_mode = StoredValue::new_local(terrain.get_untracked());
     let settings = zgui::reactive::RenderEffect::new(move |_| {
+        let mode = terrain.get();
+        if mode != active_mode.get_value() {
+            active_mode.set_value(mode);
+            camera.set(
+                pane.trajectory
+                    .with_untracked(|s| s.as_ref()?.map?.camera)
+                    .unwrap_or_default(),
+            );
+        }
         let (p, o, r) = configuration.get();
         if provider.get_untracked() != p {
             provider.set(p);
@@ -315,13 +373,22 @@ pub fn FlightMap(
         }
     });
     let (paths, paths_ready) = super::flight3::install(workbench, pane);
+    let colors = super::telemetry::install(workbench, pane);
+    let ground_projection = Memo::new(move |_| {
+        pane.trajectory.with(|s| {
+            s.as_ref()
+                .and_then(|s| s.map)
+                .is_some_and(|m| m.ground_projection)
+        })
+    });
+    provide_local_context(super::telemetry::ColorContext(colors));
     on_cleanup_local(move || {
         drop(settings);
         drop(save_orbit);
     });
     let host = NodeRef::new();
     let legend = NodeRef::new();
-    super::export::install(pane, host, camera, provider, service);
+    super::export::install(workbench, pane, host, camera, provider, service, colors);
     let bounds = host.observe_border_box();
     let size = Memo::new(move |_| {
         bounds.get().map_or([0., 0.], |b| {
@@ -338,6 +405,10 @@ pub fn FlightMap(
         })
     });
     let fitting = RenderEffect::new(move |_| {
+        if !fit_request.get() {
+            service.demand_layers(pane.id + 2000, &[], &[], provider.get_untracked(), false);
+            return;
+        }
         let pixels = size.get();
         let data = pane.trajectory_data.get();
         let spatial_paths = paths.get();
@@ -362,32 +433,39 @@ pub fn FlightMap(
         {
             let mut next = next;
             if terrain.get_untracked() {
-                let mut extent = 0_f64;
-                for path in spatial_paths.iter() {
-                    let Some(ground) = super::flight3::ground_height(service, path.origin) else {
-                        return;
-                    };
-                    let ground = f64::from(ground);
-                    for point in path.points.iter().filter(|p| p[2].is_finite()) {
-                        let z = point[2] + if path.local { ground } else { 0. };
-                        extent = extent.max((z - ground).abs());
-                    }
-                }
-                if extent > 0. {
-                    let scale = super::terrain::ground_scale(next);
-                    let maximum_scale =
-                        720. * scale / (2. * (45_f64.to_radians() / 2.).tan() * extent * 3.);
-                    let zoom = (maximum_scale * WORLD / 256.).log2();
-                    next.zoom = next
-                        .zoom
-                        .min(zoom)
-                        .clamp(0., super::camera::MAX_INTERACTIVE_ZOOM);
-                }
+                let mut anchors = vec![super::flight3::anchor_tile(next.center)];
+                anchors.extend(
+                    spatial_paths
+                        .iter()
+                        .filter(|path| path.local)
+                        .map(|path| super::flight3::anchor_tile(path.origin)),
+                );
+                service.demand_layers(
+                    pane.id + 2000,
+                    &[],
+                    &anchors,
+                    provider.get_untracked(),
+                    !offline.get_untracked(),
+                );
+                let scene = super::terrain::Scene::resolve(
+                    service,
+                    &[],
+                    &[],
+                    &super::terrain::Scene::default(),
+                    next,
+                    provider.get_untracked(),
+                )
+                .with_paths(service, spatial_paths);
+                let Some(fitted) = super::fit3::fit(next, &scene, orbit.get_untracked(), pixels)
+                else {
+                    return;
+                };
+                next = fitted;
             }
             camera.set(next);
             pane.trajectory.update(|s| {
                 if let Some(map) = s.as_mut().and_then(|s| s.map.as_mut()) {
-                    map.camera = Some(next);
+                    map.remember_camera(next);
                 }
             });
         }
@@ -422,7 +500,7 @@ pub fn FlightMap(
         }) {
             pane.trajectory.update(|s| {
                 if let Some(map) = s.as_mut().and_then(|s| s.map.as_mut()) {
-                    map.camera = Some(c);
+                    map.remember_camera(c);
                 }
             });
         }
@@ -430,11 +508,61 @@ pub fn FlightMap(
     on_cleanup_local(move || {
         drop(fitting);
         drop(view);
+        service.demand_layers(pane.id + 2000, &[], &[], provider.get_untracked(), false);
     });
+    let follow_mode = Memo::new(move |_| {
+        pane.trajectory
+            .with(|s| {
+                s.as_ref()
+                    .and_then(|s| s.map)
+                    .map(|m| (m.follow, m.terrain))
+            })
+            .unwrap_or_default()
+    });
+    let follow = RenderEffect::new(move |_| {
+        if !follow_mode.get().0 || !visible.get() || !pane.timeline_link.get() {
+            return;
+        }
+        let Some(time) = workbench.timeline.time.get() else {
+            return;
+        };
+        let Some(data) = pane.trajectory_data.get() else {
+            return;
+        };
+        let selected = pane.selected.get();
+        let hidden = pane.plot.hidden.get();
+        let trace = data
+            .traces
+            .iter()
+            .find(|t| Some(t.id) == selected && !hidden.contains(&t.id.to_string()))
+            .or_else(|| {
+                data.traces
+                    .iter()
+                    .find(|t| !hidden.contains(&t.id.to_string()))
+            });
+        if let Some(point) = trace.and_then(|trace| trace.track.at(time)) {
+            let mut next = camera.get();
+            next.center = [point.x, point.y];
+            if next != camera.get_untracked() {
+                camera.set(next);
+            }
+        }
+    });
+    on_cleanup_local(move || drop(follow));
+    let stop_follow = move || {
+        if follow_mode.get_untracked().0 {
+            super::settings::update(workbench, pane, |s| {
+                if let Some(map) = s.map.as_mut() {
+                    map.follow = false;
+                }
+            });
+        }
+    };
     let hover = RwSignal::new_local(None::<super::hover::Hit>);
     let changed = super::hover::Changed::new(move |hit: Option<super::hover::Hit>| {
         if let Some(hit) = hit
             && pane.timeline_link.get_untracked()
+            && !follow_mode.get_untracked().0
         {
             workbench.timeline.hover(hit.time);
         }
@@ -454,7 +582,9 @@ pub fn FlightMap(
         hover.set(None);
     });
     on_cleanup_local(move || drop(clear_hover));
+    use super::color_legend::ColorLegendProps;
     use super::hover::HoverViewProps;
+    use super::toolbar::MapToolbarProps;
     let press = StoredValue::new_local(None::<[f64; 2]>);
     view! {column(class="flight-map",on:key_down=move |e|{if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape)&&pane.map_origin_target.get_untracked().is_some(){pane.map_origin_target.set(None);e.prevent_default();e.stop_propagation();}}) {
         if move ||pane.map_origin_target.get().is_some(){row(class="flight-map-controls"){text(class="map-origin-prompt"){"Choose anchor on 2D map"}ActionButton(on:click=move |_|pane.map_origin_target.set(None)){"Cancel"}}}
@@ -465,16 +595,17 @@ pub fn FlightMap(
                 &&x>=0.&&y>=0.&&x<f64::from(b.size.width.0/legend.scale())&&y<f64::from(b.size.height.0/legend.scale()) {changed.run(None);return;}
             let hit=plot::zgui_renderer::local_position(&host,e.position).and_then(|(x,y)|pane.trajectory_data.with_untracked(|data|data.as_ref().and_then(|data|super::hover::flat(data,camera.get_untracked(),size.get_untracked(),[x,y],&pane.plot.hidden.get_untracked()))));
             changed.run(hit);
-        },on:pointer_leave=move |_|changed.run(None),on:wheel:capture=move |_|changed.run(None),style:background=move ||Some(pane.background.get().map_or_else(||"#12181e".into(),|[r,g,b]|format!("#{r:02x}{g:02x}{b:02x}"))),on:pointer_down:capture=move |e| {
+        },on:pointer_leave=move |_|changed.run(None),on:wheel:capture=move |_|{changed.run(None);stop_follow();},style:background=move ||Some(pane.background.get().map_or_else(||"#12181e".into(),|[r,g,b]|format!("#{r:02x}{g:02x}{b:02x}"))),on:pointer_down:capture=move |e| {
             changed.run(None);
             if let Some((x,y))=plot::zgui_renderer::local_position(&legend,e.position) &&let Some(b)=legend.window_bounds()
                 &&x>=0.&&y>=0.&&x<f64::from(b.size.width.0/legend.scale())&&y<f64::from(b.size.height.0/legend.scale()) {press.set_value(None);return;}
+            if matches!(e.button,Some(zgui::vocab::PointerButton::Primary | zgui::vocab::PointerButton::Middle)){stop_follow();}
             if !terrain.get_untracked() && e.button==Some(zgui::vocab::PointerButton::Primary) &&let Some(source)=pane.map_origin_target.get_untracked() {
                 if let Some((x,y))=plot::zgui_renderer::local_position(&host,e.position) &&let Some(g)=Camera::geometry(size.get_untracked()) {
                     let c=camera.get_untracked();let ranges=c.ranges(size.get_untracked());
                     let mut coords=geographic([g.x_value(x,ranges.x),g.y_value(y,ranges.y)]);coords[0]=(coords[0]+180.).rem_euclid(360.)-180.;
                     if let Err(error)=set_origin(pane,&source,coords){workbench.status.set(error);}else {
-                        pane.trajectory.update(|s|if let Some(map)=s.as_mut().and_then(|s|s.map.as_mut()){map.camera=Some(c);});
+                        pane.trajectory.update(|s|if let Some(map)=s.as_mut().and_then(|s|s.map.as_mut()){map.remember_camera(c);});
                         let builder=workbench.trajectory_builder();if builder.target.get_untracked()==Some(pane.id){let _=set_origin(builder.pane,&source,coords);}
                     }
                 }
@@ -497,15 +628,17 @@ pub fn FlightMap(
         },on:pointer_cancel=move |_|press.set_value(None)) {
             if move ||visible.get() {
                 if move ||terrain.get(){
-                    TerrainView(camera=camera,orbit=orbit,service=service,provider=Some(provider),offline=Some(offline),paths=Some(paths),demand_owner=pane.id+1000,show_help=false,on_hover=Some(changed),time=Some(Signal::derive_local(move ||if pane.timeline_link.get(){workbench.timeline.time.get()}else{None})),on_pick=Some(zgui::reactive::UnsyncCallback::new(move |(scene,camera,orbit,size,cursor):(std::sync::Arc<super::terrain::Scene>,Camera,super::terrain::Orbit,[f64;2],[f64;2])|{if pane.timeline_link.get_untracked() &&let Some(time)=super::flight3::pick_time(&scene,camera,orbit,size,cursor){let _=workbench.timeline.pin(time);}})))
+                    TerrainView(camera=camera,orbit=orbit,service=service,provider=Some(provider),offline=Some(offline),paths=Some(paths),colors=Some(colors),ground_projection=Some(Signal::derive_local(move ||ground_projection.get())),demand_owner=pane.id+1000,show_help=false,on_hover=Some(changed),time=Some(Signal::derive_local(move ||if pane.timeline_link.get(){workbench.timeline.time.get()}else{None})),on_pick=Some(zgui::reactive::UnsyncCallback::new(move |(scene,camera,orbit,size,cursor):(std::sync::Arc<super::terrain::Scene>,Camera,super::terrain::Orbit,[f64;2],[f64;2])|{if pane.timeline_link.get_untracked() &&let Some(time)=super::flight3::pick_time(&scene,camera,orbit,size,cursor){let _=workbench.timeline.pin(time);}})))
                 }else{
                     MapView(camera=camera,gpu=false,maps=maps,service=service,provider=Some(provider),offline=Some(offline),transparent_background=true,demand_owner=pane.id+1000,on_reset=zgui::reactive::UnsyncCallback::new(move |()|pane.fit_axes(plot::interaction::Axes::BOTH)))
                     TrajectoryOverlay(workbench=workbench,pane=pane,visible=visible)
                 }
                 HoverView(pane=pane,hit=hover,size=Signal::derive_local(move ||size.get()))
+                ColorLegend(colors=colors)
                 column(class="trajectory-plot-controls",node_ref=legend,on:pointer_enter=move |_|changed.run(None),on:pointer_down:capture=move |_|press.set_value(None)) {TrajectoryLegend(workbench=workbench,pane=pane)}
             }
         }
+        MapToolbar(workbench=workbench,pane=pane,orbit=orbit)
     }}
 }
 

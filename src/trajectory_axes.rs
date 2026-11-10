@@ -97,6 +97,13 @@ impl Workbench {
             workbench.add_plot(target, false, false)
         };
         let mut spec = pane.trajectory.get_untracked().unwrap_or_default();
+        if spec.map.is_none() && map.is_some() {
+            spec.color_source = builder
+                .pane
+                .trajectory
+                .with_untracked(|s| s.as_ref().map(|s| s.color_source.clone()))
+                .unwrap_or_default();
+        }
         spec.map = spec.map.filter(|_| map.is_some()).or(map);
         let incoming_altitude = builder
             .pane

@@ -16,6 +16,8 @@ pub struct Spec {
     pub local: Option<crate::mapping::flight::LocalFrame>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub map: Option<crate::mapping::flight::Config>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub color_source: String,
     pub x: String,
     pub y: String,
     /// GPS: X is longitude, Y is latitude; scale converts wire values to degrees.
@@ -64,6 +66,7 @@ impl Default for Spec {
             altitudes: Default::default(),
             local: None,
             map: None,
+            color_source: String::new(),
             x: String::new(),
             y: String::new(),
             gps_scale: None,
@@ -90,6 +93,7 @@ impl Spec {
     pub fn sources_mut(&mut self) -> impl Iterator<Item = &mut String> {
         [&mut self.x, &mut self.y, &mut self.fix]
             .into_iter()
+            .chain(std::iter::once(&mut self.color_source))
             .chain(
                 self.extra
                     .iter_mut()
@@ -102,10 +106,11 @@ impl Spec {
             )
     }
     pub fn add_source(&mut self, source: &str) {
-        if self
-            .altitudes
-            .values()
-            .any(|altitude| altitude.source == source)
+        if self.color_source == source
+            || self
+                .altitudes
+                .values()
+                .any(|altitude| altitude.source == source)
         {
             return;
         }

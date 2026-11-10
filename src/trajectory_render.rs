@@ -21,17 +21,22 @@ pub struct Prepared {
     source: Arc<[[f32; 2]]>,
     vertices: Arc<[[f32; 2]]>,
     markers: Arc<[[f32; 2]]>,
+    colors: Arc<crate::mapping::telemetry::Coloring>,
+    colored: crate::mapping::color_paths::Colored,
 }
 pub type Paths = BTreeMap<u64, Prepared>;
 #[derive(Clone)]
 struct Key {
     data: Arc<Tracks>,
     styles: Vec<StyleKey>,
+    colors: Arc<crate::mapping::telemetry::Coloring>,
 }
-type StyleKey = (u64, LinePattern, u64, u64, bool);
+type StyleKey = (u64, LinePattern, u64, u64, bool, [u8; 4]);
 impl PartialEq for Key {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.data, &other.data) && self.styles == other.styles
+        Arc::ptr_eq(&self.data, &other.data)
+            && self.styles == other.styles
+            && Arc::ptr_eq(&self.colors, &other.colors)
     }
 }
 #[derive(Clone)]
@@ -71,6 +76,11 @@ pub fn patterns(
     geometry: Signal<Option<PlotGeometry>, LocalStorage>,
     visible: Signal<bool, LocalStorage>,
 ) -> RwSignal<Paths, LocalStorage> {
+    let colors = use_local_context::<crate::mapping::telemetry::ColorContext>()
+        .map(|cx| cx.0)
+        .unwrap_or_else(|| {
+            Signal::stored_local(Arc::new(crate::mapping::telemetry::Coloring::default()))
+        });
     let paths = RwSignal::new_local(Paths::new());
     let frame = StoredValue::new_local(None::<Frame>);
     let pending = StoredValue::new_local(None::<Job>);
@@ -121,6 +131,7 @@ pub fn patterns(
                             0
                         },
                         draw.markers,
+                        style.color,
                     )
                 })
             })
@@ -129,6 +140,7 @@ pub fn patterns(
             key: Key {
                 data: data.clone(),
                 styles,
+                colors: colors.get(),
             },
             ranges,
             pixels: (g.width, g.height),
@@ -157,12 +169,30 @@ pub fn patterns(
                         .key
                         .styles
                         .iter()
-                        .filter_map(|(id, pattern, width, radius, markers)| {
+                        .filter_map(|(id, pattern, width, radius, markers, color)| {
                             let trace = job.data.traces.iter().find(|trace| trace.id == *id)?;
                             Some((
                                 *id,
                                 Prepared {
                                     source: trace.track.vertices.clone(),
+                                    colors: job.frame.key.colors.clone(),
+                                    colored: crate::mapping::color_paths::prepare(
+                                        trace,
+                                        job.frame.ranges,
+                                        job.frame.pixels,
+                                        LineDraw {
+                                            pattern: *pattern,
+                                            markers: *markers,
+                                            ..Default::default()
+                                        },
+                                        SeriesStyle {
+                                            width: f64::from_bits(*width),
+                                            radius: f64::from_bits(*radius),
+                                            color: *color,
+                                            ..SeriesStyle::for_id("")
+                                        },
+                                        &job.frame.key.colors,
+                                    ),
                                     vertices: pattern_vertices(
                                         &trace.track.points,
                                         trace.track.origin,
@@ -240,7 +270,7 @@ fn pattern_vertices(
 }
 
 // Keep crossing segments, and a pan margin matching Frame::covers. Never join separated runs.
-fn clip_runs(points: &[PlotPoint], ranges: Ranges) -> Vec<PlotPoint> {
+pub(crate) fn clip_runs(points: &[PlotPoint], ranges: Ranges) -> Vec<PlotPoint> {
     let (left, right) = (
         ranges.x.min - ranges.x.span() * 0.75,
         ranges.x.max + ranges.x.span() * 0.75,
@@ -317,7 +347,11 @@ fn marker_vertices(
 // A time-series column reducer cannot be used on loops or vertical XY runs.
 // Keep subpixel reduction separate from styling, including the final point of
 // each run so short endpoints and gaps survive the sampling adapter.
-fn sample_xy(points: &[PlotPoint], ranges: Ranges, pixels: (f64, f64)) -> Vec<PlotPoint> {
+pub(crate) fn sample_xy(
+    points: &[PlotPoint],
+    ranges: Ranges,
+    pixels: (f64, f64),
+) -> Vec<PlotPoint> {
     let scale = (pixels.0 / ranges.x.span(), pixels.1 / ranges.y.span());
     let mut out = Vec::<PlotPoint>::new();
     let mut previous = None;
@@ -356,37 +390,58 @@ pub fn paint(
     trace: &PreparedTrace,
     draw: LineDraw,
     style: SeriesStyle,
-    color: Color,
-    transform: kurbo::Affine,
     patterns: &Paths,
+    colors: &Arc<crate::mapping::telemetry::Coloring>,
+    alpha: f64,
 ) {
+    let [r, g, b, a] = style.color;
+    let color = Color::srgb_u8(r, g, b, (f64::from(a) * alpha) as u8);
+    let transform = kurbo::Affine::translate((trace.track.origin.x, trace.track.origin.y));
     let width = style.width;
-    let prepared = patterns
-        .get(&trace.id)
-        .filter(|prepared| Arc::ptr_eq(&prepared.source, &trace.track.vertices));
-    match draw.pattern {
-        LinePattern::Solid => plot::zgui_renderer::push_line_transformed(
-            scene,
-            prepared.map_or_else(
-                || trace.track.vertices.clone(),
-                |prepared| prepared.vertices.clone(),
+    let prepared = patterns.get(&trace.id).filter(|prepared| {
+        Arc::ptr_eq(&prepared.source, &trace.track.vertices)
+            && (Arc::ptr_eq(&prepared.colors, colors)
+                || (prepared.colors.samples.is_empty() && colors.samples.is_empty()))
+    });
+    let colored = prepared.filter(|_| colors.samples.contains_key(&trace.id));
+    let bucket_color =
+        |[r, g, b, _]: [u8; 4]| Color::srgb_u8(r, g, b, (f64::from(style.color[3]) * alpha) as u8);
+    if let Some(prepared) = colored {
+        for (bucket, vertices) in &prepared.colored.lines {
+            plot::zgui_renderer::push_line_transformed(
+                scene,
+                vertices.clone(),
+                bucket_color(*bucket),
+                width,
+                zgui::canvas::Lod::Exact,
+                transform,
+            );
+        }
+    } else {
+        match draw.pattern {
+            LinePattern::Solid => plot::zgui_renderer::push_line_transformed(
+                scene,
+                prepared.map_or_else(
+                    || trace.track.vertices.clone(),
+                    |prepared| prepared.vertices.clone(),
+                ),
+                color,
+                width,
+                zgui::canvas::Lod::Exact,
+                transform,
             ),
-            color,
-            width,
-            zgui::canvas::Lod::Exact,
-            transform,
-        ),
-        LinePattern::None => {}
-        _ => {
-            if let Some(prepared) = prepared {
-                plot::zgui_renderer::push_line_transformed(
-                    scene,
-                    prepared.vertices.clone(),
-                    color,
-                    width,
-                    zgui::canvas::Lod::Exact,
-                    transform,
-                );
+            LinePattern::None => {}
+            _ => {
+                if let Some(prepared) = prepared {
+                    plot::zgui_renderer::push_line_transformed(
+                        scene,
+                        prepared.vertices.clone(),
+                        color,
+                        width,
+                        zgui::canvas::Lod::Exact,
+                        transform,
+                    );
+                }
             }
         }
     }
@@ -404,16 +459,28 @@ pub fn paint(
                 Marker::Path(std::sync::Arc::new(plot::cross_marker(radius, radius / 3.)))
             }
         };
-        plot::zgui_renderer::push_points_transformed(
-            scene,
-            prepared.map_or_else(
-                || trace.track.vertices.clone(),
-                |prepared| prepared.markers.clone(),
-            ),
-            marker,
-            color,
-            transform,
-        );
+        if let Some(prepared) = colored {
+            for (bucket, vertices) in &prepared.colored.markers {
+                plot::zgui_renderer::push_points_transformed(
+                    scene,
+                    vertices.clone(),
+                    marker.clone(),
+                    bucket_color(*bucket),
+                    transform,
+                );
+            }
+        } else {
+            plot::zgui_renderer::push_points_transformed(
+                scene,
+                prepared.map_or_else(
+                    || trace.track.vertices.clone(),
+                    |prepared| prepared.markers.clone(),
+                ),
+                marker,
+                color,
+                transform,
+            );
+        }
     }
 }
 
@@ -521,7 +588,8 @@ mod tests {
         let original = Frame {
             key: Key {
                 data,
-                styles: vec![(1, LinePattern::Dashed, 2_f64.to_bits(), 0, false)],
+                styles: vec![(1, LinePattern::Dashed, 2_f64.to_bits(), 0, false, [255; 4])],
+                colors: Arc::new(crate::mapping::telemetry::Coloring::default()),
             },
             ranges: Ranges::new((0., 10.), (0., 10.)),
             pixels: (1000., 1000.),

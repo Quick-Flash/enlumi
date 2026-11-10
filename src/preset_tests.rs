@@ -44,10 +44,21 @@ fn trajectory_recipe_preserves_axes_and_display_mode_through_capture_and_restore
         ..Default::default()
     }));
     pane.timeline_link.set(true);
+    pane.state_tint.set(true);
     let styled = pane
         .lines
         .with_untracked(|lines| lines.iter().find(|line| line.source == other).unwrap().id);
     let mut style = pane.plot.style(&styled.to_string());
+    let mut coloring = crate::trace_color::TraceColor {
+        mode: crate::trace_color::Mode::Speed,
+        ..Default::default()
+    };
+    coloring.speed.range = [5., 50.];
+    coloring.speed.colors = [[12, 34, 56], [98, 76, 54]];
+    coloring.height.range = [100., 500.];
+    pane.trace_colors.update(|colors| {
+        colors.insert(styled, coloring);
+    });
     style.color = [12, 45, 200, 255];
     style.width = 4.5;
     style.radius = 6.;
@@ -96,6 +107,11 @@ fn trajectory_recipe_preserves_axes_and_display_mode_through_capture_and_restore
         .lines
         .with_untracked(|lines| lines.iter().find(|line| line.source == other).unwrap().id);
     assert_eq!(restored.plot.style(&restored_id.to_string()), style);
+    assert!(restored.state_tint.get_untracked());
+    assert_eq!(
+        restored.trace_colors.get_untracked()[&restored_id],
+        coloring
+    );
     assert_eq!(
         restored.drawing.get_untracked()[&restored_id].pattern,
         plot::line_draw::LinePattern::Dashed
@@ -104,6 +120,15 @@ fn trajectory_recipe_preserves_axes_and_display_mode_through_capture_and_restore
     workbench.duplicate_plot(restored);
     assert_eq!(workbench.pane().trajectory.get_untracked(), Some(spec));
     assert!(workbench.pane().timeline_link.get_untracked());
+    assert!(workbench.pane().state_tint.get_untracked());
+    assert!(
+        workbench
+            .pane()
+            .trace_colors
+            .get_untracked()
+            .values()
+            .any(|value| *value == coloring)
+    );
 }
 #[test]
 fn link_defaults_enable_pointer_and_timeline_but_preserve_explicit_choices() {

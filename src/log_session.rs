@@ -559,7 +559,9 @@ impl Workbench {
             pane.trajectory.update(|spec| {
                 if let Some(spec) = spec {
                     if let Some(map) = &mut spec.map {
-                        map.camera = None;
+                        map.fit();
+                        map.camera_2d = None;
+                        map.camera_3d = None;
                     }
                     for source in spec.sources_mut() {
                         if source.is_empty() {

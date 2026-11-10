@@ -6,6 +6,7 @@ use crate::measurement_background::MeasurementBackgroundProps;
 use crate::measurement_overlay::MeasurementOverlayProps;
 use crate::plot_appearance::PlotBackgroundProps;
 use crate::state::{Pane, Workbench};
+use crate::state_trace_overlay::StateTraceOverlayProps;
 use crate::timeline::{TimeMarkerProps, TimeSurfaceProps};
 use plot::{PlotPoint, zgui_series::SeriesPlotProps};
 use zgui::prelude::*;
@@ -63,6 +64,7 @@ pub fn CursorPlot(
         })),
         overlay: Some(ChildrenFn::new(move || {
             AnyView::new((
+            (!spectral).then(||AnyView::new(view!{StateTraceOverlay(workbench=workbench,pane=pane,visible=visible)})).into_view(),
             (!spectral).then(|| AnyView::new((view! { GeometryOverlay(workbench=workbench,pane=pane,visible=visible) }.into_view(), view! { AnalysisRange(workbench=workbench,pane=pane,visible=visible) }.into_view()))).into_view(),
             view! {MeasurementOverlay(workbench=workbench,pane=pane,visible=visible)}.into_view()
             ,(!spectral).then(||AnyView::new(view! {TimeMarker(workbench=workbench,pane=pane,visible=visible)})).into_view()

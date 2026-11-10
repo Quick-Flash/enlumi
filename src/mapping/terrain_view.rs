@@ -25,6 +25,8 @@ pub fn TerrainView(
     #[prop(optional)] provider: Option<RwSignal<Provider, LocalStorage>>,
     #[prop(optional)] offline: Option<RwSignal<bool, LocalStorage>>,
     #[prop(optional)] paths: Option<Signal<Arc<[super::flight3::Path3]>, LocalStorage>>,
+    #[prop(optional)] colors: Option<Signal<Arc<super::telemetry::Coloring>, LocalStorage>>,
+    #[prop(optional)] ground_projection: Option<Signal<bool, LocalStorage>>,
     #[prop(optional)] time: Option<Signal<Option<f64>, LocalStorage>>,
     #[prop(optional)] on_pick: Option<super::flight3::Pick>,
     #[prop(optional)] on_hover: Option<super::hover::Changed>,
@@ -35,6 +37,9 @@ pub fn TerrainView(
     let offline = offline.unwrap_or_else(|| RwSignal::new_local(false));
     let paths = paths.unwrap_or_else(|| Signal::stored_local(Arc::from([])));
     let time = time.unwrap_or_else(|| Signal::stored_local(None));
+    let colors = colors
+        .unwrap_or_else(|| Signal::stored_local(Arc::new(super::telemetry::Coloring::default())));
+    let ground_projection = ground_projection.unwrap_or_else(|| Signal::stored_local(false));
     let terrain_camera = Memo::new(move |_| {
         let mut camera = camera.get();
         if !camera.center.iter().all(|value| value.is_finite()) {
@@ -147,20 +152,22 @@ pub fn TerrainView(
             !offline.get(),
         );
     });
-    let scene = RwSignal::new_local(Arc::new(Scene::default()));
-    let data = RenderEffect::new(move |_| {
+    // Resolve lazily with current coverage before submitting its matching camera.
+    // Separate effects can briefly pair a new orbit with the previous view's tiles.
+    let scene = Memo::new_owning(move |previous: Option<Arc<Scene>>| {
         service.revision.get();
-        scene.set(Arc::new(
-            Scene::resolve(
-                service,
-                &coverage.get(),
-                &raster_coverage.get(),
-                &scene.get_untracked(),
-                terrain_camera.get(),
-                provider.get(),
-            )
-            .with_paths(service, paths.get()),
-        ));
+        let mut frame = Scene::resolve(
+            service,
+            &coverage.get(),
+            &raster_coverage.get(),
+            previous.as_deref().unwrap_or(&Scene::default()),
+            terrain_camera.get(),
+            provider.get(),
+        )
+        .with_paths(service, paths.get());
+        frame.colors = colors.get();
+        frame.ground_projection = ground_projection.get();
+        (Arc::new(frame), true)
     });
     let render = RenderEffect::new(move |_| {
         let frame = scene.get();
@@ -176,7 +183,6 @@ pub fn TerrainView(
     });
     on_cleanup_local(move || {
         drop(demand);
-        drop(data);
         drop(render);
         service.demand(
             demand_owner,

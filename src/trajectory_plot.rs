@@ -342,11 +342,12 @@ fn hovered_time(pane: Pane) -> Option<f64> {
 
 #[component]
 pub(crate) fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoView {
+    use crate::state_key::StateKeyProps;
     let collapsed = RwSignal::new_local(false);
     let settings = RwSignal::new_local(false);
     plot::zgui_svg::register_description(
         plot::zgui_svg::SnapshotLayer::Foreground,
-        move |description| describe_legend(pane, description),
+        move |description| describe_legend(workbench, pane, description),
     );
     view! {column(class="workbench-legend trajectory-legend",on:pointer_down=move |event|event.stop_propagation(),on:pointer_up=move |event|event.stop_propagation()) {
         row(class="legend-heading") {
@@ -354,17 +355,22 @@ pub(crate) fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoVie
                 vector(class="legend-chevron",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if collapsed.get(){"M4 2 L8 6 L4 10"}else{"M2 4 L6 8 L10 4"}),a11y:hidden=true)
                 text {"Legend"}
             }
-            PlotMenuEditor(workbench=workbench,pane=pane,open=settings,legend_trigger=true)
+            box(class="trajectory-legend-settings"){PlotMenuEditor(workbench=workbench,pane=pane,open=settings,legend_trigger=true)}
         }
         if move ||!collapsed.get() {
             for line in move ||{let keys=workbench.legend_keys(pane);let mut lines=pane.view_lines.get();lines.sort_by_key(|line|keys.iter().position(|id|*id==line.id).unwrap_or(usize::MAX));lines},key=|line|(line.id,line.name.clone()) {
                 TrajectoryLegendRow(workbench=workbench,pane=pane,line=line)
             }
+            StateKey(workbench=workbench,pane=pane)
         }
     }}
 }
 
-pub(crate) fn describe_legend(pane: Pane, description: &mut plot::PlotDescription) {
+pub(crate) fn describe_legend(
+    workbench: Workbench,
+    pane: Pane,
+    description: &mut plot::PlotDescription,
+) {
     let order = pane.legend_order.get_untracked();
     let mut lines = pane.view_lines.get_untracked();
     lines.sort_by_key(|line| {
@@ -373,7 +379,7 @@ pub(crate) fn describe_legend(pane: Pane, description: &mut plot::PlotDescriptio
             .position(|id| *id == line.id)
             .unwrap_or(usize::MAX)
     });
-    let entries = lines
+    let mut entries: Vec<_> = lines
         .iter()
         .map(|line| {
             plot::zgui_plot::theme::LEGEND.entry(
@@ -387,6 +393,7 @@ pub(crate) fn describe_legend(pane: Pane, description: &mut plot::PlotDescriptio
             )
         })
         .collect();
+    entries.extend(crate::state_key::legend_entries(workbench, pane));
     description.push_legend(
         entries,
         (
@@ -492,6 +499,11 @@ pub(crate) fn TrajectoryOverlay(
         PlotGeometry::with_bounds(0., 0., w, h, w, h)
     });
     let patterns = crate::trajectory_render::patterns(workbench, pane, geometry, visible);
+    let colors = use_local_context::<crate::mapping::telemetry::ColorContext>()
+        .map(|cx| cx.0)
+        .unwrap_or_else(|| {
+            Signal::stored_local(Arc::new(crate::mapping::telemetry::Coloring::default()))
+        });
     let handle = zgui::elements::canvas::CanvasHandle::new();
     plot::zgui_svg::register_canvas(&handle, plot::zgui_svg::SnapshotLayer::Foreground);
     #[cfg(test)]
@@ -547,10 +559,6 @@ pub(crate) fn TrajectoryOverlay(
                 } else {
                     1.
                 };
-                let [r, gc, b, a] = style.color;
-                let color = Color::srgb_u8(r, gc, b, (f64::from(a) * alpha) as u8);
-                let transform =
-                    kurbo::Affine::translate((trace.track.origin.x, trace.track.origin.y));
                 let width = style.width
                     + if emphasized.as_deref() == Some(&key) {
                         1.5
@@ -563,9 +571,9 @@ pub(crate) fn TrajectoryOverlay(
                         trace,
                         draw,
                         plot::plot_data::SeriesStyle { width, ..style },
-                        color,
-                        transform,
                         patterns,
+                        &colors.get(),
+                        alpha,
                     )
                 });
             }
@@ -596,8 +604,6 @@ pub(crate) fn TrajectoryOverlay(
                 if hidden.contains(&key) && emphasized.as_deref() != Some(&key) {
                     continue;
                 }
-                let [r, gc, b, a] = pane.plot.style(&key).color;
-                let color = Color::srgb_u8(r, gc, b, a);
                 if pane
                     .trajectory
                     .with(|spec| spec.as_ref().is_some_and(|s| s.map.is_some()))
@@ -645,7 +651,7 @@ pub(crate) fn TrajectoryOverlay(
                         scene,
                         path,
                         Color::srgb_u8(255, 190, 60, 255),
-                        color,
+                        Color::srgb_u8(255, 255, 255, 255),
                         2.,
                     );
                 }

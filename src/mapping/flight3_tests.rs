@@ -41,7 +41,9 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
     let (workbench, pane, service) = captured.borrow().unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
     loop {
-        if super::super::tests::map_fixture(directory.path(), &service.requested()) {
+        if super::super::tests::map_fixture(directory.path(), &service.requested())
+            || service.failed()
+        {
             service.retry();
         }
         harness.advance(std::time::Duration::from_millis(17));
@@ -66,7 +68,7 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
         {
             super::super::tests::capture(&pixels, path);
         }
-        if colored > 10 {
+        if colored > 10 && service.complete() {
             break;
         }
         assert!(
@@ -85,16 +87,68 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
             .unwrap()
             .read_composed()
     };
+    // Wait for the latest complete tile scene, then import that frame before
+    // using exact pixel counts as the baseline for style comparisons.
+    workbench.capture_screenshot(Some(pane)).unwrap();
+    harness.advance(std::time::Duration::from_millis(17));
+    harness.settle(128);
+    let legend = harness.app().windows()[0]
+        .box_with_class("trajectory-plot-controls")
+        .unwrap();
+    let surface = harness.app().windows()[0]
+        .box_with_class("map-terrain-surface")
+        .unwrap();
     let count_magenta = |pixels: &zgui_render_wgpu::Pixels| {
         (0..700)
             .flat_map(|y| (0..700).map(move |x| (x, y)))
             .filter(|&(x, y)| {
+                let (px, py) = (x as f32, y as f32);
+                let inside = |rect: zgui::geom::Rect<zgui::geom::DevicePx, zgui::geom::Device>| {
+                    px >= rect.origin.x.0
+                        && px < rect.origin.x.0 + rect.size.width.0
+                        && py >= rect.origin.y.0
+                        && py < rect.origin.y.0 + rect.size.height.0
+                };
+                if !inside(surface) || inside(legend) {
+                    return false;
+                }
                 let p = pixels.rgba(x, y);
                 p[0] > 180 && p[1] < 90 && p[2] > 100
             })
             .count()
     };
     let narrow = count_magenta(&read(&harness));
+    let mut previous = narrow;
+    for pattern in [
+        plot::line_draw::LinePattern::Dashed,
+        plot::line_draw::LinePattern::Dotted,
+        plot::line_draw::LinePattern::DashDot,
+        plot::line_draw::LinePattern::Solid,
+    ] {
+        pane.drawing.update(|drawing| {
+            drawing.entry(2).or_default().pattern = pattern;
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(25);
+        loop {
+            harness.advance(std::time::Duration::from_millis(17));
+            harness.settle(64);
+            let count = count_magenta(&read(&harness));
+            let visible = if pattern == plot::line_draw::LinePattern::Solid {
+                count == narrow
+            } else {
+                count > 10 && count < narrow * 95 / 100 && count.abs_diff(previous) > 10
+            };
+            if visible {
+                previous = count;
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "Changing 3D pattern to {pattern:?} must change rasterized stroke: {count}, solid {narrow}, previous {previous}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
     pane.plot.styles.update(|styles| {
         styles.get_mut("2").unwrap().width = 10.;
     });
@@ -181,6 +235,14 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
                 filled >= 20,
                 "Timeline marker must have filled center, not thin crossing strokes"
             );
+            let white = (-8..=8)
+                .flat_map(|dy| (-8..=8).map(move |dx| (x + dx, y + dy)))
+                .filter(|&(x, y)| {
+                    let p = pixels.rgba(x, y);
+                    p[0] > 230 && p[1] > 230 && p[2] > 230
+                })
+                .count();
+            assert!(white > 8, "Timeline dot must have visible white border");
             break (x, y);
         }
         assert!(
@@ -333,7 +395,71 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
         loads,
         "Screenshot capture must not demand more tiles"
     );
-    super::super::settings::update(workbench, pane, |s| s.map.as_mut().unwrap().terrain = false);
+    let mut appearance = crate::trace_color::TraceColor {
+        mode: crate::trace_color::Mode::Height,
+        ..Default::default()
+    };
+    appearance.height.range = [0., 2000.];
+    appearance.height.colors = [[0, 255, 0], [0, 0, 255]];
+    pane.trace_colors.update(|colors| {
+        colors.insert(2, appearance);
+    });
+    let [red, green, blue] = appearance.height.color(32. / 63.);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(25);
+    loop {
+        harness.advance(std::time::Duration::from_millis(17));
+        harness.settle(64);
+        let frame = read(&harness);
+        let colored = (80..550)
+            .flat_map(|y| (20..680).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
+                let p = frame.rgba(x, y);
+                p[0].abs_diff(red) < 8 && p[1].abs_diff(green) < 8 && p[2].abs_diff(blue) < 8
+            })
+            .count();
+        if colored > 10 && count_magenta(&frame) == 0 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "3D trace must use chosen height gradient, got {colored} colored pixels"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let before_projection = read(&harness);
+    super::super::settings::update(workbench, pane, |spec| {
+        spec.map.as_mut().unwrap().ground_projection = true
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(25);
+    loop {
+        harness.advance(std::time::Duration::from_millis(17));
+        harness.settle(64);
+        if before_projection.max_difference(&read(&harness)) > 10 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Ground projection must change rendered terrain pixels"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    if let Some(path) = std::env::var_os("ENLUMI_MAP_UI_PREVIEW") {
+        let frame = read(&harness);
+        let size = frame.size();
+        image::RgbaImage::from_fn(size.width as u32, size.height as u32, |x, y| {
+            image::Rgba(frame.rgba(x as i32, y as i32))
+        })
+        .save(path)
+        .unwrap();
+    }
+    let colored_svg = workbench.capture_screenshot(Some(pane)).unwrap();
+    assert!(
+        colored_svg.contains("height"),
+        "3D export must include color scale"
+    );
+    super::super::settings::update(workbench, pane, |s| {
+        s.map.as_mut().unwrap().set_terrain(false)
+    });
     harness.settle(128);
     assert!(
         harness.app().windows()[0]

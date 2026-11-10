@@ -18,10 +18,7 @@ jobs:
           - os: ubuntu-latest
           - os: macos-latest
           - os: macos-15-intel
-          - os: ubuntu-latest
-            container: archlinux:base-devel
     runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container }}
     env:
       ENLUMI_BUILD_COMMIT: ${{ github.sha }}
       CARGO_INCREMENTAL: "0"
@@ -30,16 +27,9 @@ jobs:
       ENLUMI_SKIP_SOFTWARE_GPU_TESTS: "1"
     timeout-minutes: 60
     steps:
-      - name: Arch build libraries
-        if: matrix.container != ''
-        working-directory: .
-        run: |
-          pacman -Syu --noconfirm --needed git rustup python pkgconf \
-            libx11 libxkbcommon libxkbcommon-x11 wayland libxcb libxcursor \
-            libxi libxrandr fontconfig ttf-dejavu
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Linux build libraries
-        if: runner.os == 'Linux' && matrix.container == ''
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential pkg-config \
@@ -51,7 +41,7 @@ jobs:
       - name: Rust dependency cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          shared-key: ${{ matrix.os }}-${{ matrix.container }}
+          shared-key: ${{ matrix.os }}
           add-job-id-key: "false"
           cache-bin: "false"
           cache-on-failure: "true"
@@ -62,6 +52,16 @@ jobs:
           CARGO_HTTP_TIMEOUT: "120"
           CARGO_NET_RETRY: "5"
         run: bash .github/scripts/fetch-dependencies.sh
+      - name: Git hooks are executable, LF-only, valid shell
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          test -n "$(git ls-files .githooks)"
+          git ls-files --stage .githooks | awk '$1 != "100755" { bad = 1; print "not executable: " $4 } END { exit bad }'
+          if grep -l $'\r' .githooks/*; then echo "CRLF in hook"; exit 1; fi
+          for hook in .githooks/*; do sh -n "$hook"; done
+          cargo xtask install-hooks
+          test "$(git config core.hooksPath)" = ".githooks"
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
