@@ -355,7 +355,7 @@ pub(crate) fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoVie
                 vector(class="legend-chevron",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if collapsed.get(){"M4 2 L8 6 L4 10"}else{"M2 4 L6 8 L10 4"}),a11y:hidden=true)
                 text {"Legend"}
             }
-            PlotMenuEditor(workbench=workbench,pane=pane,open=settings,legend_trigger=true)
+            box(class="trajectory-legend-settings"){PlotMenuEditor(workbench=workbench,pane=pane,open=settings,legend_trigger=true)}
         }
         if move ||!collapsed.get() {
             for line in move ||{let keys=workbench.legend_keys(pane);let mut lines=pane.view_lines.get();lines.sort_by_key(|line|keys.iter().position(|id|*id==line.id).unwrap_or(usize::MAX));lines},key=|line|(line.id,line.name.clone()) {

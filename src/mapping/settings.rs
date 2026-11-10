@@ -73,11 +73,7 @@ pub(crate) fn set_provider(workbench: Workbench, pane: Pane, provider: Provider)
     update(workbench, pane, edit);
 }
 #[component]
-pub fn MapBackend(
-    workbench: Workbench,
-    pane: Pane,
-    #[prop(default = false)] compact: bool,
-) -> impl IntoView {
+pub fn MapBackend(workbench: Workbench, pane: Pane) -> impl IntoView {
     install_stylesheet("enlumi-map", include_str!("preview.css"));
     let provider = Memo::new(move |_| {
         target(workbench, pane)
@@ -85,7 +81,7 @@ pub fn MapBackend(
             .with(|s| s.as_ref().and_then(|s| s.map).unwrap_or_default().provider)
     });
     view! {column(class="map-backend-settings") {
-        if move ||!compact {text {"Map backend"}}
+        text {"Map backend"}
         Select(value=Binding::controlled(Signal::derive_local(move ||provider.get().key().to_owned()),move |key:String|if let Some(provider)=Provider::parse(&key){set_provider(workbench,pane,provider);})) {
             SelectTrigger(class="map-backend-trigger",label="Map backend"){{move ||provider.get().label()}}
             SelectContent {for provider in move ||Provider::ALL,key=|p|p.key(){SelectItem(value=provider.key()){{provider.label()}}}}

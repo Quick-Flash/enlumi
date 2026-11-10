@@ -18,7 +18,7 @@
 .map-scale-row { gap: 2px; }
 .map-scale-rule { height: 5px; border-left: 2px solid white; border-right: 2px solid white; border-bottom: 2px solid white; flex: none; }
 
-.flight-map { flex: 1; min-height: 0; min-width: 0; height: 100%; gap: 0; }
+.flight-map { position: relative; flex: 1; min-height: 0; min-width: 0; height: 100%; gap: 0; }
 .flight-map-controls { flex: none; gap: 6px; padding: 4px; align-items: center; flex-wrap: wrap; }
 .flight-map-source-name { min-width: 0; flex: 1; font-size: 11px; overflow: hidden; }
 .flight-map-view { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: hidden; background: #18212a; }
@@ -37,10 +37,8 @@
 
 .map-sidebar-settings, .map-altitude-options { gap: 6px; padding: 6px; flex: none; }
 .map-backend-settings { gap: 4px; flex: none; }
-.map-toolbar { flex: none; gap: 4px; padding: 4px 6px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--app-border); background: var(--app-surface); }
-.map-toolbar .map-backend-settings { flex: 1; min-width: 150px; max-width: 220px; }
-.map-toolbar .map-backend-trigger { min-height: 25px; height: 25px; padding-top: 0; padding-bottom: 0; font-size: 11px; }
-.map-toolbar-zoom { font-size: 11px; color: var(--app-muted); }
+.map-toolbar { position: absolute; top: 6px; left: 6px; z-index: 3; gap: 2px; padding: 3px; align-items: center; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-surface); }
+.map-toolbar .app-action.zui-button[data-size] { height: 24px; min-height: 24px; padding: 0 6px; font-size: 11px; }
 .map-compass-arrow { width: 14px; height: 14px; color: var(--app-foreground); transform-origin: center; }
 .map-toolbar .setting-active { background: var(--app-selected); color: var(--app-foreground); }
 .map-color-settings { gap: 5px; flex: none; }

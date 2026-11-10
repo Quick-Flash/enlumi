@@ -405,6 +405,10 @@ pub fn FlightMap(
         })
     });
     let fitting = RenderEffect::new(move |_| {
+        if !fit_request.get() {
+            service.demand_layers(pane.id + 2000, &[], &[], provider.get_untracked(), false);
+            return;
+        }
         let pixels = size.get();
         let data = pane.trajectory_data.get();
         let spatial_paths = paths.get();
@@ -429,27 +433,34 @@ pub fn FlightMap(
         {
             let mut next = next;
             if terrain.get_untracked() {
-                let mut extent = 0_f64;
-                for path in spatial_paths.iter() {
-                    let Some(ground) = super::flight3::ground_height(service, path.origin) else {
-                        return;
-                    };
-                    let ground = f64::from(ground);
-                    for point in path.points.iter().filter(|p| p[2].is_finite()) {
-                        let z = point[2] + if path.local { ground } else { 0. };
-                        extent = extent.max((z - ground).abs());
-                    }
-                }
-                if extent > 0. {
-                    let scale = super::terrain::ground_scale(next);
-                    let maximum_scale =
-                        720. * scale / (2. * (45_f64.to_radians() / 2.).tan() * extent * 3.);
-                    let zoom = (maximum_scale * WORLD / 256.).log2();
-                    next.zoom = next
-                        .zoom
-                        .min(zoom)
-                        .clamp(0., super::camera::MAX_INTERACTIVE_ZOOM);
-                }
+                let mut anchors = vec![super::flight3::anchor_tile(next.center)];
+                anchors.extend(
+                    spatial_paths
+                        .iter()
+                        .filter(|path| path.local)
+                        .map(|path| super::flight3::anchor_tile(path.origin)),
+                );
+                service.demand_layers(
+                    pane.id + 2000,
+                    &[],
+                    &anchors,
+                    provider.get_untracked(),
+                    !offline.get_untracked(),
+                );
+                let scene = super::terrain::Scene::resolve(
+                    service,
+                    &[],
+                    &[],
+                    &super::terrain::Scene::default(),
+                    next,
+                    provider.get_untracked(),
+                )
+                .with_paths(service, spatial_paths);
+                let Some(fitted) = super::fit3::fit(next, &scene, orbit.get_untracked(), pixels)
+                else {
+                    return;
+                };
+                next = fitted;
             }
             camera.set(next);
             pane.trajectory.update(|s| {
@@ -497,6 +508,7 @@ pub fn FlightMap(
     on_cleanup_local(move || {
         drop(fitting);
         drop(view);
+        service.demand_layers(pane.id + 2000, &[], &[], provider.get_untracked(), false);
     });
     let follow_mode = Memo::new(move |_| {
         pane.trajectory
@@ -573,12 +585,8 @@ pub fn FlightMap(
     use super::color_legend::ColorLegendProps;
     use super::hover::HoverViewProps;
     use super::toolbar::MapToolbarProps;
-    use crate::plot_menu::PlotMenuEditorProps;
-    let settings_open = RwSignal::new_local(false);
     let press = StoredValue::new_local(None::<[f64; 2]>);
     view! {column(class="flight-map",on:key_down=move |e|{if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape)&&pane.map_origin_target.get_untracked().is_some(){pane.map_origin_target.set(None);e.prevent_default();e.stop_propagation();}}) {
-        MapToolbar(workbench=workbench,pane=pane,camera=camera,orbit=orbit,settings=settings_open)
-        PlotMenuEditor(workbench=workbench,pane=pane,open=settings_open)
         if move ||pane.map_origin_target.get().is_some(){row(class="flight-map-controls"){text(class="map-origin-prompt"){"Choose anchor on 2D map"}ActionButton(on:click=move |_|pane.map_origin_target.set(None)){"Cancel"}}}
         column(class="flight-map-view",node_ref=host,on:pointer_move:capture=move |e| {
             if terrain.get_untracked() {return;}
@@ -630,6 +638,7 @@ pub fn FlightMap(
                 column(class="trajectory-plot-controls",node_ref=legend,on:pointer_enter=move |_|changed.run(None),on:pointer_down:capture=move |_|press.set_value(None)) {TrajectoryLegend(workbench=workbench,pane=pane)}
             }
         }
+        MapToolbar(workbench=workbench,pane=pane,orbit=orbit)
     }}
 }
 

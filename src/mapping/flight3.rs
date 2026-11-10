@@ -129,40 +129,12 @@ pub(crate) fn vertices(
             ]
         };
         if scene.ground_projection {
-            let stride = path.points.len().div_ceil(4096).max(1);
-            let mut previous = None;
-            for (index, &point) in path.points.iter().enumerate() {
-                if !point.iter().all(|v| v.is_finite()) {
-                    previous = None;
-                    continue;
+            for segment in super::ground_path::segments(path, &scene.tiles) {
+                for [x, y, z] in segment {
+                    let mut v = vertex([x, y, z - f64::from(origin)], [0, 0, 0, 125]);
+                    v[7] = 1.5;
+                    vertices.push(v);
                 }
-                let endpoint = previous.is_none()
-                    || index == 0
-                    || index + 1 == path.points.len()
-                    || path
-                        .points
-                        .get(index + 1)
-                        .is_some_and(|p| !p.iter().all(|v| v.is_finite()));
-                if index % stride != 0 && !endpoint {
-                    continue;
-                }
-                let height = scene
-                    .tiles
-                    .iter()
-                    .find_map(|tile| tile.mesh_height_at([point[0], point[1]]));
-                let Some(height) = height else {
-                    previous = None;
-                    continue;
-                };
-                let mut v = vertex(
-                    [point[0], point[1], f64::from(height - origin)],
-                    [0, 0, 0, 125],
-                );
-                v[7] = 1.5;
-                if let Some(start) = previous {
-                    vertices.extend([start, v]);
-                }
-                previous = Some(v);
             }
         }
         if path.drawing.pattern != plot::line_draw::LinePattern::None {
@@ -341,21 +313,6 @@ pub fn anchor_tile(origin: [f64; 2]) -> TileId {
         y: (((WORLD / 2. - origin[1]) / WORLD * side as f64).floor() as i64).clamp(0, side - 1)
             as u32,
     }
-}
-pub(crate) fn ground_height(service: super::tiles::Service, origin: [f64; 2]) -> Option<f32> {
-    let id = anchor_tile(origin);
-    super::terrain::Tile {
-        id,
-        dem_id: id,
-        raster_id: id,
-        provider: super::tiles::Provider::OpenStreetMap,
-        raster: None,
-        elevation: service.payload(super::tiles::Key::elevation(id)),
-    }
-    .height_at(Camera {
-        center: origin,
-        zoom: 14.,
-    })
 }
 pub fn prepare(
     data: &Tracks,

@@ -4,12 +4,14 @@ mod color_legend;
 pub(crate) mod color_paths;
 pub(crate) mod color_settings;
 pub(crate) mod export;
+mod fit3;
 pub(crate) mod flight;
 mod flight3;
 mod gpu;
 mod gradient_controls;
 mod gradient_legend_row;
 mod gradient_stop;
+mod ground_path;
 mod hover;
 pub mod preview;
 mod scale;
@@ -20,6 +22,7 @@ mod terrain_gpu;
 mod terrain_view;
 mod tiles;
 mod toolbar;
+pub(crate) mod view_options;
 
 #[cfg(test)]
 mod test_renderer;

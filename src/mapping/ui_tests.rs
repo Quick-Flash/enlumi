@@ -113,11 +113,58 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
             .box_with_class("map-toolbar")
             .is_some()
     );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-backend-trigger")
+            .is_empty()
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-toolbar-settings")
+            .is_empty()
+    );
+    let map_box = harness.app().windows()[0]
+        .box_with_class("flight-map")
+        .unwrap();
+    let viewport = harness.app().windows()[0]
+        .box_with_class("flight-map-view")
+        .unwrap();
+    assert_eq!(
+        map_box.size.height, viewport.size.height,
+        "Toolbar must not consume map height"
+    );
+    let gear = harness.app().windows()[0]
+        .box_with_class("plot-settings-trigger")
+        .unwrap();
+    let icon = harness.app().windows()[0]
+        .box_with_class("plot-settings-icon")
+        .unwrap();
+    assert_eq!(
+        (icon.size.width.0, icon.size.height.0),
+        (18., 18.),
+        "Settings icon must render before opening editor"
+    );
+    let legend = harness.app().windows()[0]
+        .box_with_class("trajectory-legend")
+        .unwrap();
+    assert!(
+        gear.origin.x.0 >= legend.origin.x.0
+            && gear.origin.x.0 + gear.size.width.0 <= legend.origin.x.0 + legend.size.width.0,
+        "Settings gear must stay inside legend"
+    );
+    click(&mut harness, "plot-settings-trigger", "");
     click(&mut harness, "map-backend-trigger", "OpenStreetMap");
     click(&mut harness, "zui-select__item", "Esri World Imagery");
     assert_eq!(map().provider, super::tiles::Provider::EsriImagery);
+    click(&mut harness, "settings-done", "Done");
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("plot-settings-surface")
+            .is_empty(),
+        "Done must close legend settings"
+    );
     workbench.timeline.time.set(Some(1.5));
-    click(&mut harness, "map-follow", "Follow marker");
+    click(&mut harness, "map-follow", "Follow");
     assert!(map().follow);
     assert!((map().camera.unwrap().center[0] - 20.).abs() < 1e-6);
     assert_eq!(map().camera.unwrap().zoom, 14.);
@@ -157,12 +204,21 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
     harness.settle(128);
     click(&mut harness, "map-compass", "");
     assert_eq!(map().orbit.bearing, 0.);
+    click(&mut harness, "map-fit", "Fit");
+    settle_until(&mut harness, |_| {
+        map().camera.is_some_and(|camera| camera != spatial)
+    });
+    let fitted_3d = map().camera;
+    assert!(!map().follow);
+    assert_eq!(map().orbit.bearing, 0.);
+    click(&mut harness, "plot-settings-trigger", "");
     click(&mut harness, "map-ground-projection", "Ground path");
     assert!(map().ground_projection);
+    click(&mut harness, "settings-done", "Done");
     click(&mut harness, "map-mode-2d", "2D");
     assert_eq!(map().camera, Some(remembered));
-    assert_eq!(map().camera_3d, Some(spatial));
-    click(&mut harness, "map-toolbar-settings", "Settings");
+    assert_eq!(map().camera_3d, fitted_3d);
+    click(&mut harness, "plot-settings-trigger", "");
     click(&mut harness, "map-color-mode", "Solid color");
     click(&mut harness, "zui-select__item", "Speed gradient");
     assert_eq!(

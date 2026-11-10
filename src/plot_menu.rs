@@ -2,6 +2,7 @@ use crate::state_tint_options::StateTintOptionsProps;
 use crate::{
     mapping::color_settings::ColorSettingsProps,
     mapping::settings::MapBackendProps,
+    mapping::view_options::MapViewOptionsProps,
     preset_capture::CaptureKind,
     state::{Pane, Workbench},
 };
@@ -190,29 +191,6 @@ pub fn PlotMenuEditor(
     open: RwSignal<bool, LocalStorage>,
     #[prop(optional)] legend_trigger: bool,
 ) -> impl IntoView {
-    let gear = || {
-        zgui::elements::canvas().class("gear-icon").draw(|cx| {
-            let mut path = kurbo::BezPath::new();
-            for index in 0..32 {
-                let angle = f64::from(index) * std::f64::consts::TAU / 32.;
-                let radius = if index % 4 < 2 { 8. } else { 6. };
-                let point = (9. + radius * angle.cos(), 9. + radius * angle.sin());
-                if index == 0 {
-                    path.move_to(point);
-                } else {
-                    path.line_to(point);
-                }
-            }
-            path.close_path();
-            plot::append_circle(&mut path, (9., 9.), 2.5);
-            plot::zgui_renderer::push_stroke(
-                cx.scene,
-                path,
-                zgui::canvas::zgui_color::Color::srgb_u8(215, 225, 217, 255),
-                1.25,
-            );
-        })
-    };
     let mut actions = workbench.legend_host().actions;
     if pane.analysis.with_untracked(Option::is_some) {
         actions.extra = Some(UnsyncCallback::new(move |_| workbench.edit_analysis(pane)));
@@ -222,13 +200,17 @@ pub fn PlotMenuEditor(
     view! {Dialog(open=open,on_open_change=UnsyncCallback::new(move |opened|{
         if opened && !pane.view_lines.with_untracked(|lines|lines.iter().any(|line|Some(line.id)==pane.selected.get_untracked())) && let Some(id)=pane.view_lines.with_untracked(|lines|lines.first().map(|line|line.id)){pane.selected.set(Some(id));}
     })) {
-        if move ||legend_trigger {DialogTrigger(size=ButtonSize::Xs,variant=ButtonVariant::Ghost,class="plot-settings-trigger plot-gear",a11y:label="Plot line settings") {{gear().into_view()}}}
+        if move ||legend_trigger {DialogTrigger(size=ButtonSize::Xs,variant=ButtonVariant::Ghost,class="plot-settings-trigger plot-gear",a11y:label="Plot line settings") {
+            vector(class="gear-icon plot-settings-icon",prop:viewBox="0 0 20 20",prop:d="M8 2 H12 L12.5 4 L14 5 L16 4.5 L18 8 L16.5 9.5 V11 L18 12.5 L16 16 L14 15.5 L12.5 16.5 L12 18 H8 L7.5 16 L6 15 L4 15.5 L2 12 L3.5 10.5 V9 L2 7.5 L4 4 L6 4.5 L7.5 3.5 Z M10 7 A3 3 0 1 0 10 13 A3 3 0 1 0 10 7 Z",a11y:hidden=true)
+        }}
         DialogContent(class="plot-settings-surface plot-editor-surface") {
         column(class="plot-settings-content",class:trace-gradient-active=move ||crate::trace_color::current(pane,crate::trace_color::selected(pane)).mode!=crate::trace_color::Mode::Solid) {
             DialogTitle(class="settings-title") {{format!("Plot {} line settings",pane.id)}}
-            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {MapBackend(workbench=workbench,pane=pane) ColorSettings(workbench=workbench,pane=pane)}
+            column(class="plot-settings-body") {
+            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {MapBackend(workbench=workbench,pane=pane) MapViewOptions(workbench=workbench,pane=pane) ColorSettings(workbench=workbench,pane=pane)}
             if move ||pane.analysis.with(Option::is_none) {StateTintOptions(workbench=workbench,pane=pane)}
             {move ||if spatial.get() {AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),fixed_connection=plot::line_draw::Connection::Linear,on_extra=UnsyncCallback::new(move |()|open.set(false)))})}else{AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),on_extra=UnsyncCallback::new(move |()|open.set(false)))})}}
+            }
             DialogClose(class="settings-done",size=ButtonSize::Sm,variant=ButtonVariant::Outline) {"Done"}
         }
     }}}

@@ -40,11 +40,11 @@ impl Tile {
         let span = WORLD / f64::from(1_u32 << self.id.z);
         let u = (point[0] + WORLD / 2.) / span - self.id.x as f64;
         let v = (WORLD / 2. - point[1]) / span - f64::from(self.id.y);
-        if !(0. ..=1.).contains(&u) || !(0. ..=1.).contains(&v) {
+        if !(-1e-8..=1. + 1e-8).contains(&u) || !(-1e-8..=1. + 1e-8).contains(&v) {
             return None;
         }
-        let x = (u * 48.).min(48. - 1e-9);
-        let y = (v * 48.).min(48. - 1e-9);
+        let x = (u * 48.).clamp(0., 48. - 1e-9);
+        let y = (v * 48.).clamp(0., 48. - 1e-9);
         let sample = |dx: f64, dy: f64| {
             self.height_at(Camera {
                 center: [
