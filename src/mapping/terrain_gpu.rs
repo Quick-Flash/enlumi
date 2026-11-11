@@ -44,6 +44,9 @@ pub struct Renderer {
     depth: Option<([u32; 2], wgpu::Texture)>,
 }
 impl Renderer {
+    pub fn trace_work(&self) -> super::flight3::Work {
+        self.paths.work()
+    }
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let view = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map.3d.view"),

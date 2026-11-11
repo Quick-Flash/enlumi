@@ -31,6 +31,8 @@ pub struct Coloring {
 pub struct Scale {
     pub gradient: crate::trace_color::Gradient,
     pub label: String,
+    pub mode: crate::trace_color::Mode,
+    pub data_range: Option<[f64; 2]>,
 }
 impl Coloring {
     pub fn bucket_for(&self, id: u64, value: f64) -> Option<u8> {
@@ -170,14 +172,18 @@ pub fn prepare(data: &Tracks, lines: &[Line], spec: &Spec, hidden: &BTreeSet<Str
                 }
                 ColorBy::Speed => f64::NAN,
                 _ => {
-                    aligned
-                        .as_mut()
-                        .map_or(f64::NAN, |aligned| aligned.at(index, reference[index].x))
-                        * if mode == ColorBy::Altitude {
-                            altitude.scale
+                    aligned.as_mut().map_or(
+                        if mode == ColorBy::Altitude && altitude.source.is_empty() {
+                            0.
                         } else {
-                            1.
-                        }
+                            f64::NAN
+                        },
+                        |aligned| aligned.at(index, reference[index].x),
+                    ) * if mode == ColorBy::Altitude {
+                        altitude.scale
+                    } else {
+                        1.
+                    }
                 }
             };
         }
@@ -283,6 +289,19 @@ pub fn prepare_styled(
                 Scale {
                     gradient,
                     label: label.clone(),
+                    mode: style.mode,
+                    data_range: values
+                        .as_ref()
+                        .and_then(|colors| colors.samples.get(&trace.id))
+                        .and_then(|values| {
+                            let range = values
+                                .iter()
+                                .filter(|v| v.is_finite())
+                                .fold([f64::INFINITY, f64::NEG_INFINITY], |[lo, hi], &v| {
+                                    [lo.min(v), hi.max(v)]
+                                });
+                            range.iter().all(|v| v.is_finite()).then_some(range)
+                        }),
                 },
             );
             if output.range.is_none() {

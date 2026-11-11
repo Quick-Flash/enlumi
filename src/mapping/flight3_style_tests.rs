@@ -1,5 +1,56 @@
 use super::*;
 #[test]
+fn timeline_updates_keep_static_geometry_key_and_small_marker_layer() {
+    let (lines, spec, tracks) = super::super::telemetry::tests::fixture();
+    let mut scene = Scene::default();
+    scene.paths = prepare(
+        &tracks,
+        &lines,
+        &BTreeMap::from([("y".into(), spec.altitudes[&0].clone())]),
+        &Default::default(),
+        &Default::default(),
+    )
+    .unwrap();
+    let camera = Camera {
+        center: [0., 0.],
+        zoom: 16.,
+    };
+    let orbit = super::super::terrain::Orbit::default();
+    let size = [800., 600.];
+    let key = geometry_key(&scene, camera, orbit, size);
+    let mut ground = super::super::ground_path::Cache::default();
+    ground.prepare(&scene.paths, &scene.tiles);
+    scene.time = Some(1.);
+    let mut detail = super::super::trace_detail::Cache::default();
+    let before = vertices_layer(&scene, camera, orbit, size, true, &mut ground, &mut detail);
+    assert_eq!(
+        before.len(),
+        2,
+        "Marker-only update must not include flight or ground paths"
+    );
+    scene.time = Some(1.5);
+    assert_eq!(key, geometry_key(&scene, camera, orbit, size));
+    assert_ne!(
+        before,
+        vertices_layer(&scene, camera, orbit, size, true, &mut ground, &mut detail)
+    );
+    let rotated = super::super::terrain::Orbit {
+        bearing: orbit.bearing + 40.,
+        ..orbit
+    };
+    assert_eq!(
+        key,
+        geometry_key(&scene, camera, rotated, size),
+        "Solid orbit must reuse trace vertices"
+    );
+    Arc::make_mut(&mut scene.paths)[0].drawing.pattern = plot::line_draw::LinePattern::Dashed;
+    assert_ne!(
+        geometry_key(&scene, camera, orbit, size),
+        geometry_key(&scene, camera, rotated, size),
+        "Dash phase still tracks orbit projection"
+    );
+}
+#[test]
 fn state_tint_splits_3d_segments_without_blending_state_boundaries() {
     let (lines, spec, tracks) = super::super::telemetry::tests::fixture();
     let mut tint = crate::state_tint::tests::fixture();
@@ -93,10 +144,19 @@ fn ground_projection_samples_terrain_breaks_gaps_and_connects_marker() {
         .iter()
         .filter(|v| v[7] == 1.5 && v[3..6] == [0., 0., 0.])
         .collect::<Vec<_>>();
-    assert_eq!(
-        ground.len(),
-        6,
-        "Ground path must retain three segments, not bridge GPS gap"
+    let ink = ground
+        .chunks_exact(2)
+        .map(|pair| f64::from((pair[1][0] - pair[0][0]).abs()))
+        .sum::<f64>();
+    assert!(
+        (ink - 60.).abs() < 1e-4,
+        "Ground display must keep complete path length"
+    );
+    assert!(
+        ground.chunks_exact(2).all(
+            |pair| pair[0][0].max(pair[1][0]) <= 30.001 || pair[0][0].min(pair[1][0]) >= 59.999
+        ),
+        "Ground display must preserve GPS gap"
     );
     assert!(ground.iter().all(|v| (v[1] - 5.5).abs() < 1e-6));
     let connector = geometry

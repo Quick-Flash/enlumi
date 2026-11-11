@@ -291,6 +291,13 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
                     .contains("height (m)")
             })
     });
+    click(&mut harness, "trace-gradient-fit", "Fit data range");
+    assert_eq!(
+        pane.trace_colors.get_untracked()[&2].height.range,
+        [100., 150.]
+    );
+    click(&mut harness, "map-color-mode", "Height gradient");
+    click(&mut harness, "zui-select__item", "Solid color");
     click(
         &mut harness,
         "state-trace-tint-toggle",

@@ -1,3 +1,4 @@
+use super::gradient_range::GradientRangeProps;
 use super::{gradient_stop::GradientStopProps, settings::AltitudeOptionsProps};
 use crate::{
     action_button::ActionButtonProps,
@@ -44,6 +45,7 @@ pub fn GradientControls(
     let height = Memo::new(move |_| appearance.get().mode == Mode::Height);
     view! {column(class="trace-gradient-controls") {
         text(class="muted"){{move ||if height.get(){"Height in metres, from bound Z. Values outside limits use endpoint colors."}else{"Horizontal speed in m/s. Values outside limits use endpoint colors."}}}
+        GradientRange(pane=pane,selected=selected,appearance=appearance)
         row(class="trace-gradient-limits") {
             column{ text{"Lower limit"} Input(class="trace-gradient-min",value=low,a11y:label="Gradient lower limit",on:key_down=move |event|if event.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter){apply();}) }
             column{ text{"Upper limit"} Input(class="trace-gradient-max",value=high,a11y:label="Gradient upper limit",on:key_down=move |event|if event.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter){apply();}) }

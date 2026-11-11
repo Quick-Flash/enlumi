@@ -49,6 +49,7 @@
 .map-color-limits { justify-content: space-between; }
 .map-gradient-key { gap: 5px; flex: none; }
 .trace-gradient-controls { gap: 6px; }
+.trace-gradient-data { gap: 4px; flex: none; }
 .trace-gradient-limits { gap: 6px; align-items: flex-end; }
 .trace-gradient-limits > column { flex: 1; min-width: 70px; gap: 3px; }
 .trace-gradient-color-popup { width: 220px; padding: 10px; background: var(--app-surface); color: var(--app-foreground); }

@@ -12,6 +12,15 @@ use zgui::surface::{GpuShare, SurfaceConfig, SurfaceEvent, SurfaceHandle, wgpu};
 
 #[derive(Default)]
 pub struct Stats {
+    pub requested_revision: AtomicU64,
+    pub presented_revision: AtomicU64,
+    pub prepare_ns: AtomicU64,
+    pub wait_ns: AtomicU64,
+    pub ground_builds: AtomicU64,
+    pub trace_uploads: AtomicU64,
+    pub trace_bytes: AtomicU64,
+    pub marker_uploads: AtomicU64,
+    pub marker_bytes: AtomicU64,
     pub frames: AtomicU64,
     pub rebuilds: AtomicU64,
     pub uploads: AtomicU64,
@@ -44,7 +53,6 @@ pub struct Producer {
     _events: Arc<SurfaceHandle>,
     shared: Arc<Shared>,
     capture: Capture,
-    #[cfg(test)]
     pub stats: Arc<Stats>,
 }
 
@@ -262,7 +270,6 @@ impl Producer {
             _events: endpoint,
             shared,
             capture,
-            #[cfg(test)]
             stats,
         }
     }
@@ -275,6 +282,9 @@ impl Producer {
         if state.camera != camera {
             state.camera = camera;
             state.revision = state.revision.wrapping_add(1);
+            self.stats
+                .requested_revision
+                .store(state.revision, Ordering::Release);
             self.shared.changed.notify_one();
         }
     }
@@ -291,6 +301,9 @@ impl Producer {
             state.orbit = orbit;
             state.scene = Some(scene);
             state.revision = state.revision.wrapping_add(1);
+            self.stats
+                .requested_revision
+                .store(state.revision, Ordering::Release);
             self.shared.changed.notify_one();
         }
     }
@@ -382,6 +395,7 @@ fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Cap
             stats.rebuilds.fetch_add(1, Ordering::Release);
         }
         let renderer = &mut pipeline.as_mut().unwrap().1;
+        let prepare_started = std::time::Instant::now();
         let device = gpu.device();
         let limit = f64::from(device.limits().max_texture_dimension_2d);
         let shrink = (limit / f64::from(snapshot.size[0].max(snapshot.size[1])))
@@ -455,12 +469,31 @@ fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Cap
             }
         }
         if let Renderer::Terrain(renderer) = renderer {
+            let work = renderer.trace_work();
+            stats
+                .ground_builds
+                .store(work.ground_builds, Ordering::Release);
+            stats
+                .trace_uploads
+                .store(work.trace_uploads, Ordering::Release);
+            stats.trace_bytes.store(work.trace_bytes, Ordering::Release);
+            stats
+                .marker_uploads
+                .store(work.marker_uploads, Ordering::Release);
+            stats
+                .marker_bytes
+                .store(work.marker_bytes, Ordering::Release);
             stats.uploads.store(renderer.uploads, Ordering::Release);
             stats
                 .resident_bytes
                 .store(renderer.resident_bytes as u64, Ordering::Release);
         }
         let submission = gpu.queue().submit([encoder.finish()]);
+        stats.prepare_ns.fetch_add(
+            prepare_started.elapsed().as_nanos() as u64,
+            Ordering::Release,
+        );
+        let wait_started = std::time::Instant::now();
         // Bound in-flight work; waiting is confined to this producer. Each changed
         // frame has a fresh texture, so the UI can safely retain the previous one.
         if let Err(error) = device.poll(wgpu::PollType::Wait {
@@ -474,6 +507,9 @@ fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Cap
             pipeline = None;
             continue;
         }
+        stats
+            .wait_ns
+            .fetch_add(wait_started.elapsed().as_nanos() as u64, Ordering::Release);
         let state = shared.state.lock().unwrap();
         // Present completed work while a newer camera revision is queued, so
         // continuous orbit/pan input cannot starve the display. A changed
@@ -516,6 +552,9 @@ fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Cap
                 Ordering::Release,
             );
             stats.frames.fetch_add(1, Ordering::Release);
+            stats
+                .presented_revision
+                .store(snapshot.revision, Ordering::Release);
         }
     }
 }

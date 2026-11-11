@@ -72,17 +72,15 @@ impl Tile {
         let tile_span = WORLD / f64::from(1_u32 << self.id.z);
         let tile_u = (camera.center[0] + WORLD / 2.) / tile_span - self.id.x as f64;
         let tile_v = (WORLD / 2. - camera.center[1]) / tile_span - f64::from(self.id.y);
-        if !(0. ..=1. + 1e-8).contains(&tile_u) || !(0. ..=1. + 1e-8).contains(&tile_v) {
+        if !(-1e-8..=1. + 1e-8).contains(&tile_u) || !(-1e-8..=1. + 1e-8).contains(&tile_v) {
             return None;
         }
         let key = Key::elevation(self.dem_id);
-        let n = f64::from(1_u32 << key.z);
-        let span = WORLD / n;
-        let u = ((camera.center[0] + WORLD / 2.) / span - f64::from(key.x)).rem_euclid(n);
-        let v = (WORLD / 2. - camera.center[1]) / span - f64::from(key.y);
-        if !(0. ..=1. + 1e-8).contains(&u) || !(0. ..=1. + 1e-8).contains(&v) {
-            return None;
-        }
+        // Match terrain.wgsl's tile-local DEM UV transform. Recomputing global
+        // coordinates rejects roundoff at left/top edges and wraps root u=1 to 0.
+        let ratio = f64::from(1_u32 << (self.id.z - key.z));
+        let u = (f64::from(self.id.canonical_x()).rem_euclid(ratio) + tile_u.clamp(0., 1.)) / ratio;
+        let v = (f64::from(self.id.y).rem_euclid(ratio) + tile_v.clamp(0., 1.)) / ratio;
         let Payload::Elevation(e) = self.elevation.as_ref()?.as_ref() else {
             return None;
         };

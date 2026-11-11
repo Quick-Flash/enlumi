@@ -48,7 +48,9 @@ fn ink_distance(x:f32,period:f32,start:f32,end:f32)->f32 {
     let wrapped=x-center-period*floor((x-center)/period+0.5);
     return max(abs(wrapped)-(end-start)*0.5,0.);
 }
-@fragment fn fragment(input:Output)->@location(0) vec4<f32>{
+struct Fragment { @location(0) color:vec4<f32>, @builtin(frag_depth) depth:f32 }
+@fragment fn fragment(input:Output)->Fragment {
+    let depth_slope=fwidth(input.position.z);
     let p=abs(input.distance);
     var along=max(max(-input.distance.x,input.distance.x-input.span),0.);
     if input.pattern.y>0.5 {
@@ -73,5 +75,13 @@ fn ink_distance(x:f32,period:f32,start:f32,end:f32)->f32 {
         let border=smoothstep(input.radius-2.,input.radius-1.,distance);
         color=mix(color,vec3(1.),border);
     }
-    return vec4(color,input.color.a*coverage);
+    var output:Fragment;
+    output.color=vec4(color,input.color.a*coverage);
+    output.depth=input.position.z;
+    // Ground annotations expand in screen space; bias depth across their width
+    // so adjacent uphill terrain cannot shave off stroke edges and joints.
+    if input.shape<0. {
+        output.depth=min(1.,output.depth+depth_slope*(input.radius+1.)+max(0.0000001,output.depth*0.002));
+    }
+    return output;
 }

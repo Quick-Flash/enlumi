@@ -426,6 +426,87 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
         );
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    // Vary real Z input: checking a constant-height trace cannot prove gradient interpolation.
+    pane.lines.update(|lines| {
+        let line = lines.iter_mut().find(|line| line.source == "alt").unwrap();
+        line.data = plot::time_series::SeriesData::new(
+            line.data
+                .samples()
+                .iter()
+                .enumerate()
+                .map(|(i, p)| plot::PlotPoint {
+                    x: p.x,
+                    y: 1000. + i as f64 * 100.,
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        line.revision += 1;
+    });
+    // This fixture mounts FlightMap directly; normal TrajectoryPlot refreshes XY inputs.
+    pane.trajectory_data.set(Some(Arc::new(
+        Tracks::prepare(
+            &pane.lines.get_untracked(),
+            &pane.trajectory.get_untracked().unwrap(),
+        )
+        .unwrap(),
+    )));
+    pane.trace_colors.update(|colors| {
+        let appearance = colors.get_mut(&2).unwrap();
+        appearance.height.range = [1000., 1800.];
+        appearance.height.colors = [[255, 0, 0], [0, 0, 255]];
+    });
+    pane.fit_axes(plot::interaction::Axes::BOTH);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if super::super::tests::map_fixture(directory.path(), &service.requested())
+            || service.failed()
+        {
+            service.retry();
+        }
+        harness.advance(std::time::Duration::from_millis(17));
+        harness.settle(64);
+        let frame = read(&harness);
+        let mut low = 0;
+        let mut high = 0;
+        for y in 60..550 {
+            for x in 20..680 {
+                let p = frame.rgba(x, y);
+                if p[1] < 10 {
+                    if p[0] > 210 && p[2] < 45 {
+                        low += 1;
+                    }
+                    if p[2] > 210 && p[0] < 45 {
+                        high += 1;
+                    }
+                }
+            }
+        }
+        if low > 10 && high > 10 {
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            super::super::tests::capture(&frame, "target/altitude-gradient-failure.ppm");
+            eprintln!(
+                "camera={:?}; altitude={:?}",
+                pane.trajectory.get_untracked().unwrap().map.unwrap().camera,
+                pane.lines.with_untracked(|lines| lines
+                    .iter()
+                    .find(|line| line.source == "alt")
+                    .unwrap()
+                    .data
+                    .samples()
+                    .iter()
+                    .map(|p| p.y)
+                    .collect::<Vec<_>>())
+            );
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Changing Z must update both gradient endpoints: low={low}, high={high}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     let before_projection = read(&harness);
     super::super::settings::update(workbench, pane, |spec| {
         spec.map.as_mut().unwrap().ground_projection = true

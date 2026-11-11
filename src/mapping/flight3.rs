@@ -98,16 +98,47 @@ pub fn pick_time(
     }
     best.1
 }
+#[cfg(test)]
 pub(crate) fn vertices(
     scene: &Scene,
     camera: Camera,
     orbit: super::terrain::Orbit,
     size: [f64; 2],
 ) -> Vec<[f32; 11]> {
+    let mut ground = super::ground_path::Cache::default();
+    ground.prepare(&scene.paths, &scene.tiles);
+    let mut detail = super::trace_detail::Cache::default();
+    let mut vertices = vertices_layer(scene, camera, orbit, size, false, &mut ground, &mut detail);
+    vertices.extend(vertices_layer(
+        scene,
+        camera,
+        orbit,
+        size,
+        true,
+        &mut ground,
+        &mut detail,
+    ));
+    vertices
+}
+fn vertices_layer(
+    scene: &Scene,
+    camera: Camera,
+    orbit: super::terrain::Orbit,
+    size: [f64; 2],
+    timeline_only: bool,
+    ground: &mut super::ground_path::Cache,
+    detail: &mut super::trace_detail::Cache,
+) -> Vec<[f32; 11]> {
     let scale = super::terrain::ground_scale(camera);
     let base = f64::from(scene.center_height(camera));
     let projection = super::hover::Projection::new(scene, camera, orbit, size);
     let mut vertices = Vec::new();
+    let view = super::trace_detail::View {
+        camera,
+        orbit,
+        size,
+        focus: scene.center_height(camera),
+    };
     for path in scene.paths.iter() {
         let Some(origin) = scene.path_base(path) else {
             continue;
@@ -128,160 +159,175 @@ pub(crate) fn vertices(
                 0.,
             ]
         };
-        if scene.ground_projection {
-            for segment in super::ground_path::segments(path, &scene.tiles) {
-                for [x, y, z] in segment {
-                    let mut v = vertex([x, y, z - f64::from(origin)], [0, 0, 0, 125]);
-                    v[7] = 1.5;
-                    vertices.push(v);
-                }
-            }
-        }
-        if path.drawing.pattern != plot::line_draw::LinePattern::None {
-            let pattern = match path.drawing.pattern {
-                plot::line_draw::LinePattern::Dashed => 1.,
-                plot::line_draw::LinePattern::Dotted => 2.,
-                plot::line_draw::LinePattern::DashDot => 3.,
-                _ => 0.,
-            };
-            let mut phase = 0.;
-            // Keep dash phase continuous across samples, measured in CSS pixels.
-            for (index, pair) in path.points.windows(2).enumerate() {
-                if pair.iter().flatten().all(|v| v.is_finite()) {
-                    let (ta, tb) = (path.times[index], path.times[index + 1]);
-                    let scalar = |offset: usize| {
-                        scene
-                            .colors
-                            .samples
-                            .get(&path.id)
-                            .and_then(|values| values.get(index + offset))
-                            .copied()
-                            .unwrap_or(f64::NAN)
-                    };
-                    let (a, b) = (scalar(0), scalar(1));
-                    let mut cuts = if scene.colors.tints.is_empty() {
-                        Vec::new()
-                    } else {
-                        crate::state_tint::cuts(&scene.colors.tints, ta, tb)
-                    };
-                    if a.is_finite()
-                        && b.is_finite()
-                        && a != b
-                        && let Some(range) = scene
-                            .colors
-                            .scales
-                            .get(&path.id)
-                            .map(|scale| scale.gradient.range)
-                            .or_else(|| {
-                                scene
-                                    .colors
-                                    .scales
-                                    .is_empty()
-                                    .then_some(scene.colors.range)
-                                    .flatten()
-                            })
-                    {
-                        for limit in range {
-                            let at = (limit - a) / (b - a);
-                            if at > 0. && at < 1. {
-                                cuts.push(at);
-                            }
-                        }
-                    }
-                    let defaults = [0., 1.];
-                    let cuts = if cuts.is_empty() {
-                        &defaults[..]
-                    } else {
-                        cuts.extend(defaults);
-                        cuts.sort_unstable_by(f64::total_cmp);
-                        cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
-                        &cuts[..]
-                    };
-                    for cut in cuts.windows(2) {
-                        let middle = ta + (tb - ta) * (cut[0] + cut[1]) / 2.;
-                        let point = |t: f64| {
-                            std::array::from_fn(|axis| {
-                                pair[0][axis] + (pair[1][axis] - pair[0][axis]) * t
-                            })
-                        };
-                        for &at in cut {
-                            let value = if a.is_finite() && b.is_finite() {
-                                a + (b - a) * at
-                            } else {
-                                f64::NAN
-                            };
-                            let mut v = vertex(
-                                point(at),
-                                scene.colors.shade(path.id, value, middle, path.color),
-                            );
-                            v[9] = phase as f32;
-                            v[10] = pattern;
+        if !timeline_only {
+            if scene.ground_projection {
+                let ground = detail.ground(path.id, ground.get(path), view);
+                for (width, color) in [(3.5, [255, 255, 255, 170]), (1.5, [0, 0, 0, 220])] {
+                    for segment in &ground {
+                        for &[x, y, z] in segment {
+                            let mut v = vertex([x, y, z - f64::from(origin)], color);
+                            v[7] = width;
+                            v[8] = -1.;
                             vertices.push(v);
                         }
-                        if pattern != 0. {
-                            if let (Some((a, _)), Some((b, _))) = (
-                                projection.point(point(cut[0]), origin),
-                                projection.point(point(cut[1]), origin),
-                            ) {
-                                phase += (b[0] - a[0]).hypot(b[1] - a[1]);
-                            } else {
-                                phase = 0.;
+                    }
+                }
+            }
+            if path.drawing.pattern != plot::line_draw::LinePattern::None {
+                let pattern = match path.drawing.pattern {
+                    plot::line_draw::LinePattern::Dashed => 1.,
+                    plot::line_draw::LinePattern::Dotted => 2.,
+                    plot::line_draw::LinePattern::DashDot => 3.,
+                    _ => 0.,
+                };
+                let mut phase = 0.;
+                // Keep dash phase continuous across samples, measured in CSS pixels.
+                let indices = if path.drawing.pattern == plot::line_draw::LinePattern::Solid {
+                    detail.trace(path, &scene.colors, view, origin)
+                } else {
+                    (0..path.points.len()).collect()
+                };
+                for indices in indices.windows(2) {
+                    let index = indices[0];
+                    let next = indices[1];
+                    let pair = [path.points[index], path.points[next]];
+                    if pair.iter().flatten().all(|v| v.is_finite()) {
+                        let (ta, tb) = (path.times[index], path.times[next]);
+                        let scalar = |offset: usize| {
+                            scene
+                                .colors
+                                .samples
+                                .get(&path.id)
+                                .and_then(|values| {
+                                    values.get(if offset == 0 { index } else { next })
+                                })
+                                .copied()
+                                .unwrap_or(f64::NAN)
+                        };
+                        let (a, b) = (scalar(0), scalar(1));
+                        let mut cuts = if scene.colors.tints.is_empty() {
+                            Vec::new()
+                        } else {
+                            crate::state_tint::cuts(&scene.colors.tints, ta, tb)
+                        };
+                        if a.is_finite()
+                            && b.is_finite()
+                            && a != b
+                            && let Some(range) = scene
+                                .colors
+                                .scales
+                                .get(&path.id)
+                                .map(|scale| scale.gradient.range)
+                                .or_else(|| {
+                                    scene
+                                        .colors
+                                        .scales
+                                        .is_empty()
+                                        .then_some(scene.colors.range)
+                                        .flatten()
+                                })
+                        {
+                            for limit in range {
+                                let at = (limit - a) / (b - a);
+                                if at > 0. && at < 1. {
+                                    cuts.push(at);
+                                }
                             }
                         }
+                        let defaults = [0., 1.];
+                        let cuts = if cuts.is_empty() {
+                            &defaults[..]
+                        } else {
+                            cuts.extend(defaults);
+                            cuts.sort_unstable_by(f64::total_cmp);
+                            cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+                            &cuts[..]
+                        };
+                        for cut in cuts.windows(2) {
+                            let middle = ta + (tb - ta) * (cut[0] + cut[1]) / 2.;
+                            let point = |t: f64| {
+                                std::array::from_fn(|axis| {
+                                    pair[0][axis] + (pair[1][axis] - pair[0][axis]) * t
+                                })
+                            };
+                            for &at in cut {
+                                let value = if a.is_finite() && b.is_finite() {
+                                    a + (b - a) * at
+                                } else {
+                                    f64::NAN
+                                };
+                                let mut v = vertex(
+                                    point(at),
+                                    scene.colors.shade(path.id, value, middle, path.color),
+                                );
+                                v[9] = phase as f32;
+                                v[10] = pattern;
+                                vertices.push(v);
+                            }
+                            if pattern != 0. {
+                                if let (Some((a, _)), Some((b, _))) = (
+                                    projection.point(point(cut[0]), origin),
+                                    projection.point(point(cut[1]), origin),
+                                ) {
+                                    phase += (b[0] - a[0]).hypot(b[1] - a[1]);
+                                } else {
+                                    phase = 0.;
+                                }
+                            }
+                        }
+                    } else {
+                        phase = 0.;
                     }
-                } else {
-                    phase = 0.;
                 }
             }
-        }
-        if path.drawing.markers {
-            for (index, &point) in path
+            if path.drawing.markers {
+                for (index, &point) in path
+                    .points
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.iter().all(|v| v.is_finite()))
+                {
+                    let mut marker = vertex(point, scene.colors.color(path.id, index, path.color));
+                    marker[7] = path.radius * 2.;
+                    marker[8] = match path.marker {
+                        plot::plot_data::MarkerShape::Circle => 1.,
+                        plot::plot_data::MarkerShape::Square => 2.,
+                        plot::plot_data::MarkerShape::Triangle => 3.,
+                        plot::plot_data::MarkerShape::Diamond => 4.,
+                        plot::plot_data::MarkerShape::Cross => 5.,
+                    };
+                    vertices.extend([marker, marker]);
+                }
+            }
+            let first = path
                 .points
                 .iter()
-                .enumerate()
-                .filter(|(_, p)| p.iter().all(|v| v.is_finite()))
-            {
-                let mut marker = vertex(point, scene.colors.color(path.id, index, path.color));
-                marker[7] = path.radius * 2.;
-                marker[8] = match path.marker {
-                    plot::plot_data::MarkerShape::Circle => 1.,
-                    plot::plot_data::MarkerShape::Square => 2.,
-                    plot::plot_data::MarkerShape::Triangle => 3.,
-                    plot::plot_data::MarkerShape::Diamond => 4.,
-                    plot::plot_data::MarkerShape::Cross => 5.,
-                };
-                vertices.extend([marker, marker]);
-            }
-        }
-        let first = path
-            .points
-            .iter()
-            .find(|p| p.iter().all(|v| v.is_finite()))
-            .copied();
-        let last = path
-            .points
-            .iter()
-            .rev()
-            .find(|p| p.iter().all(|v| v.is_finite()))
-            .copied();
-        let current = scene.time.and_then(|time| path.at(time));
-        let size = 5. * scale / camera.scale();
-        for (point, color) in [(first, [40, 230, 110, 255]), (last, [240, 75, 65, 255])] {
-            if let Some(point) = point {
-                for axis in 0..3 {
-                    let mut a = point;
-                    let mut b = point;
-                    a[axis] -= size;
-                    b[axis] += size;
-                    let mut a = vertex(a, color);
-                    let mut b = vertex(b, color);
-                    a[7] = 2.;
-                    b[7] = 2.;
-                    vertices.extend([a, b]);
+                .find(|p| p.iter().all(|v| v.is_finite()))
+                .copied();
+            let last = path
+                .points
+                .iter()
+                .rev()
+                .find(|p| p.iter().all(|v| v.is_finite()))
+                .copied();
+            let size = 5. * scale / camera.scale();
+            for (point, color) in [(first, [40, 230, 110, 255]), (last, [240, 75, 65, 255])] {
+                if let Some(point) = point {
+                    for axis in 0..3 {
+                        let mut a = point;
+                        let mut b = point;
+                        a[axis] -= size;
+                        b[axis] += size;
+                        let mut a = vertex(a, color);
+                        let mut b = vertex(b, color);
+                        a[7] = 2.;
+                        b[7] = 2.;
+                        vertices.extend([a, b]);
+                    }
                 }
             }
         }
-        if let Some(point) = current {
+        if timeline_only && let Some(point) = scene.time.and_then(|time| path.at(time)) {
             if scene.ground_projection
                 && let Some(height) = scene
                     .tiles
@@ -413,7 +459,7 @@ type PreparedPaths = (
 pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
     let output = RwSignal::new_local(Arc::<[Path3]>::from([]));
     let generation = RwSignal::new_local(0_u64);
-    let ready = RwSignal::new_local(false);
+    let prepared = RwSignal::new_local(None);
     let failure = StoredValue::new_local(String::new());
     let altitudes = Memo::new(move |_| {
         pane.trajectory
@@ -436,8 +482,35 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
         pane.trajectory
             .with(|s| s.as_ref().is_some_and(|s| s.map.is_some_and(|m| m.terrain)))
     });
+    // Lazy request identity makes readiness false immediately when inputs change,
+    // before either alignment or Fit effects have had a chance to run.
+    let request = Memo::new(move |_| {
+        (
+            enabled.get(),
+            pane.trajectory_data
+                .with(|data| data.as_ref().map(|data| Arc::as_ptr(data) as usize)),
+            pane.lines.with(|lines| {
+                lines
+                    .iter()
+                    .map(|line| {
+                        (
+                            line.id,
+                            line.revision,
+                            line.data.samples().as_ptr() as usize,
+                            line.data.samples().len(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }),
+            altitudes.get(),
+            pane.plot.hidden.get(),
+            pane.plot.styles.get(),
+            pane.drawing.get(),
+        )
+    });
     let effect = RenderEffect::new(move |_| {
-        ready.set(false);
+        let key = request.get();
+        prepared.set(None);
         if !enabled.get() {
             generation.update(|g| *g = g.wrapping_add(1));
             output.set(Arc::from([]));
@@ -481,7 +554,7 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
                     }
                     failure.set_value(String::new());
                     output.set(paths);
-                    ready.set(true);
+                    prepared.set(Some(key));
                 }
                 Err(error) => {
                     output.set(Arc::from([]));
@@ -494,7 +567,7 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
     on_cleanup_local(move || drop(effect));
     (
         Signal::derive_local(move || output.get()),
-        Signal::derive_local(move || ready.get()),
+        Signal::derive_local(move || prepared.get().is_some_and(|key| key == request.get())),
     )
 }
 
@@ -504,18 +577,61 @@ type RenderKey = (
     u32,
     u32,
     Vec<(u64, u32)>,
-    Option<u64>,
+    u64,
     u64,
     Option<([u32; 16], [u64; 2])>,
     usize,
-    (bool, u64),
+    Option<super::ground_path::Key>,
 );
+fn geometry_key(
+    scene: &Scene,
+    camera: Camera,
+    orbit: super::terrain::Orbit,
+    css: [f64; 2],
+) -> RenderKey {
+    let bases = scene
+        .paths
+        .iter()
+        .map(|path| (path.id, scene.path_base(path).unwrap_or(f32::NAN).to_bits()))
+        .collect();
+    let patterned = scene.paths.iter().any(|path| {
+        matches!(
+            path.drawing.pattern,
+            plot::line_draw::LinePattern::Dashed
+                | plot::line_draw::LinePattern::Dotted
+                | plot::line_draw::LinePattern::DashDot
+        )
+    });
+    (
+        scene.paths.as_ptr() as usize,
+        camera.center.map(f64::to_bits),
+        scene.center_height(camera).to_bits(),
+        orbit.exaggeration.to_bits(),
+        bases,
+        camera.zoom.to_bits(),
+        css[1].to_bits(),
+        patterned.then(|| {
+            (
+                orbit.matrix(camera, css).map(f32::to_bits),
+                css.map(f64::to_bits),
+            )
+        }),
+        Arc::as_ptr(&scene.colors) as usize,
+        scene
+            .ground_projection
+            .then(|| super::ground_path::key(&scene.tiles)),
+    )
+}
 pub struct Renderer {
+    ground_builds: u64,
     pipeline: zgui::surface::wgpu::RenderPipeline,
     viewport: zgui::surface::wgpu::Buffer,
     viewport_bind: zgui::surface::wgpu::BindGroup,
-    buffer: Option<zgui::surface::wgpu::Buffer>,
-    count: u32,
+    geometry: super::flight3_buffer::Buffer,
+    marker: super::flight3_buffer::Buffer,
+    last_time: Option<Option<u64>>,
+    ground: super::ground_path::Cache,
+    detail: super::trace_detail::Cache,
     held_paths: Option<Arc<[Path3]>>,
     held_colors: Option<Arc<super::telemetry::Coloring>>,
     key: Option<RenderKey>,
@@ -634,11 +750,15 @@ impl Renderer {
             cache: None,
         });
         Self {
+            ground_builds: 0,
             pipeline,
             viewport,
             viewport_bind,
-            buffer: None,
-            count: 0,
+            geometry: Default::default(),
+            marker: Default::default(),
+            last_time: None,
+            ground: Default::default(),
+            detail: Default::default(),
             held_paths: None,
             held_colors: None,
             key: None,
@@ -652,7 +772,6 @@ impl Renderer {
         orbit: super::terrain::Orbit,
         css: [f64; 2],
     ) {
-        use zgui::surface::wgpu;
         let viewport = [css[0].max(1.) as f32, css[1].max(1.) as f32, 0., 0.];
         gpu.queue().write_buffer(
             &self.viewport,
@@ -662,100 +781,73 @@ impl Renderer {
                 .flat_map(|v| v.to_ne_bytes())
                 .collect::<Vec<_>>(),
         );
-        let bases = scene
-            .paths
-            .iter()
-            .map(|path| {
-                (
-                    path.id,
-                    scene
-                        .path_base(path)
-                        .map_or(f32::NAN, |base| base)
-                        .to_bits(),
-                )
-            })
-            .collect::<Vec<_>>();
-        let key = (
-            scene.paths.as_ptr() as usize,
-            camera.center.map(f64::to_bits),
-            scene.center_height(camera).to_bits(),
-            orbit.exaggeration.to_bits(),
-            bases,
-            scene.time.map(f64::to_bits),
-            camera.zoom.to_bits(),
-            if scene.paths.iter().any(|path| {
-                matches!(
-                    path.drawing.pattern,
-                    plot::line_draw::LinePattern::Dashed
-                        | plot::line_draw::LinePattern::Dotted
-                        | plot::line_draw::LinePattern::DashDot
-                )
-            }) {
-                Some((
-                    orbit.matrix(camera, css).map(f32::to_bits),
-                    css.map(f64::to_bits),
-                ))
+        let key = geometry_key(scene, camera, orbit, css);
+        let changed = self.key.as_ref() != Some(&key);
+        if changed {
+            self.key = Some(key);
+            self.held_paths = Some(scene.paths.clone());
+            self.held_colors = Some(scene.colors.clone());
+            if scene.ground_projection {
+                self.ground.prepare(&scene.paths, &scene.tiles);
             } else {
-                None
-            },
-            Arc::as_ptr(&scene.colors) as usize,
-            (
-                scene.ground_projection,
-                if scene.ground_projection {
-                    scene.revision
-                } else {
-                    0
-                },
-            ),
-        );
-        if self.key.as_ref() == Some(&key) {
-            return;
-        }
-        self.key = Some(key);
-        self.held_paths = Some(scene.paths.clone());
-        self.held_colors = Some(scene.colors.clone());
-        self.count = 0;
-        let vertices = vertices(scene, camera, orbit, css);
-        self.count = (vertices.len() / 2) as u32;
-        let mut bytes = Vec::with_capacity(self.count as usize * 72);
-        for pair in vertices.chunks_exact(2) {
-            for value in pair[0][..3]
-                .iter()
-                .chain(pair[1][..3].iter())
-                .chain(pair[0][3..8].iter())
-            {
-                bytes.extend_from_slice(&value.to_ne_bytes());
+                self.ground = Default::default();
             }
-            let point = pair[0][8];
-            bytes.extend_from_slice(&point.to_ne_bytes());
-            for value in &pair[0][9..11] {
-                bytes.extend_from_slice(&value.to_ne_bytes());
-            }
-            for value in &pair[1][3..7] {
-                bytes.extend_from_slice(&value.to_ne_bytes());
-            }
+            let before = self.ground.builds;
+            self.detail.retain(&scene.paths);
+            self.geometry.upload(
+                gpu,
+                &vertices_layer(
+                    scene,
+                    camera,
+                    orbit,
+                    css,
+                    false,
+                    &mut self.ground,
+                    &mut self.detail,
+                ),
+            );
+            self.ground_builds += self.ground.builds - before;
         }
-        if bytes.is_empty() {
-            self.buffer = None;
-            return;
+        let time = Some(scene.time.map(f64::to_bits));
+        if changed || self.last_time != time {
+            self.last_time = time;
+            self.marker.upload(
+                gpu,
+                &vertices_layer(
+                    scene,
+                    camera,
+                    orbit,
+                    css,
+                    true,
+                    &mut self.ground,
+                    &mut self.detail,
+                ),
+            );
         }
-        let buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("map.trace3.vertices"),
-            size: bytes.len() as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        gpu.queue().write_buffer(&buffer, 0, &bytes);
-        self.buffer = Some(buffer);
     }
     pub fn draw(&self, pass: &mut zgui::surface::wgpu::RenderPass<'_>) {
-        if let Some(buffer) = &self.buffer {
-            pass.set_pipeline(&self.pipeline);
-            pass.set_vertex_buffer(0, buffer.slice(..));
-            pass.set_bind_group(1, &self.viewport_bind, &[]);
-            pass.draw(0..6, 0..self.count);
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(1, &self.viewport_bind, &[]);
+        self.geometry.draw(pass);
+        self.marker.draw(pass);
+    }
+    pub fn work(&self) -> Work {
+        Work {
+            ground_builds: self.ground_builds,
+            trace_uploads: self.geometry.uploads,
+            trace_bytes: self.geometry.uploaded_bytes,
+            marker_uploads: self.marker.uploads,
+            marker_bytes: self.marker.uploaded_bytes,
         }
     }
+}
+#[derive(Clone, Copy, Default)]
+pub struct Work {
+    pub ground_builds: u64,
+    pub trace_uploads: u64,
+    pub trace_bytes: u64,
+    pub marker_uploads: u64,
+    pub marker_bytes: u64,
 }
 
 #[cfg(test)]

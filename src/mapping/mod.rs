@@ -7,10 +7,13 @@ pub(crate) mod export;
 mod fit3;
 pub(crate) mod flight;
 mod flight3;
+mod flight3_buffer;
 mod gpu;
 mod gradient_controls;
 mod gradient_legend_row;
+mod gradient_range;
 mod gradient_stop;
+mod ground_mesh;
 mod ground_path;
 mod hover;
 pub mod preview;
@@ -22,8 +25,11 @@ mod terrain_gpu;
 mod terrain_view;
 mod tiles;
 mod toolbar;
+mod trace_detail;
 pub(crate) mod view_options;
 
+#[cfg(test)]
+mod performance_replay;
 #[cfg(test)]
 mod test_renderer;
 #[cfg(test)]

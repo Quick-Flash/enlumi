@@ -49,6 +49,55 @@ Record separate files for these 20–30 second scenarios:
 Compare percentile frame costs and upload volume, not just the average FPS.
 Keep loading/filter compilation outside the measured interaction interval.
 
+## 3D ground-path CPU profile
+
+Run `cargo test --locked --bin enlumi profile_ground_path -- --ignored --nocapture`
+to measure 20,000 samples across 64 terrain tiles. It reports cold projection,
+cached projection, and resulting segment count. These CPU timings exclude GPU
+rendering and do not measure application FPS.
+
+Ground projection caches tile mesh heights and complete projected paths. Timeline
+movement updates a separate marker buffer; trace buffers retain their allocations.
+Keep tile-edge, ridge, bend, gap, and terrain-replacement regressions passing when
+changing this code. Index-stride decimation loses bends and must not replace it.
+
+## 3D interaction GPU replay
+
+Run `cargo test --locked --bin enlumi replay_3d_interactions -- --ignored --nocapture`.
+Set `ENLUMI_3D_REPLAY_OUT` to keep separate before/after CSV files (default:
+`target/map3d-replay.csv`). Use the same build profile, GPU, and viewport.
+
+The replay draws one or four synthetic 20,000-sample traces at 1000 x 700 pixels,
+with ground projection off/on. Each orbit, pan, zoom, and timeline case excludes
+four warmup frames and measures twenty frames. `ready_ms` covers request through
+offscreen surface rendering and compositor completion. `prepare_ms` includes
+CPU preparation/recording/submission; `gpu_wait_ms` measures completion wait,
+not timestamp-query GPU execution. Upload counters and ground builds identify
+unexpected geometry work. This bypasses native input dispatch, terrain selection,
+network loading, and presentation; these timings do not establish native FPS.
+
+Solid 3D traces cache a balanced geometric-error hierarchy. Display detail uses
+a conservative perspective bound across orbit angles; raw samples remain intact
+for picking and timeline interpolation. Original samples around gradient bucket
+changes and state boundaries remain explicit. Ground shortcuts additionally stay
+within 1 cm of the terrain-draped path. Dashed/dotted paths and sample markers
+retain full detail. Unrelated terrain tiles do not invalidate cached projection.
+
+Measured on NVIDIA RTX 4070 Laptop GPU, DX12 driver 32.0.15.8195, debug build:
+
+| Four traces, ground enabled | Before p95 | After p95 |
+| --- | ---: | ---: |
+| Orbit | 18.39 ms | 6.25 ms |
+| Pan | 566.83 ms | 16.64 ms |
+| Zoom | 564.88 ms | 21.81 ms |
+| Timeline | 23.26 ms | 7.23 ms |
+
+Mean static-trace upload per measured pan frame fell from 17.33 MB to 0.35 MB.
+Orbit and timeline frames uploaded no static-trace geometry in either run.
+These synthetic smooth traces demonstrate density scaling, not a speedup bound
+for arbitrary tracks. Jagged paths, rapidly varying colors, sample markers, and
+near-camera geometry can retain substantially more segments.
+
 ## Linux backend comparison
 
 Use the same release executable and inputs:

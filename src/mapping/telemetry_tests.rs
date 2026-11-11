@@ -1,6 +1,29 @@
 use super::*;
 use crate::trajectory::{Altitude, Pair};
 #[test]
+fn height_range_reports_clipping_and_zero_z_matches_3d_geometry() {
+    let (lines, mut spec, tracks) = fixture();
+    let appearance = crate::trace_color::TraceColor {
+        mode: crate::trace_color::Mode::Height,
+        ..Default::default()
+    };
+    let mut styles = BTreeMap::from([(2, appearance)]);
+    let colors = prepare_styled(&tracks, &lines, &spec, &Default::default(), &styles, vec![]);
+    assert_eq!(colors.scales[&2].data_range, Some([100., 150.]));
+    assert_eq!(
+        colors.color(2, 0, [255; 4]),
+        colors.color(2, 5, [255; 4]),
+        "Default 0..100 limits clamp this whole flight"
+    );
+    styles.get_mut(&2).unwrap().height.range = colors.scales[&2].data_range.unwrap();
+    let colors = prepare_styled(&tracks, &lines, &spec, &Default::default(), &styles, vec![]);
+    assert_ne!(colors.color(2, 0, [255; 4]), colors.color(2, 5, [255; 4]));
+    spec.altitudes.clear();
+    let colors = prepare_styled(&tracks, &lines, &spec, &Default::default(), &styles, vec![]);
+    assert_eq!(colors.scales[&2].data_range, Some([0., 0.]));
+    assert_eq!(colors.samples[&2][0], 0.);
+}
+#[test]
 fn new_map_keeps_channel_source_when_dropping_first_pair() {
     let window = zgui_testkit_view::Window::open();
     let workbench = window.scope.with(Workbench::new);
