@@ -21,9 +21,12 @@ fn distance(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> f64 {
     };
     (0..3).map(|i| (v[i] - d[i] * t).powi(2)).sum()
 }
+type Bounds = ([f64; 3], [f64; 3]);
 struct Hierarchy {
     points: Arc<[[f64; 3]]>,
     errors: Vec<f64>,
+    /// Bounds of each node's points, indexed like `errors` by node midpoint.
+    boxes: Vec<Bounds>,
     runs: Vec<(usize, usize)>,
     bounds: ([f64; 3], [f64; 3]),
 }
@@ -31,6 +34,7 @@ impl Hierarchy {
     fn new(points: Arc<[[f64; 3]]>) -> Self {
         let mut hierarchy = Self {
             errors: vec![0.; points.len()],
+            boxes: vec![([0.; 3], [0.; 3]); points.len()],
             points,
             runs: Vec::new(),
             bounds: ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]),
@@ -64,19 +68,37 @@ impl Hierarchy {
             .iter()
             .map(|&p| distance(p, self.points[a], self.points[b]))
             .fold(0., f64::max);
+        self.boxes[mid] = self.points[a..=b].iter().fold(
+            ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]),
+            |(mut lo, mut hi), p| {
+                for axis in 0..3 {
+                    lo[axis] = lo[axis].min(p[axis]);
+                    hi[axis] = hi[axis].max(p[axis]);
+                }
+                (lo, hi)
+            },
+        );
         self.build(a, mid);
         self.build(mid, b);
     }
-    fn visit(&self, a: usize, b: usize, tolerance: f64, indices: &mut Vec<usize>) {
-        if b <= a + 1 || self.errors[(a + b) / 2] <= tolerance {
+    /// `tolerance` maps a node's bounds to its allowed error, so detail
+    /// follows each part's distance instead of the whole path's worst case.
+    fn visit(
+        &self,
+        a: usize,
+        b: usize,
+        tolerance: &impl Fn(Bounds) -> f64,
+        indices: &mut Vec<usize>,
+    ) {
+        let mid = (a + b) / 2;
+        if b <= a + 1 || self.errors[mid] <= tolerance(self.boxes[mid]).powi(2) {
             indices.push(b);
         } else {
-            let mid = (a + b) / 2;
             self.visit(a, mid, tolerance, indices);
             self.visit(mid, b, tolerance, indices);
         }
     }
-    fn indices(&self, tolerance: f64) -> Vec<usize> {
+    fn indices(&self, tolerance: impl Fn(Bounds) -> f64) -> Vec<usize> {
         let mut output = Vec::new();
         for &(a, b) in &self.runs {
             if let Some(&last) = output.last() {
@@ -84,7 +106,7 @@ impl Hierarchy {
             }
             output.push(a);
             if a != b {
-                self.visit(a, b, tolerance * tolerance, &mut output);
+                self.visit(a, b, &tolerance, &mut output);
             }
         }
         output
@@ -98,33 +120,49 @@ pub struct View {
     pub focus: f32,
 }
 impl View {
-    fn tolerance(self, hierarchy: &Hierarchy, origin: f32) -> f64 {
-        let (lo, hi) = hierarchy.bounds;
+    /// Allowed error for one node, valid for every orbit direction: the eye
+    /// lies on a sphere of the orbit distance around the focus, so the node
+    /// is at least the gap between that sphere and the node's bounds away.
+    fn node_tolerance(self, (lo, hi): Bounds, origin: f32) -> f64 {
         let scale = ground_scale(self.camera);
         let exaggeration = f64::from(self.orbit.exaggeration);
-        let x = (lo[0] - self.camera.center[0])
-            .abs()
-            .max((hi[0] - self.camera.center[0]).abs())
-            * scale;
-        let y = (lo[1] - self.camera.center[1])
-            .abs()
-            .max((hi[1] - self.camera.center[1]).abs())
-            * scale;
-        let z = (lo[2] + f64::from(origin - self.focus))
-            .abs()
-            .max((hi[2] + f64::from(origin - self.focus)).abs())
-            * exaggeration;
-        let radius = (x * x + y * y + z * z).sqrt();
+        let offset = [
+            -self.camera.center[0],
+            -self.camera.center[1],
+            f64::from(origin - self.focus),
+        ];
+        let factor = [scale, scale, exaggeration];
+        let (mut near, mut far) = (0., 0.);
+        for axis in 0..3 {
+            let a = (lo[axis] + offset[axis]) * factor[axis];
+            let b = (hi[axis] + offset[axis]) * factor[axis];
+            let closest = if a > 0. {
+                a
+            } else if b < 0. {
+                -b
+            } else {
+                0.
+            };
+            near += closest * closest;
+            far += a.abs().max(b.abs()).powi(2);
+        }
+        let (near, far) = (near.sqrt(), far.sqrt());
         let tangent = (45_f64.to_radians() / 2.).tan();
         let distance = (720. / (2. * tangent * self.camera.scale()) * scale).max(1.);
-        // All orbit directions share this conservative perspective error bound.
-        // Near/inside the bounds, keep exact geometry rather than risk clipping.
-        if radius >= distance * 0.9 || !radius.is_finite() {
+        // Keep exact geometry near the eye sphere, as the whole-path bound does.
+        let gap = if far < distance * 0.9 {
+            distance - far
+        } else if near > distance * 1.1 {
+            near - distance
+        } else {
+            return 0.;
+        };
+        if !gap.is_finite() {
             return 0.;
         }
         let focal = self.size[1].max(1.) / (2. * tangent);
-        // Inserting exact color boundaries can at most double chord error.
-        0.1 * (distance - radius).powi(2) / (focal * distance * scale.max(exaggeration))
+        // At most ~0.1 px: world error times focal over eye distance (>= gap).
+        0.1 * gap * (gap / distance).min(1.) / (focal * scale.max(exaggeration))
     }
 }
 struct Trace {
@@ -199,7 +237,7 @@ impl Cache {
         }
         let mut indices = entry
             .hierarchy
-            .indices(view.tolerance(&entry.hierarchy, origin));
+            .indices(|bounds| view.node_tolerance(bounds, origin));
         indices.extend(&entry.forced);
         indices.sort_unstable();
         indices.dedup();
@@ -215,9 +253,9 @@ impl Cache {
         }
         let hierarchy = &entry.hierarchy;
         hierarchy
-            // Preserve terrain draping: a screen-small shortcut could otherwise
-            // cut through a ridge and reopen gaps in the ground annotation.
-            .indices(view.tolerance(hierarchy, 0.).min(0.01))
+            // A ~0.1 px shortcut stays within the ground stroke's depth bias
+            // (0.2% of depth), so it cannot sink into a ridge.
+            .indices(|bounds| view.node_tolerance(bounds, 0.))
             .windows(2)
             .filter_map(|pair| {
                 let (a, b) = (hierarchy.points[pair[0]], hierarchy.points[pair[1]]);
@@ -274,7 +312,7 @@ mod tests {
                         size,
                         focus: 0.,
                     };
-                    let indices = hierarchy.indices(view.tolerance(&hierarchy, 0.));
+                    let indices = hierarchy.indices(|bounds| view.node_tolerance(bounds, 0.));
                     assert!(
                         indices.len() < 500,
                         "Dense curve should substantially reduce display work"

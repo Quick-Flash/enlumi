@@ -3,8 +3,8 @@ use super::{
     camera::{Camera, TileId, WORLD, geographic},
     tiles::{Key, Payload, Provider, Service},
 };
-use std::sync::Arc;
-use zgui::prelude::GetUntracked;
+use std::{collections::BTreeMap, sync::Arc};
+use zgui::prelude::{Get, GetUntracked};
 
 #[derive(Clone)]
 pub struct Tile {
@@ -30,6 +30,82 @@ pub struct Scene {
     anchor_zoom: f64,
 }
 
+/// `id` and its ancestors, coarsest first.
+fn ancestors(id: TileId) -> impl DoubleEndedIterator<Item = TileId> {
+    (0..=id.z).map(move |z| {
+        let shift = id.z - z;
+        TileId {
+            z,
+            x: id.x.div_euclid(1_i64 << shift),
+            y: id.y >> shift,
+        }
+    })
+}
+/// Strict descendants of `id`, by ordered range per zoom instead of a full scan.
+fn descendants<T>(map: &BTreeMap<TileId, T>, id: TileId) -> impl Iterator<Item = &T> {
+    (id.z + 1..=super::tiles::MAX_TILE_ZOOM).flat_map(move |z| {
+        let shift = z - id.z;
+        let x = id.x * (1_i64 << shift);
+        map.range(
+            TileId { z, x, y: 0 }..TileId {
+                z,
+                x: x + (1_i64 << shift),
+                y: 0,
+            },
+        )
+        .filter(move |(tile, _)| tile.y >> shift == id.y)
+        .map(|(_, value)| value)
+    })
+}
+/// Finest ready tile covering `id` (itself included) that has elevation.
+fn height_source(ready: &BTreeMap<TileId, Tile>, id: TileId) -> Option<Tile> {
+    ancestors(id)
+        .filter_map(|id| ready.get(&id))
+        .filter(|tile| tile.elevation.is_some())
+        .max_by_key(|tile| Key::elevation(tile.dem_id).z)
+        .cloned()
+}
+/// `height_source` for many tiles at once: siblings share every ancestor, so
+/// each ancestor's best source is looked up once. `memo` stays valid while
+/// `ready` gains no ancestors of later queries.
+fn height_source_memo(
+    ready: &BTreeMap<TileId, Tile>,
+    id: TileId,
+    memo: &mut std::collections::HashMap<TileId, Option<TileId>>,
+) -> Option<TileId> {
+    if let Some(&best) = memo.get(&id) {
+        return best;
+    }
+    let above = (id.z > 0).then(|| {
+        height_source_memo(
+            ready,
+            TileId {
+                z: id.z - 1,
+                x: id.x.div_euclid(2),
+                y: id.y / 2,
+            },
+            memo,
+        )
+    });
+    let dem = |id: TileId| Key::elevation(ready[&id].dem_id).z;
+    let own = ready
+        .get(&id)
+        .is_some_and(|tile| tile.elevation.is_some())
+        .then_some(id);
+    // Finer tiles win ties, as in `height_source`.
+    let best = match (own, above.flatten()) {
+        (Some(own), Some(above)) => Some(if dem(own) >= dem(above) { own } else { above }),
+        (own, above) => own.or(above),
+    };
+    memo.insert(id, best);
+    best
+}
+/// Finest complete ready tile covering `id`, itself included.
+fn complete_ancestor(ready: &BTreeMap<TileId, Tile>, id: TileId) -> Option<TileId> {
+    ancestors(id)
+        .rev()
+        .find(|id| ready.get(id).is_some_and(Tile::complete))
+}
 pub fn contains(parent: TileId, child: TileId) -> bool {
     parent.z <= child.z
         && child.x.div_euclid(1_i64 << (child.z - parent.z)) == parent.x
@@ -100,14 +176,19 @@ impl Tile {
     }
 }
 impl Scene {
+    #[allow(clippy::too_many_arguments)] // View and selection inputs.
     pub fn resolve(
         service: Service,
         ids: &[TileId],
         raster_ids: &[TileId],
         previous: &Self,
         camera: Camera,
+        orbit: Orbit,
+        size: [f64; 2],
         provider: Provider,
     ) -> Self {
+        // One subscription covers every tile read below.
+        service.revision.get();
         let mut ready = previous
             .tiles
             .iter()
@@ -122,8 +203,8 @@ impl Scene {
                     dem_id: parent,
                     raster_id: parent,
                     provider,
-                    raster: service.payload(Key::raster_from(parent, provider)),
-                    elevation: service.payload(Key::elevation(parent)),
+                    raster: service.payload_untracked(Key::raster_from(parent, provider)),
+                    elevation: service.payload_untracked(Key::elevation(parent)),
                 };
                 if tile.complete() {
                     ready.insert(parent, tile);
@@ -139,33 +220,31 @@ impl Scene {
                 };
             }
         }
-        for &raster_id in raster_ids {
-            let Some(height_source) = ready
-                .values()
-                .filter(|tile| contains(tile.id, raster_id) && tile.elevation.is_some())
-                .max_by_key(|tile| Key::elevation(tile.dem_id).z)
-                .cloned()
+        // Raster tiles never contain one another, so inserting them below
+        // keeps the memo's ancestor answers valid.
+        let mut memo = std::collections::HashMap::new();
+        let rasters =
+            service.payloads_untracked(raster_ids.iter().map(|&id| Key::raster_from(id, provider)));
+        for (&raster_id, raster) in raster_ids.iter().zip(rasters) {
+            let Some(raster) = raster else {
+                continue;
+            };
+            let Some(height_source) =
+                height_source_memo(&ready, raster_id, &mut memo).map(|id| ready[&id].clone())
             else {
                 continue;
             };
-            if let Some(raster) = service.payload(Key::raster_from(raster_id, provider)) {
-                ready.entry(raster_id).or_insert(Tile {
-                    id: raster_id,
-                    dem_id: height_source.dem_id,
-                    raster_id,
-                    provider,
-                    raster: Some(raster),
-                    elevation: height_source.elevation,
-                });
-            }
+            ready.entry(raster_id).or_insert(Tile {
+                id: raster_id,
+                dem_id: height_source.dem_id,
+                raster_id,
+                provider,
+                raster: Some(raster),
+                elevation: height_source.elevation,
+            });
         }
         for &id in ids {
-            let Some(height_source) = ready
-                .values()
-                .filter(|tile| contains(tile.id, id) && tile.elevation.is_some())
-                .max_by_key(|tile| Key::elevation(tile.dem_id).z)
-                .cloned()
-            else {
+            let Some(height_source) = height_source(&ready, id) else {
                 continue;
             };
             for child in service.cached_raster_children(id, provider) {
@@ -174,19 +253,19 @@ impl Scene {
                     dem_id: height_source.dem_id,
                     raster_id: child,
                     provider,
-                    raster: service.payload(Key::raster_from(child, provider)),
+                    raster: service.payload_untracked(Key::raster_from(child, provider)),
                     elevation: height_source.elevation.clone(),
                 });
             }
         }
-        let tiles = Self::handover(ids, &ready, previous, provider, camera);
+        let tiles = Self::handover(ids, &ready, previous, provider, camera, orbit, size);
         // Keep the same height source across LOD changes. Bilinear sampling of
         // that source avoids both whole-scene jumps and nearest-pixel steps.
         let mut scene = Self::assembled(tiles, previous, camera, service.revision.get_untracked());
         // Focus height must not remain locked to a world-view fallback DEM
         // after fitting a distant flight. Use one fixed-resolution source.
         let id = super::flight3::anchor_tile(camera.center);
-        if let Some(elevation) = service.payload(Key::elevation(id)) {
+        if let Some(elevation) = service.payload_untracked(Key::elevation(id)) {
             let anchor = Tile {
                 id,
                 dem_id: id,
@@ -243,32 +322,28 @@ impl Scene {
             path_bases: previous.path_bases.clone(),
         }
     }
+    #[allow(clippy::too_many_arguments)] // View and selection inputs.
     pub(super) fn handover(
         ids: &[TileId],
         ready: &std::collections::BTreeMap<TileId, Tile>,
         previous: &Self,
         _provider: Provider,
         camera: Camera,
+        orbit: Orbit,
+        size: [f64; 2],
     ) -> Vec<Tile> {
         let mut selected = std::collections::BTreeSet::new();
         for &id in ids {
             // Keep detailed old leaves when they still cover this coarser
             // selection. A cached parent must not replace sharp imagery just
             // because orbit angle or view budget merged the terrain LOD.
-            let frontier = ready
-                .values()
-                .filter(|t| {
-                    t.provider == _provider && t.id != id && contains(id, t.id) && t.complete()
-                })
+            let frontier = descendants(ready, id)
+                .filter(|t| t.provider == _provider && t.complete())
                 .collect::<Vec<_>>();
             if !frontier.is_empty() {
                 if ready.get(&id).is_some_and(Tile::complete) {
                     selected.insert(id);
-                } else if let Some((&ancestor, _)) = ready
-                    .iter()
-                    .filter(|(ancestor, t)| contains(**ancestor, id) && t.complete())
-                    .max_by_key(|(ancestor, _)| ancestor.z)
-                {
+                } else if let Some(ancestor) = complete_ancestor(ready, id) {
                     selected.insert(ancestor);
                 }
                 selected.extend(frontier.iter().map(|t| t.id));
@@ -292,23 +367,23 @@ impl Scene {
             {
                 selected.extend(
                     ready
-                        .values()
-                        .filter(|t| contains(id, t.id) && t.complete())
+                        .get(&id)
+                        .into_iter()
+                        .chain(descendants(ready, id))
+                        .filter(|t| t.complete())
                         .map(|t| t.id),
                 );
                 continue;
             }
-            if let Some((&ancestor, _)) = ready
-                .iter()
-                .filter(|(ancestor, t)| contains(**ancestor, id) && t.complete())
-                .max_by_key(|(ancestor, _)| ancestor.z)
-            {
+            if let Some(ancestor) = complete_ancestor(ready, id) {
                 selected.insert(ancestor);
             } else {
                 selected.extend(
                     ready
-                        .values()
-                        .filter(|t| contains(id, t.id) && t.complete())
+                        .get(&id)
+                        .into_iter()
+                        .chain(descendants(ready, id))
+                        .filter(|t| t.complete())
                         .map(|t| t.id),
                 );
             }
@@ -317,44 +392,50 @@ impl Scene {
             .iter()
             .filter_map(|id| ready.get(id).cloned())
             .collect::<Vec<_>>();
-        Self::partition(candidates, camera)
+        Self::partition(candidates, camera, orbit, size)
     }
-    fn partition(candidates: Vec<Tile>, camera: Camera) -> Vec<Tile> {
+    fn partition(candidates: Vec<Tile>, camera: Camera, orbit: Orbit, size: [f64; 2]) -> Vec<Tile> {
         let mut split = std::collections::BTreeSet::new();
         for tile in &candidates {
-            let mut ancestor = tile.id;
-            while ancestor.z > 0 {
-                ancestor = TileId {
-                    z: ancestor.z - 1,
-                    x: ancestor.x.div_euclid(2),
-                    y: ancestor.y / 2,
-                };
-                split.insert(ancestor);
+            // Strict ancestors; once one is known, so are all above it.
+            for ancestor in ancestors(tile.id).rev().skip(1) {
+                if !split.insert(ancestor) {
+                    break;
+                }
             }
         }
+        let ids = candidates
+            .iter()
+            .map(|tile| tile.id)
+            .collect::<std::collections::BTreeSet<_>>();
+        // Leaves are candidates without a candidate ancestor.
         let mut leaves = candidates
             .iter()
-            .filter(|tile| {
-                !candidates
-                    .iter()
-                    .any(|other| other.id != tile.id && contains(other.id, tile.id))
-            })
+            .filter(|tile| !ancestors(tile.id).rev().skip(1).any(|id| ids.contains(&id)))
             .cloned()
             .collect::<Vec<_>>();
         let sources = candidates
             .iter()
             .map(|tile| (tile.id, tile))
             .collect::<std::collections::BTreeMap<_, _>>();
-        loop {
-            let mut splittable = leaves
-                .iter()
-                .filter(|leaf| split.contains(&leaf.id))
-                .map(|tile| tile.id)
-                .collect::<Vec<_>>();
-            camera.center_first(&mut splittable);
-            let Some(id) = splittable.first().copied() else {
-                break;
-            };
+        // Split largest on screen first, so a full budget drops only the
+        // smallest detail; the heap holds exactly the splittable leaves.
+        let pose = orbit.pose(camera, size);
+        let scale = ground_scale(camera);
+        let key = |id: TileId| {
+            let pixels = pose.projected_size(camera, id, size[1], scale);
+            let (edge, center) = camera.center_key(id);
+            (
+                pixels.to_bits(),
+                std::cmp::Reverse((edge.to_bits(), center.to_bits(), id)),
+            )
+        };
+        let mut splittable = leaves
+            .iter()
+            .filter(|leaf| split.contains(&leaf.id))
+            .map(|tile| key(tile.id))
+            .collect::<std::collections::BinaryHeap<_>>();
+        while let Some((_, std::cmp::Reverse((_, _, id)))) = splittable.pop() {
             if leaves.len() + 3 > MAX_RENDER_TILES {
                 break;
             }
@@ -380,6 +461,9 @@ impl Scene {
                         }
                     }
                     leaves.push(tile);
+                    if split.contains(&region) {
+                        splittable.push(key(region));
+                    }
                 }
             }
         }
@@ -472,6 +556,13 @@ impl Orbit {
     pub fn visibility_metres(self) -> f64 {
         f64::from(self.view_distance_km.clamp(40., 160.)) * 1000.
     }
+    /// Ground shown past the focus. Up close it is the view distance; once
+    /// the orbit is farther than 4 km it scales with that distance (20x at
+    /// the default 80 km), keeping terrain to within ~1/20 of the pitch below
+    /// the horizon instead of leaving an empty band at regional zooms.
+    fn reach(self, distance: f64) -> f64 {
+        self.visibility_metres() * (distance / 4000.).max(1.)
+    }
 
     fn pose(self, camera: Camera, size: [f64; 2]) -> Pose {
         // Zoom sets a world-space orbit distance. Resizing changes aspect only;
@@ -489,11 +580,14 @@ impl Orbit {
         let right = normalize(cross(forward, [0., 1., 0.]));
         let up = cross(right, forward);
         let top_down = pitch.sin() - pitch.cos() * tan_y;
+        let reach = self.reach(distance);
+        // Ground footprint of the top screen edge. It grows without bound as
+        // the horizon nears, so cap it at the visible reach: far then changes
+        // continuously instead of collapsing once the horizon enters view.
         let footprint = if top_down > 0. {
-            1.1 * distance * pitch.cos() * tan_y / top_down
+            (1.1 * distance * pitch.cos() * tan_y / top_down).min(reach)
         } else {
-            // Sky above the horizon has no ground footprint to preserve.
-            0.
+            reach
         };
         Pose {
             eye,
@@ -504,6 +598,8 @@ impl Orbit {
             // Cover the viewport's ground footprint when dollying out. A fixed
             // distance beyond focus clips the upper screen at regional zooms.
             far: distance + self.visibility_metres().max(footprint),
+            reach,
+            distance,
             tan_x: tan_y * size[0].max(1.) / size[1].max(1.),
             tan_y,
         }
@@ -519,6 +615,7 @@ impl Orbit {
             far,
             tan_x,
             tan_y,
+            ..
         } = self.pose(camera, size);
         let view = [
             right[0],
@@ -607,27 +704,51 @@ impl Orbit {
     pub fn tiles(self, camera: Camera, size: [f64; 2]) -> Vec<TileId> {
         Selector::default().select(self, camera, size)
     }
+    /// View-space depths where terrain starts and finishes fading into the
+    /// background: the last 40% of reach, so the far cutoff reads as haze.
+    pub fn fog(self, camera: Camera, size: [f64; 2]) -> [f64; 2] {
+        let pose = self.pose(camera, size);
+        [pose.distance + 0.6 * pose.reach, pose.distance + pose.reach]
+    }
     pub fn projected_tile_size(self, camera: Camera, size: [f64; 2], tile: TileId) -> f64 {
         self.pose(camera, size)
             .projected_size(camera, tile, size[1], ground_scale(camera))
     }
+    /// Largest on screen first: coarse fallbacks, then detail nearest the eye.
+    /// Distance from the orbit focus would rank near-eye and horizon tiles alike.
+    pub fn screen_first(self, camera: Camera, size: [f64; 2], tiles: &mut [TileId]) {
+        let pose = self.pose(camera, size);
+        let scale = ground_scale(camera);
+        // One sort; ties fall back to `Camera::center_first` order.
+        tiles.sort_by_cached_key(|&tile| {
+            let (edge, center) = camera.center_key(tile);
+            (
+                std::cmp::Reverse(pose.projected_size(camera, tile, size[1], scale).to_bits()),
+                edge.to_bits(),
+                center.to_bits(),
+                tile,
+            )
+        });
+    }
 }
 
+/// Split order is by on-screen size, so a full budget always drops the
+/// smallest (farthest) detail. Remembering last frame's splits gives a
+/// split/merge deadband without making the result depend on older history.
 #[derive(Default)]
 pub struct Selector {
     expanded: std::collections::BTreeSet<TileId>,
 }
 impl Selector {
-    fn collapse(&mut self, parent: TileId) {
-        self.expanded.retain(|&id| !contains(parent, id));
-    }
     pub fn select(&mut self, orbit: Orbit, camera: Camera, size: [f64; 2]) -> Vec<TileId> {
         if Camera::geometry(size).is_none() {
             return Vec::new();
         }
         let pose = orbit.pose(camera, size);
         let scale = ground_scale(camera);
-        let max_zoom = (camera.zoom.ceil() as u8).saturating_add(1).min(19);
+        let max_zoom = (camera.zoom.ceil() as u8)
+            .saturating_add(1)
+            .min(super::tiles::MAX_TILE_ZOOM);
         let visible = |id| pose.visible(camera, id, scale, 6000. * f64::from(orbit.exaggeration));
         let score = |id| pose.projected_size(camera, id, size[1], scale);
         let children = |id: TileId| {
@@ -639,84 +760,53 @@ impl Selector {
                 })
             })
         };
-        let mut pending = (-1..=1)
+        let mut leaves = (-1..=1)
             .map(|x| TileId { z: 0, x, y: 0 })
+            .filter(|&id| visible(id))
+            .map(|id| (id, score(id)))
             .collect::<Vec<_>>();
-        let mut leaves = Vec::new();
-        while let Some(id) = pending.pop() {
-            if !visible(id) {
+        let mut expanded = std::collections::BTreeSet::new();
+        // Largest on screen first; a split that would exceed the budget is
+        // dropped for this frame, as smaller tiles may still fit.
+        let splittable = |id: TileId, pixels: f64| {
+            let threshold = if self.expanded.contains(&id) {
+                MERGE_PIXELS
+            } else {
+                SPLIT_PIXELS
+            };
+            id.z < max_zoom && pixels > threshold
+        };
+        let mut queue = leaves
+            .iter()
+            .filter(|&&(id, pixels)| splittable(id, pixels))
+            .map(|&(id, pixels)| (pixels.to_bits(), id))
+            .collect::<std::collections::BinaryHeap<_>>();
+        while let Some((_, id)) = queue.pop() {
+            let kids = children(id).filter(|&id| visible(id)).collect::<Vec<_>>();
+            if leaves.len() - 1 + kids.len() > MAX_TERRAIN_TILES {
                 continue;
             }
-            if self.expanded.contains(&id) {
-                if id.z >= max_zoom || score(id) < MERGE_PIXELS {
-                    self.collapse(id);
-                } else {
-                    pending.extend(children(id));
-                    continue;
+            let index = leaves.iter().position(|leaf| leaf.0 == id).unwrap();
+            leaves.swap_remove(index);
+            for kid in kids {
+                let pixels = score(kid);
+                leaves.push((kid, pixels));
+                if splittable(kid, pixels) {
+                    queue.push((pixels.to_bits(), kid));
                 }
             }
-            leaves.push(id);
+            expanded.insert(id);
         }
-        let mut blocked = std::collections::BTreeSet::new();
-        // Re-entering retained branches can exceed the active budget. Keep
-        // tiles around camera focus sharp; collapse farther branches first.
-        while leaves.len() > MAX_TERRAIN_TILES {
-            let parent = self
-                .expanded
-                .iter()
-                .filter(|&&p| leaves.iter().filter(|&&id| contains(p, id)).count() > 1)
-                .max_by(|&&a, &&b| {
-                    let focus_distance = |id: TileId| {
-                        let span = WORLD / f64::from(1_u32 << id.z);
-                        let x = -WORLD / 2. + (id.x as f64 + 0.5) * span;
-                        let y = camera.center[1] - WORLD / 2. + (f64::from(id.y) + 0.5) * span;
-                        let dx = ((x - camera.center[0]).abs() - span / 2.).max(0.);
-                        let dy = (y.abs() - span / 2.).max(0.);
-                        dx.hypot(dy)
-                    };
-                    focus_distance(a)
-                        .total_cmp(&focus_distance(b))
-                        .then_with(|| score(b).total_cmp(&score(a)))
-                })
-                .copied();
-            let Some(parent) = parent else {
-                break;
-            };
-            leaves.retain(|&id| !contains(parent, id));
-            leaves.push(parent);
-            self.collapse(parent);
-            blocked.insert(parent);
-        }
-        loop {
-            let next = leaves
-                .iter()
-                .enumerate()
-                .filter(|(_, id)| id.z < max_zoom && !blocked.contains(*id))
-                .map(|(index, &id)| (index, score(id)))
-                .filter(|(_, pixels)| *pixels > SPLIT_PIXELS)
-                .max_by(|a, b| a.1.total_cmp(&b.1));
-            let Some((index, _)) = next else {
-                break;
-            };
-            let id = leaves[index];
-            let kids = children(id).filter(|&id| visible(id)).collect::<Vec<_>>();
-            if leaves.len() - 1 + kids.len() <= MAX_TERRAIN_TILES {
-                leaves.swap_remove(index);
-                leaves.extend(kids);
-                self.expanded.insert(id);
-            } else {
-                blocked.insert(id);
-            }
-        }
-        if self.expanded.len() > 4096 {
-            self.expanded.retain(|&id| visible(id));
-        }
+        self.expanded = expanded;
+        let mut leaves = leaves.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
         camera.center_first(&mut leaves);
         leaves
     }
 }
 
 struct Pose {
+    reach: f64,
+    distance: f64,
     eye: [f64; 3],
     forward: [f64; 3],
     right: [f64; 3],
@@ -760,12 +850,12 @@ impl Pose {
             })
     }
     fn projected_size(&self, camera: Camera, id: TileId, height: f64, scale: f64) -> f64 {
+        // Detail follows the look target (orbit focus), not the eye: at the
+        // focus this equals the true eye distance, and it grows radially.
         let (center, half) = Self::tile_box(camera, id, scale);
-        let dx = ((center[0] - self.eye[0]).abs() - half).max(0.);
-        let dz = ((center[2] - self.eye[2]).abs() - half).max(0.);
-        let distance = (dx * dx + dz * dz + self.eye[1] * self.eye[1])
-            .sqrt()
-            .max(1.);
+        let dx = (center[0].abs() - half).max(0.);
+        let dz = (center[2].abs() - half).max(0.);
+        let distance = (dx * dx + dz * dz + dot(self.eye, self.eye)).sqrt().max(1.);
         2. * half * height / (2. * self.tan_y * distance)
     }
 }
@@ -807,7 +897,12 @@ mod retention_tests {
         height.raster_id = root;
         let mut imagery = tile(detail, vec![0.; 4]);
         imagery.dem_id = root;
-        let leaves = Scene::partition(vec![base, height, imagery], Camera::default());
+        let leaves = Scene::partition(
+            vec![base, height, imagery],
+            Camera::default(),
+            Orbit::default(),
+            [1000., 700.],
+        );
         assert_eq!(leaves.len(), 7);
         for (index, a) in leaves.iter().enumerate() {
             for b in &leaves[index + 1..] {
@@ -917,6 +1012,8 @@ mod retention_tests {
             &old,
             Provider::OpenStreetMap,
             Camera::default(),
+            Orbit::default(),
+            [1000., 700.],
         );
         assert_eq!(mixed.len(), 4);
         assert!(mixed.iter().any(|tile| tile.raster_id == parent));
@@ -929,6 +1026,8 @@ mod retention_tests {
                 &old,
                 Provider::OpenStreetMap,
                 Camera::default(),
+                Orbit::default(),
+                [1000., 700.],
             ),
             ..Scene::default()
         };
@@ -944,7 +1043,9 @@ mod retention_tests {
                 &ready,
                 &partial,
                 Provider::OpenStreetMap,
-                Camera::default()
+                Camera::default(),
+                Orbit::default(),
+                [1000., 700.]
             )
             .len(),
             4,
@@ -956,7 +1057,9 @@ mod retention_tests {
                 &ready,
                 &Scene::default(),
                 Provider::OpenStreetMap,
-                Camera::default()
+                Camera::default(),
+                Orbit::default(),
+                [1000., 700.]
             )
             .len(),
             4,
@@ -968,7 +1071,9 @@ mod retention_tests {
                 &ready,
                 &refined,
                 Provider::OpenStreetMap,
-                Camera::default()
+                Camera::default(),
+                Orbit::default(),
+                [1000., 700.]
             )
             .len(),
             4
@@ -980,7 +1085,9 @@ mod retention_tests {
                 &ready,
                 &refined,
                 Provider::OpenStreetMap,
-                Camera::default()
+                Camera::default(),
+                Orbit::default(),
+                [1000., 700.]
             )
             .len(),
             4
@@ -1056,6 +1163,26 @@ mod retention_tests {
             "LOD movement trace: retained={retained_changes}, stateless={fresh_changes} tile changes"
         );
         assert!(retained_changes <= fresh_changes);
+        // Sweeping the orbit must not leave history-made coarse patches.
+        let camera = Camera {
+            center: [-12517719.28, 4965521.78],
+            zoom: 17.45,
+        };
+        let size = [1600., 900.];
+        for step in 0..48 {
+            let pose = Orbit {
+                bearing: step as f32 * 7.5,
+                pitch: 30.,
+                ..orbit
+            };
+            let coarsest = |ids: Vec<TileId>| ids.into_iter().map(|id| id.z).min().unwrap();
+            let retained = coarsest(selector.select(pose, camera, size));
+            let fresh = coarsest(pose.tiles(camera, size));
+            assert!(
+                retained + 1 >= fresh,
+                "step {step}: z{retained} vs fresh z{fresh}"
+            );
+        }
         let wide = selector.select(orbit, Camera { zoom: 0., ..camera }, size);
         assert!(wide.iter().all(|id| id.z <= 1));
     }
@@ -1094,6 +1221,14 @@ mod camera_invariant_tests {
             if zoom >= 12. {
                 assert!((p.far - distance - orbit.visibility_metres()).abs() < 1e-6);
             }
+        }
+        // Lowering the view past the angle where the horizon enters (22.5
+        // degrees with a 45 degree FOV) must not collapse far into a wall.
+        for zoom in [9., 12., 15., 18.] {
+            let camera = Camera { zoom, ..camera };
+            let far = |pitch| Orbit { pitch, ..orbit }.pose(camera, [800., 600.]).far;
+            let (above, below) = (far(22.6), far(22.4));
+            assert!(below >= above * 0.99, "zoom {zoom}: far {above} -> {below}");
         }
         for zoom in [3., 5., 8., 12., 19.] {
             let camera = Camera { zoom, ..camera };

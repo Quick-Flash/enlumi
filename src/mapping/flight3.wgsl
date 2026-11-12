@@ -1,5 +1,7 @@
 struct View { matrix: mat4x4<f32> }
-struct Viewport { size:vec4<f32> }
+// offset: translation (xyz) and horizontal scale (w) from the camera the
+// vertices were built for to the current one.
+struct Viewport { size:vec4<f32>, offset:vec4<f32> }
 @group(0) @binding(0) var<uniform> view: View;
 @group(1) @binding(0) var<uniform> viewport: Viewport;
 struct Output {
@@ -11,8 +13,15 @@ struct Output {
     @location(4) @interpolate(flat) shape:f32,
     @location(5) @interpolate(flat) pattern:vec2<f32>,
 }
-@vertex fn vertex(@builtin(vertex_index) index:u32,@location(0) start:vec3<f32>,@location(1) end:vec3<f32>,@location(2) color:vec4<f32>,@location(3) width:f32,@location(4) point:f32,@location(5) pattern:vec2<f32>,@location(6) end_color:vec4<f32>)->Output {
-    var a=view.matrix*vec4(start,1.);var b=view.matrix*vec4(end,1.);
+@vertex fn vertex(@builtin(vertex_index) vertex:u32,@location(0) start:vec3<f32>,@location(1) end:vec3<f32>,@location(2) stroke:vec4<f32>,@location(3) stroke_width:f32,@location(4) point:f32,@location(5) pattern:vec2<f32>,@location(6) stroke_end:vec4<f32>)->Output {
+    // Ground strokes are stored once as their halo; vertices 6..12 draw the
+    // dark core from the same instance in a second, later draw call.
+    let index=vertex%6u;let core=vertex>=6u && point< -0.5;
+    var color=stroke;var end_color=stroke_end;var width=stroke_width;
+    if core {color=vec4(0.,0.,0.,220./255.);end_color=color;width=1.5;}
+    let o=viewport.offset;
+    let p0=vec3(start.x*o.w,start.y,start.z*o.w)+o.xyz;let p1=vec3(end.x*o.w,end.y,end.z*o.w)+o.xyz;
+    var a=view.matrix*vec4(p0,1.);var b=view.matrix*vec4(p1,1.);
     let da=a.w-a.z;let db=b.w-b.z;
     var output:Output;output.color=color;output.radius=max(width*0.5,0.);
     output.shape=point;output.span=0.;output.distance=vec2(0.);output.position=vec4(2.,2.,0.,1.);

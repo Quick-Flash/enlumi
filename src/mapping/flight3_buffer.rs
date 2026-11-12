@@ -46,11 +46,19 @@ impl Buffer {
         self.uploaded_bytes += size;
     }
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        self.draw_vertices(pass, 0..6);
+    }
+    /// Ground halos, then every core over them (see flight3.wgsl).
+    pub fn draw_ground(&self, pass: &mut wgpu::RenderPass<'_>) {
+        self.draw_vertices(pass, 0..6);
+        self.draw_vertices(pass, 6..12);
+    }
+    fn draw_vertices(&self, pass: &mut wgpu::RenderPass<'_>, vertices: std::ops::Range<u32>) {
         if self.count > 0
             && let Some(buffer) = &self.buffer
         {
             pass.set_vertex_buffer(0, buffer.slice(..));
-            pass.draw(0..6, 0..self.count);
+            pass.draw(vertices, 0..self.count);
         }
     }
 }

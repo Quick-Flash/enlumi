@@ -47,10 +47,10 @@ impl Renderer {
     pub fn trace_work(&self) -> super::flight3::Work {
         self.paths.work()
     }
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, wake: super::flight3::Wake) -> Self {
         let view = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map.3d.view"),
-            size: 64,
+            size: 80,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -62,7 +62,7 @@ impl Renderer {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(64),
+                    min_binding_size: NonZeroU64::new(80),
                 },
                 count: None,
             }],
@@ -192,7 +192,7 @@ impl Renderer {
             &[140, 154, 135, 255],
             4,
         );
-        let paths = super::flight3::Renderer::new(device, &view_layout);
+        let paths = super::flight3::Renderer::new(device, &view_layout, wake);
         Self {
             uploads: 0,
             resident_bytes: 0,
@@ -310,7 +310,10 @@ impl Renderer {
                 self.resident_bytes += bytes;
             }
         }
-        queue.write_buffer(&self.view, 0, &floats(&orbit.matrix(camera, css)));
+        let fog = orbit.fog(camera, css).map(|v| v as f32);
+        let mut view = orbit.matrix(camera, css).to_vec();
+        view.extend([fog[0], fog[1], 0., 0.]);
+        queue.write_buffer(&self.view, 0, &floats(&view));
         if self.depth.as_ref().is_none_or(|(size, _)| *size != extent) {
             let depth = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("map.depth"),

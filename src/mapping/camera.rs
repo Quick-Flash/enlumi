@@ -119,18 +119,19 @@ impl Camera {
         tiles
     }
 
+    /// Squared distance from focus to tile edge, then to tile center.
+    pub fn center_key(self, tile: TileId) -> (f64, f64) {
+        let span = WORLD / f64::from(1_u32 << tile.z);
+        let dx = -WORLD / 2. + (tile.x as f64 + 0.5) * span - self.center[0];
+        let dy = WORLD / 2. - (f64::from(tile.y) + 0.5) * span - self.center[1];
+        let edge_x = (dx.abs() - span / 2.).max(0.);
+        let edge_y = (dy.abs() - span / 2.).max(0.);
+        (edge_x * edge_x + edge_y * edge_y, dx * dx + dy * dy)
+    }
     pub fn center_first(self, tiles: &mut [TileId]) {
-        let distance = |tile: TileId| {
-            let span = WORLD / f64::from(1_u32 << tile.z);
-            let dx = -WORLD / 2. + (tile.x as f64 + 0.5) * span - self.center[0];
-            let dy = WORLD / 2. - (f64::from(tile.y) + 0.5) * span - self.center[1];
-            let edge_x = (dx.abs() - span / 2.).max(0.);
-            let edge_y = (dy.abs() - span / 2.).max(0.);
-            (edge_x * edge_x + edge_y * edge_y, dx * dx + dy * dy)
-        };
         tiles.sort_by(|a, b| {
-            let a_score = distance(*a);
-            let b_score = distance(*b);
+            let a_score = self.center_key(*a);
+            let b_score = self.center_key(*b);
             a_score
                 .0
                 .total_cmp(&b_score.0)

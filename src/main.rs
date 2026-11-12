@@ -52,6 +52,7 @@ mod filter_sources;
 mod filter_workspace;
 mod filter_zero_phase;
 mod fps;
+mod frame_profile;
 mod geometry;
 mod geometry_appearance;
 mod geometry_coordinates;

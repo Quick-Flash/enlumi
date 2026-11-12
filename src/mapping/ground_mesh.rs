@@ -3,12 +3,16 @@ use super::{
     camera::{Camera, WORLD},
     terrain::Tile,
 };
-use std::{cell::Cell, sync::OnceLock};
+use std::{
+    cell::Cell,
+    sync::{Arc, OnceLock},
+};
 
 struct Mesh {
     tile: Tile,
     span: f64,
-    samples: OnceLock<Vec<f32>>,
+    /// Shared with the next sampler while the tile and its DEM are unchanged.
+    samples: Arc<OnceLock<Vec<f32>>>,
 }
 impl Mesh {
     fn local(&self, p: [f64; 2]) -> [f64; 2] {
@@ -70,7 +74,28 @@ pub struct Sampler {
     last: Cell<Option<usize>>,
 }
 impl Sampler {
+    #[cfg(test)]
     pub fn new(tiles: &[Tile]) -> Self {
+        Self::reusing(tiles, None)
+    }
+    /// Terrain changes a few tiles at a time while orbiting; keep the
+    /// height grids of tiles that are still identical.
+    pub fn reusing(tiles: &[Tile], previous: Option<&Self>) -> Self {
+        let same = |a: &Tile, b: &Tile| {
+            a.id == b.id
+                && a.dem_id == b.dem_id
+                && a.elevation
+                    .as_ref()
+                    .zip(b.elevation.as_ref())
+                    .is_some_and(|(a, b)| Arc::ptr_eq(a, b))
+        };
+        let reused = |tile: &Tile| {
+            previous?
+                .meshes
+                .iter()
+                .find(|mesh| same(&mesh.tile, tile))
+                .map(|mesh| mesh.samples.clone())
+        };
         Self {
             meshes: tiles
                 .iter()
@@ -78,7 +103,7 @@ impl Sampler {
                 .map(|tile| Mesh {
                     tile: tile.clone(),
                     span: WORLD / f64::from(1_u32 << tile.id.z),
-                    samples: OnceLock::new(),
+                    samples: reused(tile).unwrap_or_default(),
                 })
                 .collect(),
             last: Cell::new(None),

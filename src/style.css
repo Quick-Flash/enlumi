@@ -97,7 +97,7 @@
 .trace-gradient-active .line-style > .appearance-row > .color-picker { display: none; }
 .state-tint-options, .state-color-key, .state-color-key-band { gap: 5px; flex: none; }
 .state-color-key-rules { gap: 8px; flex-wrap: wrap; }
-.state-color-key-rule { gap: 4px; align-items: center; }
+.state-color-key-rule, .state-legend-band { gap: 4px; align-items: center; }
 .state-color-key-swatch { width: 12px; height: 12px; flex: none; border: 1px solid var(--app-border-strong); }
 .state-trace-tint, .state-trace-tint-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .filter-workspace { flex: 1; width: 0; min-width: 0; min-height: 0; padding: 10px; overflow: hidden; background: var(--app-surface); color: var(--app-foreground); }

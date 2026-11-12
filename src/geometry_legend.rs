@@ -20,7 +20,7 @@ pub fn register_snapshot_legend(workbench: Workbench, pane: Pane) {
                 .text
                 .truncate(description.text.len().saturating_sub(lines.len()));
         }
-        let mut entries: Vec<_> = workbench
+        let entries = workbench
             .legend_keys(pane)
             .into_iter()
             .filter_map(|key| {
@@ -50,7 +50,6 @@ pub fn register_snapshot_legend(workbench: Workbench, pane: Pane) {
                 Some(theme::LEGEND.entry(plot::LegendMarker::Line, &name, color, visible))
             })
             .collect();
-        entries.extend(crate::state_key::legend_entries(workbench, pane));
         description.push_legend(
             entries,
             (description.width - theme::LEGEND_RIGHT, theme::LEGEND_TOP),
@@ -61,7 +60,6 @@ pub fn register_snapshot_legend(workbench: Workbench, pane: Pane) {
 
 #[component]
 pub fn GeometryLegend(workbench: Workbench, pane: Pane) -> impl IntoView {
-    use crate::state_key::StateKeyProps;
     let host = workbench.legend_host();
     view! { column(class = "geometry-legend") {
         for entry in move || {
@@ -83,6 +81,5 @@ pub fn GeometryLegend(workbench: Workbench, pane: Pane) -> impl IntoView {
                 }))
             }}
         }
-        StateKey(workbench=workbench,pane=pane)
     }}
 }

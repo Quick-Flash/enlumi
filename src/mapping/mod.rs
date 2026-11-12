@@ -23,6 +23,7 @@ pub(crate) mod telemetry;
 mod terrain;
 mod terrain_gpu;
 mod terrain_view;
+mod throttle;
 mod tiles;
 mod toolbar;
 mod trace_detail;

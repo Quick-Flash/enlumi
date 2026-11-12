@@ -22,7 +22,15 @@ fn timeline_updates_keep_static_geometry_key_and_small_marker_layer() {
     ground.prepare(&scene.paths, &scene.tiles);
     scene.time = Some(1.);
     let mut detail = super::super::trace_detail::Cache::default();
-    let before = vertices_layer(&scene, camera, orbit, size, true, &mut ground, &mut detail);
+    let before = vertices_layer(
+        &scene,
+        camera,
+        orbit,
+        size,
+        Layer::Timeline,
+        &mut ground,
+        &mut detail,
+    );
     assert_eq!(
         before.len(),
         2,
@@ -32,7 +40,15 @@ fn timeline_updates_keep_static_geometry_key_and_small_marker_layer() {
     assert_eq!(key, geometry_key(&scene, camera, orbit, size));
     assert_ne!(
         before,
-        vertices_layer(&scene, camera, orbit, size, true, &mut ground, &mut detail)
+        vertices_layer(
+            &scene,
+            camera,
+            orbit,
+            size,
+            Layer::Timeline,
+            &mut ground,
+            &mut detail
+        )
     );
     let rotated = super::super::terrain::Orbit {
         bearing: orbit.bearing + 40.,
@@ -142,7 +158,8 @@ fn ground_projection_samples_terrain_breaks_gaps_and_connects_marker() {
     );
     let ground = geometry
         .iter()
-        .filter(|v| v[7] == 1.5 && v[3..6] == [0., 0., 0.])
+        // Stored once as halos; the shader draws the core from each instance.
+        .filter(|v| v[8] < 0. && v[7] == 3.5)
         .collect::<Vec<_>>();
     let ink = ground
         .chunks_exact(2)

@@ -359,18 +359,41 @@ pub fn FlightMap(
             orbit.set(r);
         }
     });
-    let save_orbit = zgui::reactive::RenderEffect::new(move |_| {
-        let next = orbit.get();
+    // Saving the view into the spec re-runs everything that reads the spec,
+    // so a drag saves at most a few times a second; other changes, and the
+    // drag's final view, save at once.
+    let dragging = RwSignal::new_local(false);
+    let save_view = super::throttle::Throttle::new(std::time::Duration::from_millis(250));
+    let store_view = move || {
+        let _profile = crate::frame_profile::section("map.save_view");
+        let (next, c) = (orbit.get_untracked(), camera.get_untracked());
         if pane.trajectory.with_untracked(|s| {
-            s.as_ref()
-                .is_some_and(|s| s.map.is_some_and(|m| m.orbit != next))
+            s.as_ref().is_some_and(|s| {
+                s.map
+                    .is_some_and(|m| m.orbit != next || m.camera.is_some_and(|saved| saved != c))
+            })
         }) {
             pane.trajectory.update(|s| {
                 if let Some(map) = s.as_mut().and_then(|s| s.map.as_mut()) {
                     map.orbit = next;
+                    if map.camera.is_some() {
+                        map.remember_camera(c);
+                    }
                 }
             });
         }
+    };
+    let save = move || {
+        if dragging.get_untracked() {
+            save_view.run(store_view);
+        } else {
+            store_view();
+        }
+    };
+    let save_orbit = zgui::reactive::RenderEffect::new(move |_| {
+        orbit.track();
+        dragging.track();
+        save();
     });
     let (paths, paths_ready) = super::flight3::install(workbench, pane);
     let colors = super::telemetry::install(workbench, pane);
@@ -411,7 +434,14 @@ pub fn FlightMap(
         }
         let pixels = size.get();
         let data = pane.trajectory_data.get();
-        let spatial_paths = paths.get();
+        // Legend hover can reveal a hidden trace; fit only visible ones.
+        let hidden = pane.plot.hidden.get();
+        let spatial_paths: std::sync::Arc<[super::flight3::Path3]> = paths
+            .get()
+            .iter()
+            .filter(|path| !hidden.contains(&path.id.to_string()))
+            .cloned()
+            .collect();
         if terrain.get() && (!paths_ready.get() || spatial_paths.is_empty()) {
             return;
         }
@@ -429,7 +459,7 @@ pub fn FlightMap(
                         })
                 })
             })
-            && let Some(next) = fit(&data, pixels, &pane.plot.hidden.get())
+            && let Some(next) = fit(&data, pixels, &hidden)
         {
             let mut next = next;
             if terrain.get_untracked() {
@@ -453,6 +483,8 @@ pub fn FlightMap(
                     &[],
                     &super::terrain::Scene::default(),
                     next,
+                    orbit.get_untracked(),
+                    pixels,
                     provider.get_untracked(),
                 )
                 .with_paths(service, spatial_paths);
@@ -487,23 +519,13 @@ pub fn FlightMap(
             }
         }
         if Camera::geometry(pixels).is_some() {
+            let _profile = crate::frame_profile::section("map.plot_view");
             let ranges = c.ranges(pixels);
             if pane.plot.ranges.get_untracked() != ranges {
                 let _ = pane.plot.set_view(ranges);
             }
         }
-        if pane.trajectory.with_untracked(|s| {
-            s.as_ref().is_some_and(|s| {
-                s.map
-                    .is_some_and(|m| m.camera.is_some_and(|saved| saved != c))
-            })
-        }) {
-            pane.trajectory.update(|s| {
-                if let Some(map) = s.as_mut().and_then(|s| s.map.as_mut()) {
-                    map.remember_camera(c);
-                }
-            });
-        }
+        save();
     });
     on_cleanup_local(move || {
         drop(fitting);
@@ -628,7 +650,7 @@ pub fn FlightMap(
         },on:pointer_cancel=move |_|press.set_value(None)) {
             if move ||visible.get() {
                 if move ||terrain.get(){
-                    TerrainView(camera=camera,orbit=orbit,service=service,provider=Some(provider),offline=Some(offline),paths=Some(paths),colors=Some(colors),ground_projection=Some(Signal::derive_local(move ||ground_projection.get())),demand_owner=pane.id+1000,show_help=false,on_hover=Some(changed),time=Some(Signal::derive_local(move ||if pane.timeline_link.get(){workbench.timeline.time.get()}else{None})),on_pick=Some(zgui::reactive::UnsyncCallback::new(move |(scene,camera,orbit,size,cursor):(std::sync::Arc<super::terrain::Scene>,Camera,super::terrain::Orbit,[f64;2],[f64;2])|{if pane.timeline_link.get_untracked() &&let Some(time)=super::flight3::pick_time(&scene,camera,orbit,size,cursor){let _=workbench.timeline.pin(time);}})))
+                    TerrainView(camera=camera,orbit=orbit,dragging=Some(dragging),service=service,provider=Some(provider),offline=Some(offline),paths=Some(paths),colors=Some(colors),ground_projection=Some(Signal::derive_local(move ||ground_projection.get())),demand_owner=pane.id+1000,show_help=false,on_hover=Some(changed),time=Some(Signal::derive_local(move ||if pane.timeline_link.get(){workbench.timeline.time.get()}else{None})),on_pick=Some(zgui::reactive::UnsyncCallback::new(move |(scene,camera,orbit,size,cursor):(std::sync::Arc<super::terrain::Scene>,Camera,super::terrain::Orbit,[f64;2],[f64;2])|{if pane.timeline_link.get_untracked() &&let Some(time)=super::flight3::pick_time(&scene,camera,orbit,size,cursor){let _=workbench.timeline.pin(time);}})))
                 }else{
                     MapView(camera=camera,gpu=false,maps=maps,service=service,provider=Some(provider),offline=Some(offline),transparent_background=true,demand_owner=pane.id+1000,on_reset=zgui::reactive::UnsyncCallback::new(move |()|pane.fit_axes(plot::interaction::Axes::BOTH)))
                     TrajectoryOverlay(workbench=workbench,pane=pane,visible=visible)

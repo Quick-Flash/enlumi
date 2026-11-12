@@ -1,5 +1,5 @@
 //! Small shared, demand-driven tile service for the standalone demo.
-//! No prefetch: two blocking workers claim only current visible demand.
+//! No prefetch: four blocking workers (two per layer) claim only current visible demand.
 use super::camera::TileId;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -16,7 +16,10 @@ use std::{
 };
 use zgui::prelude::*;
 
-const MEMORY: usize = 384 * 1024 * 1024;
+// One 3D view can demand ~450 MB (512 px DEM tiles are 1 MB as f32).
+/// Deepest zoom any provider is asked for; selection never goes deeper.
+pub const MAX_TILE_ZOOM: u8 = 19;
+const MEMORY: usize = 768 * 1024 * 1024;
 const DISK: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_BODY: u64 = 4 * 1024 * 1024;
 #[derive(
@@ -347,7 +350,7 @@ impl Work {
             })
             .min_by_key(|key| {
                 (
-                    key.dem != (worker == 1),
+                    key.dem != (worker % 2 == 1),
                     self.priorities.get(key).copied().unwrap_or(usize::MAX),
                 )
             })
@@ -367,6 +370,7 @@ struct Ui {
 pub struct Service {
     ui: StoredValue<Rc<Ui>, LocalStorage>,
     pub revision: RwSignal<u64, LocalStorage>,
+    demanded: RwSignal<u64, LocalStorage>,
 }
 
 impl Service {
@@ -422,8 +426,26 @@ impl Service {
             shared: shared.clone(),
         });
         let revision = RwSignal::new_local(0_u64);
-        let (tx, rx) = async_channel::bounded::<(Key, Result<Arc<Payload>, String>)>(8);
-        for worker in 0..2 {
+        type Loaded = (Key, Result<Arc<Payload>, String>);
+        let (tx, loaded) = std::sync::mpsc::channel::<Loaded>();
+        let (batches, rx) = async_channel::bounded::<Vec<Loaded>>(2);
+        // Arrivals spread across a frame would each rebuild the scene. Batch
+        // them per ~frame so dragging pays for at most one rebuild per frame.
+        std::thread::spawn(move || {
+            while let Ok(first) = loaded.recv() {
+                let mut batch = vec![first];
+                let deadline = Instant::now() + Duration::from_millis(16);
+                while let Some(left) = deadline.checked_duration_since(Instant::now())
+                    && let Ok(next) = loaded.recv_timeout(left)
+                {
+                    batch.push(next);
+                }
+                if batches.send_blocking(batch).is_err() {
+                    return;
+                }
+            }
+        });
+        for worker in 0..4 {
             let shared = shared.clone();
             let tx = tx.clone();
             let config = config.clone();
@@ -478,13 +500,13 @@ impl Service {
                     match load(&config, &agent, key, online) {
                         Ok((payload, refresh)) => {
                             let payload = Arc::new(payload);
-                            if tx.send_blocking((key, Ok(payload.clone()))).is_err() {
+                            if tx.send((key, Ok(payload.clone()))).is_err() {
                                 return;
                             }
                             if refresh {
                                 match load_impl(&config, &agent, key, online, false) {
                                     Ok((updated, _)) if updated.version() != payload.version() => {
-                                        if tx.send_blocking((key, Ok(Arc::new(updated)))).is_err() {
+                                        if tx.send((key, Ok(Arc::new(updated)))).is_err() {
                                             return;
                                         }
                                     }
@@ -503,7 +525,7 @@ impl Service {
                                 shared.work.lock().unwrap().blocked[usize::from(key.dem)] =
                                     Some(Instant::now() + Duration::from_secs(60));
                             }
-                            if tx.send_blocking((key, Err(message))).is_err() {
+                            if tx.send((key, Err(message))).is_err() {
                                 return;
                             }
                         }
@@ -514,35 +536,30 @@ impl Service {
         drop(tx);
         let weak = Rc::downgrade(&ui);
         zgui::reactive::spawn_local(async move {
-            while let Ok((key, value)) = rx.recv().await {
+            while let Ok(batch) = rx.recv().await {
                 let Some(ui) = weak.upgrade() else {
                     return;
                 };
                 let mut cache = ui.cache.borrow_mut();
-                cache.tick += 1;
-                let used = cache.tick;
-                let value = value.map(|payload| {
-                    let image = match payload.as_ref() {
-                        Payload::Raster(r) => Some(zgui_image::ImageBytes::new(r.encoded.clone())),
-                        _ => None,
-                    };
-                    Ready { payload, image }
-                });
-                cache.entries.insert(key, Entry { value, used });
                 let mut work = ui.shared.work.lock().unwrap();
-                work.claimed.remove(&key);
-                trim(&mut cache, &work.desired);
-                if memory(&cache) > MEMORY {
-                    cache.entries.insert(
-                        key,
-                        Entry {
-                            value: Err(
-                                "Map tile memory budget reached; reduce the visible area".into()
-                            ),
-                            used,
-                        },
-                    );
+                for (key, value) in batch {
+                    cache.tick += 1;
+                    let used = cache.tick;
+                    let value = value.map(|payload| {
+                        let image = match payload.as_ref() {
+                            Payload::Raster(r) => {
+                                Some(zgui_image::ImageBytes::new(r.encoded.clone()))
+                            }
+                            _ => None,
+                        };
+                        Ready { payload, image }
+                    });
+                    cache.entries.insert(key, Entry { value, used });
+                    work.claimed.remove(&key);
                 }
+                // Visible demand is capped by the selector; the budget only
+                // limits retained off-screen tiles. Never fail a visible tile.
+                trim(&mut cache, &work.desired);
                 work.known = cache.entries.keys().copied().collect();
                 drop(work);
                 drop(cache);
@@ -557,6 +574,7 @@ impl Service {
         Self {
             ui: StoredValue::new_local(ui),
             revision,
+            demanded: RwSignal::new_local(0),
         }
     }
 
@@ -587,6 +605,7 @@ impl Service {
         let ui = self.ui.get_value();
         let mut cache = ui.cache.borrow_mut();
         let demand = Demand { keys, online };
+        let entries = cache.entries.len();
         let became_online = online && cache.demands.get(&owner).is_some_and(|old| !old.online);
         if became_online {
             for key in &demand.keys {
@@ -628,13 +647,38 @@ impl Service {
             .collect();
         trim(&mut cache, &work.desired);
         work.known = cache.entries.keys().copied().collect();
+        // Demand alone changes no payload; rebuilding scenes for it doubles
+        // per-frame work while dragging. Only status depends on demand.
+        let changed = cache.entries.len() != entries;
         drop(work);
         drop(cache);
         ui.shared.changed.notify_all();
-        self.revision.try_update(|r| *r = r.wrapping_add(1));
+        self.demanded.try_update(|r| *r = r.wrapping_add(1));
+        if changed {
+            self.revision.try_update(|r| *r = r.wrapping_add(1));
+        }
     }
     pub fn payload(self, key: Key) -> Option<Arc<Payload>> {
         self.revision.get();
+        self.payload_untracked(key)
+    }
+    /// `payload_untracked` for many keys under one cache borrow.
+    pub fn payloads_untracked(self, keys: impl Iterator<Item = Key>) -> Vec<Option<Arc<Payload>>> {
+        self.ui.with_value(|ui| {
+            let mut cache = ui.cache.borrow_mut();
+            cache.tick += 1;
+            let tick = cache.tick;
+            keys.map(|key| {
+                let entry = cache.entries.get_mut(&key)?;
+                entry.used = tick;
+                entry.value.as_ref().ok().map(|ready| ready.payload.clone())
+            })
+            .collect()
+        })
+    }
+    /// For callers that already track `revision`: re-tracking per tile costs
+    /// more than the lookup when a scene reads hundreds of tiles.
+    pub fn payload_untracked(self, key: Key) -> Option<Arc<Payload>> {
         self.ui.with_value(|ui| {
             let mut cache = ui.cache.borrow_mut();
             cache.tick += 1;
@@ -675,27 +719,31 @@ impl Service {
     }
     pub fn cached_raster_children(self, parent: TileId, provider: Provider) -> Vec<TileId> {
         self.ui.with_value(|ui| {
-            ui.cache
-                .borrow()
-                .entries
-                .iter()
-                .filter_map(|(key, entry)| {
-                    if key.dem
-                        || key.provider != provider
-                        || key.z <= parent.z
-                        || entry.value.is_err()
-                    {
-                        return None;
-                    }
-                    let shift = key.z - parent.z;
-                    if key.x >> shift != parent.canonical_x() || key.y >> shift != parent.y {
-                        return None;
-                    }
-                    Some(TileId {
-                        z: key.z,
-                        x: parent.x * (1_i64 << shift) + i64::from(key.x % (1_u32 << shift)),
-                        y: key.y,
-                    })
+            let cache = ui.cache.borrow();
+            // Keys order by (layer, provider, z, x, y): range each deeper zoom's x band.
+            (parent.z + 1..=MAX_TILE_ZOOM)
+                .flat_map(|z| {
+                    let shift = z - parent.z;
+                    let x = u64::from(parent.canonical_x()) << shift;
+                    let key = |x: u64| Key {
+                        dem: false,
+                        provider,
+                        z,
+                        x: x.min(u64::from(u32::MAX)) as u32,
+                        y: 0,
+                    };
+                    cache
+                        .entries
+                        .range(key(x)..key(x + (1 << shift)))
+                        .filter(move |(key, entry)| {
+                            key.y >> shift == parent.y && entry.value.is_ok()
+                        })
+                        .map(move |(key, _)| TileId {
+                            z,
+                            x: parent.x * (1_i64 << shift) + i64::from(key.x % (1_u32 << shift)),
+                            y: key.y,
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .collect()
         })
@@ -728,6 +776,7 @@ impl Service {
     }
     pub fn status(self) -> String {
         self.revision.get();
+        self.demanded.get();
         let ui = self.ui.get_value();
         let cache = ui.cache.borrow();
         let work = ui.shared.work.lock().unwrap();
@@ -765,7 +814,7 @@ fn memory(cache: &Cache) -> usize {
 }
 fn trim(cache: &mut Cache, desired: &BTreeSet<Key>) {
     let mut bytes = memory(cache);
-    while cache.entries.len() > 1024 || bytes > MEMORY {
+    while cache.entries.len() > 2048 || bytes > MEMORY {
         let oldest = cache
             .entries
             .iter()
@@ -820,7 +869,7 @@ fn load_impl(
     online: bool,
     serve_stale: bool,
 ) -> Result<(Payload, bool), String> {
-    if key.z > 19 || key.x >= 1 << key.z || key.y >= 1 << key.z {
+    if key.z > MAX_TILE_ZOOM || key.x >= 1 << key.z || key.y >= 1 << key.z {
         return Err("Invalid tile coordinate".into());
     }
     if let Some(local) = &config.local {

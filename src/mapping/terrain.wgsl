@@ -1,11 +1,11 @@
-struct View { matrix: mat4x4<f32> }
+struct View { matrix: mat4x4<f32>, fog: vec4<f32> }
 struct Tile { position: vec4<f32>, dem: vec4<f32>, settings: vec4<f32>, unused: vec4<f32> }
 @group(0) @binding(0) var<uniform> view: View;
 @group(1) @binding(0) var imagery: texture_2d<f32>;
 @group(1) @binding(1) var imagery_sampler: sampler;
 @group(1) @binding(2) var heights: texture_2d<f32>;
 @group(1) @binding(3) var<uniform> tile: Tile;
-struct Output { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) shade: f32 }
+struct Output { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) shade: f32, @location(2) fog: f32 }
 fn elevation(uv:vec2<f32>)->f32 {
     let dimensions=vec2<i32>(textureDimensions(heights));
     let point=clamp(uv*vec2<f32>(dimensions)-vec2(0.5),vec2(0.),vec2<f32>(dimensions-vec2(1)));
@@ -29,9 +29,12 @@ fn elevation(uv:vec2<f32>)->f32 {
     let dz=elevation(dem_uv+vec2(0.,step.y))-elevation(dem_uv-vec2(0.,step.y));
     let normal=normalize(vec3(-dx*tile.settings.x,2.*tile.dem.w,-dz*tile.settings.x));
     let position=vec3(tile.position.x+uv.x*tile.position.z,(h-tile.position.w)*tile.settings.x-skirt,tile.position.y+uv.y*tile.position.z);
-    var output:Output;output.position=view.matrix*vec4(position,1.);output.uv=tile.unused.xy+uv*tile.unused.z;
+    var output:Output;output.position=view.matrix*vec4(position,1.);
+    output.fog=smoothstep(view.fog.x,view.fog.y,output.position.w);output.uv=tile.unused.xy+uv*tile.unused.z;
     output.shade=0.45+0.55*max(dot(normal,normalize(vec3(-0.4,0.85,-0.3))),0.);return output;
 }
 @fragment fn fragment(input:Output)->@location(0) vec4<f32> {
-    return vec4(textureSample(imagery,imagery_sampler,input.uv).rgb*input.shade,1.);
+    // Matches the pass clear color.
+    let sky=vec3(0.16,0.22,0.29);
+    return vec4(mix(textureSample(imagery,imagery_sampler,input.uv).rgb*input.shade,sky,input.fog),1.);
 }

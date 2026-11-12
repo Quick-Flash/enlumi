@@ -342,7 +342,7 @@ fn hovered_time(pane: Pane) -> Option<f64> {
 
 #[component]
 pub(crate) fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoView {
-    use crate::state_key::StateKeyProps;
+    use crate::state_key::StateLegendProps;
     let collapsed = RwSignal::new_local(false);
     let settings = RwSignal::new_local(false);
     plot::zgui_svg::register_description(
@@ -361,7 +361,7 @@ pub(crate) fn TrajectoryLegend(workbench: Workbench, pane: Pane) -> impl IntoVie
             for line in move ||{let keys=workbench.legend_keys(pane);let mut lines=pane.view_lines.get();lines.sort_by_key(|line|keys.iter().position(|id|*id==line.id).unwrap_or(usize::MAX));lines},key=|line|(line.id,line.name.clone()) {
                 TrajectoryLegendRow(workbench=workbench,pane=pane,line=line)
             }
-            StateKey(workbench=workbench,pane=pane)
+            StateLegend(workbench=workbench,pane=pane)
         }
     }}
 }

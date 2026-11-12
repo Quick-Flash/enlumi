@@ -108,29 +108,42 @@ pub(crate) fn vertices(
     let mut ground = super::ground_path::Cache::default();
     ground.prepare(&scene.paths, &scene.tiles);
     let mut detail = super::trace_detail::Cache::default();
-    let mut vertices = vertices_layer(scene, camera, orbit, size, false, &mut ground, &mut detail);
-    vertices.extend(vertices_layer(
-        scene,
+    let view = super::trace_detail::View {
         camera,
         orbit,
         size,
-        true,
-        &mut ground,
-        &mut detail,
-    ));
-    vertices
+        focus: scene.center_height(camera),
+    };
+    for path in scene.paths.iter() {
+        if let Some(origin) = scene.path_base(path) {
+            ground.get(path, &detail.trace(path, &scene.colors, view, origin));
+        }
+    }
+    [Layer::Ground, Layer::Trace, Layer::Timeline]
+        .into_iter()
+        .flat_map(|layer| {
+            vertices_layer(scene, camera, orbit, size, layer, &mut ground, &mut detail)
+        })
+        .collect()
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Layer {
+    /// Draped ground strokes, stored once as halos (see flight3.wgsl).
+    Ground,
+    Trace,
+    Timeline,
 }
 fn vertices_layer(
     scene: &Scene,
     camera: Camera,
     orbit: super::terrain::Orbit,
     size: [f64; 2],
-    timeline_only: bool,
+    layer: Layer,
     ground: &mut super::ground_path::Cache,
     detail: &mut super::trace_detail::Cache,
 ) -> Vec<[f32; 11]> {
     let scale = super::terrain::ground_scale(camera);
-    let base = f64::from(scene.center_height(camera));
+    let basis = Basis::of(scene, camera);
     let projection = super::hover::Projection::new(scene, camera, orbit, size);
     let mut vertices = Vec::new();
     let view = super::trace_detail::View {
@@ -144,11 +157,11 @@ fn vertices_layer(
             continue;
         };
         let vertex = |point: [f64; 3], color: [u8; 4]| {
+            let [x, y, z] = basis.place(point, origin, orbit.exaggeration);
             [
-                ((point[0] - camera.center[0]) * scale) as f32,
-                ((point[2] + f64::from(origin) - base) * f64::from(orbit.exaggeration) + 0.5)
-                    as f32,
-                ((camera.center[1] - point[1]) * scale) as f32,
+                x,
+                y,
+                z,
                 f32::from(color[0]) / 255.,
                 f32::from(color[1]) / 255.,
                 f32::from(color[2]) / 255.,
@@ -159,20 +172,19 @@ fn vertices_layer(
                 0.,
             ]
         };
-        if !timeline_only {
-            if scene.ground_projection {
-                let ground = detail.ground(path.id, ground.get(path), view);
-                for (width, color) in [(3.5, [255, 255, 255, 170]), (1.5, [0, 0, 0, 220])] {
-                    for segment in &ground {
-                        for &[x, y, z] in segment {
-                            let mut v = vertex([x, y, z - f64::from(origin)], color);
-                            v[7] = width;
-                            v[8] = -1.;
-                            vertices.push(v);
-                        }
-                    }
+        if layer == Layer::Ground && scene.ground_projection {
+            // Renderer::prepare drapes every path before building this layer.
+            let source = ground.cached(path.id).unwrap_or_default();
+            for segment in &detail.ground(path.id, source, view) {
+                for &[x, y, z] in segment {
+                    let mut v = vertex([x, y, z - f64::from(origin)], [255, 255, 255, 170]);
+                    v[7] = 3.5;
+                    v[8] = -1.;
+                    vertices.push(v);
                 }
             }
+        }
+        if layer == Layer::Trace {
             if path.drawing.pattern != plot::line_draw::LinePattern::None {
                 let pattern = match path.drawing.pattern {
                     plot::line_draw::LinePattern::Dashed => 1.,
@@ -327,7 +339,9 @@ fn vertices_layer(
                 }
             }
         }
-        if timeline_only && let Some(point) = scene.time.and_then(|time| path.at(time)) {
+        if layer == Layer::Timeline
+            && let Some(point) = scene.time.and_then(|time| path.at(time))
+        {
             if scene.ground_projection
                 && let Some(height) = scene
                     .tiles
@@ -503,7 +517,6 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
                     .collect::<Vec<_>>()
             }),
             altitudes.get(),
-            pane.plot.hidden.get(),
             pane.plot.styles.get(),
             pane.drawing.get(),
         )
@@ -522,7 +535,6 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
         };
         let lines = pane.lines.get();
         let altitudes = altitudes.get();
-        let hidden = pane.plot.hidden.get();
         pane.plot.styles.get();
         let drawing = pane.drawing.get();
         let colors = data
@@ -540,7 +552,8 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
         generation.set(next);
         workbench.task(async move {
             let result = plot::preparation::prepare("3d-alignment", move || {
-                prepare(&data, &lines, &altitudes, &hidden, &colors)
+                // Hidden traces stay prepared so legend hover can reveal them.
+                prepare(&data, &lines, &altitudes, &BTreeSet::new(), &colors)
             })
             .await;
             if generation.try_get_untracked() != Some(next) {
@@ -565,24 +578,70 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
         });
     });
     on_cleanup_local(move || drop(effect));
+    // Visibility, legend order and hover emphasis only restyle prepared paths; no re-alignment.
+    let styled = Memo::new_owning(move |_| {
+        let order = pane.legend_order.get();
+        let emphasized = pane.plot.emphasized.get();
+        let hidden = pane.plot.hidden.get();
+        (
+            emphasize(&output.get(), &order, &hidden, emphasized.as_deref()),
+            true,
+        )
+    });
     (
-        Signal::derive_local(move || output.get()),
+        Signal::derive_local(move || styled.get()),
         Signal::derive_local(move || prepared.get().is_some_and(|key| key == request.get())),
     )
 }
+/// Paint in legend order with the emphasized trace last, wider, and others dimmed,
+/// matching 2D plots. Hidden traces show only while emphasized.
+fn emphasize(
+    paths: &[Path3],
+    order: &[u64],
+    hidden: &BTreeSet<String>,
+    emphasized: Option<&str>,
+) -> Arc<[Path3]> {
+    let emphasized = emphasized.and_then(|id| id.parse::<u64>().ok());
+    let mut paths = paths
+        .iter()
+        .filter(|path| emphasized == Some(path.id) || !hidden.contains(&path.id.to_string()))
+        .cloned()
+        .collect::<Vec<_>>();
+    paths.sort_by_key(|path| {
+        (
+            emphasized == Some(path.id),
+            order
+                .iter()
+                .position(|id| *id == path.id)
+                .unwrap_or(usize::MAX),
+        )
+    });
+    if let Some(emphasized) = emphasized {
+        for path in &mut paths {
+            if path.id == emphasized {
+                path.width += 1.5;
+            } else {
+                path.color[3] = (f32::from(path.color[3]) * 0.3).round() as u8;
+            }
+        }
+    }
+    paths.into()
+}
 
-type RenderKey = (
+/// Changes that make built geometry wrong: rebuild before drawing.
+type SyncKey = (
     usize,
-    [u64; 2],
-    u32,
     u32,
     Vec<(u64, u32)>,
-    u64,
-    u64,
     Option<([u32; 16], [u64; 2])>,
     usize,
-    Option<super::ground_path::Key>,
+    bool,
 );
+/// Build camera and reduction detail. Geometry built for an older detail
+/// stays exactly placed under `Basis::offset`, so it may update in the
+/// background.
+type DetailKey = ([u64; 2], u32, u64, u64);
+type RenderKey = (SyncKey, DetailKey);
 fn geometry_key(
     scene: &Scene,
     camera: Camera,
@@ -603,43 +662,246 @@ fn geometry_key(
         )
     });
     (
-        scene.paths.as_ptr() as usize,
-        camera.center.map(f64::to_bits),
-        scene.center_height(camera).to_bits(),
-        orbit.exaggeration.to_bits(),
-        bases,
-        camera.zoom.to_bits(),
-        css[1].to_bits(),
-        patterned.then(|| {
-            (
-                orbit.matrix(camera, css).map(f32::to_bits),
-                css.map(f64::to_bits),
-            )
-        }),
-        Arc::as_ptr(&scene.colors) as usize,
-        scene
-            .ground_projection
-            .then(|| super::ground_path::key(&scene.tiles)),
+        (
+            scene.paths.as_ptr() as usize,
+            orbit.exaggeration.to_bits(),
+            bases,
+            patterned.then(|| {
+                (
+                    orbit.matrix(camera, css).map(f32::to_bits),
+                    css.map(f64::to_bits),
+                )
+            }),
+            Arc::as_ptr(&scene.colors) as usize,
+            scene.ground_projection,
+        ),
+        (
+            camera.center.map(f64::to_bits),
+            scene.center_height(camera).to_bits(),
+            camera.zoom.to_bits(),
+            css[1].to_bits(),
+        ),
     )
 }
+/// Camera frame that path vertices were built in (see `vertices_layer`).
+#[derive(Clone, Copy)]
+struct Basis {
+    center: [f64; 2],
+    scale: f64,
+    base: f64,
+}
+impl Basis {
+    fn of(scene: &Scene, camera: Camera) -> Self {
+        Self {
+            center: camera.center,
+            scale: super::terrain::ground_scale(camera),
+            base: f64::from(scene.center_height(camera)),
+        }
+    }
+    /// Camera-relative vertex position, as uploaded.
+    fn place(self, point: [f64; 3], origin: f32, exaggeration: f32) -> [f32; 3] {
+        [
+            ((point[0] - self.center[0]) * self.scale) as f32,
+            ((point[2] + f64::from(origin) - self.base) * f64::from(exaggeration) + 0.5) as f32,
+            ((self.center[1] - point[1]) * self.scale) as f32,
+        ]
+    }
+    /// Translation and horizontal scale that move vertices built in `self`
+    /// to where they belong in `now`; exact for pans and focus-height moves.
+    fn offset(self, now: Self, exaggeration: f32) -> [f32; 4] {
+        [
+            ((self.center[0] - now.center[0]) * now.scale) as f32,
+            ((self.base - now.base) * f64::from(exaggeration)) as f32,
+            ((now.center[1] - self.center[1]) * now.scale) as f32,
+            (now.scale / self.scale) as f32,
+        ]
+    }
+}
+/// Wakes the producer when background work finishes.
+pub type Wake = Arc<dyn Fn() + Send + Sync>;
+/// Builds trace and draped ground-stroke vertices, caching between builds.
+#[derive(Default)]
+struct PathBuilder {
+    ground: super::ground_path::Cache,
+    detail: super::trace_detail::Cache,
+    /// Per-path reductions; they depend only on the render key.
+    indices: BTreeMap<u64, Vec<usize>>,
+    trace: Option<RenderKey>,
+    /// Render key and draped segments behind the last ground vertices.
+    built: Option<(RenderKey, Vec<usize>)>,
+}
+/// New vertices for each layer; `None` keeps that layer's current buffer.
+struct Built {
+    basis: Basis,
+    trace: Option<Vec<[f32; 11]>>,
+    ground: Option<Vec<[f32; 11]>>,
+}
+impl PathBuilder {
+    fn build(
+        &mut self,
+        scene: &Scene,
+        camera: Camera,
+        orbit: super::terrain::Orbit,
+        css: [f64; 2],
+        key: &RenderKey,
+    ) -> Built {
+        let basis = Basis::of(scene, camera);
+        let trace = (self.trace.as_ref() != Some(key)).then(|| {
+            self.indices.clear();
+            self.detail.retain(&scene.paths);
+            self.trace = Some(key.clone());
+            vertices_layer(
+                scene,
+                camera,
+                orbit,
+                css,
+                Layer::Trace,
+                &mut self.ground,
+                &mut self.detail,
+            )
+        });
+        if !scene.ground_projection {
+            self.built = None;
+            return Built {
+                basis,
+                trace,
+                ground: Some(Vec::new()),
+            };
+        }
+        self.ground.prepare(&scene.paths, &scene.tiles);
+        let view = super::trace_detail::View {
+            camera,
+            orbit,
+            size: css,
+            focus: scene.center_height(camera),
+        };
+        let mut grounds = Vec::new();
+        for path in scene.paths.iter() {
+            let Some(origin) = scene.path_base(path) else {
+                continue;
+            };
+            let indices = self
+                .indices
+                .entry(path.id)
+                .or_insert_with(|| self.detail.trace(path, &scene.colors, view, origin));
+            grounds.push(Arc::as_ptr(&self.ground.get(path, indices)) as *const u8 as usize);
+        }
+        let built = Some((key.clone(), grounds));
+        let ground = (self.built != built).then(|| {
+            self.built = built;
+            vertices_layer(
+                scene,
+                camera,
+                orbit,
+                css,
+                Layer::Ground,
+                &mut self.ground,
+                &mut self.detail,
+            )
+        });
+        Built {
+            basis,
+            trace,
+            ground,
+        }
+    }
+}
+struct PathJob {
+    scene: Scene,
+    camera: Camera,
+    orbit: super::terrain::Orbit,
+    css: [f64; 2],
+    key: RenderKey,
+}
+struct PathDone {
+    key: RenderKey,
+    built: Built,
+}
+#[derive(Default)]
+struct PathQueue {
+    job: Option<PathJob>,
+    done: Option<PathDone>,
+    builds: u64,
+    closed: bool,
+}
+/// Rebuilds path geometry off the render thread when only the camera,
+/// detail or terrain changed: orbiting moves tiles under long paths in and
+/// out of view nearly every frame, and pans and zooms change the reduction.
+/// Current buffers stay correctly placed meanwhile, merely a frame behind.
+struct PathWorker {
+    queue: std::sync::Mutex<PathQueue>,
+    changed: std::sync::Condvar,
+}
+impl PathWorker {
+    fn spawn(wake: Wake) -> Arc<Self> {
+        let worker = Arc::new(Self {
+            queue: Default::default(),
+            changed: Default::default(),
+        });
+        let shared = worker.clone();
+        std::thread::spawn(move || {
+            let mut builder = PathBuilder::default();
+            loop {
+                let job = {
+                    let mut queue = shared.queue.lock().unwrap();
+                    loop {
+                        if queue.closed {
+                            return;
+                        }
+                        if let Some(job) = queue.job.take() {
+                            break job;
+                        }
+                        queue = shared.changed.wait(queue).unwrap();
+                    }
+                };
+                let before = builder.ground.builds;
+                let built = builder.build(&job.scene, job.camera, job.orbit, job.css, &job.key);
+                let mut queue = shared.queue.lock().unwrap();
+                queue.builds += builder.ground.builds - before;
+                queue.done = Some(PathDone {
+                    key: job.key,
+                    built,
+                });
+                drop(queue);
+                wake();
+            }
+        });
+        worker
+    }
+}
 pub struct Renderer {
-    ground_builds: u64,
     pipeline: zgui::surface::wgpu::RenderPipeline,
     viewport: zgui::surface::wgpu::Buffer,
     viewport_bind: zgui::surface::wgpu::BindGroup,
+    /// Markers are rebuilt for the current camera: no offset.
+    marker_viewport: zgui::surface::wgpu::Buffer,
+    marker_bind: zgui::surface::wgpu::BindGroup,
     geometry: super::flight3_buffer::Buffer,
+    ground_geometry: super::flight3_buffer::Buffer,
     marker: super::flight3_buffer::Buffer,
-    last_time: Option<Option<u64>>,
-    ground: super::ground_path::Cache,
     detail: super::trace_detail::Cache,
     held_paths: Option<Arc<[Path3]>>,
     held_colors: Option<Arc<super::telemetry::Coloring>>,
+    /// Key and camera frame of the uploaded trace and ground buffers.
     key: Option<RenderKey>,
+    basis: Option<Basis>,
+    /// Builds immediately when the sync key changes.
+    builder: PathBuilder,
+    worker: Arc<PathWorker>,
+    sent: Option<(RenderKey, super::ground_path::Key)>,
+    marker_key: Option<(RenderKey, Option<u64>, super::ground_path::Key)>,
+}
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        self.worker.queue.lock().unwrap().closed = true;
+        self.worker.changed.notify_one();
+    }
 }
 impl Renderer {
     pub fn new(
         device: &zgui::surface::wgpu::Device,
         view: &zgui::surface::wgpu::BindGroupLayout,
+        wake: Wake,
     ) -> Self {
         use zgui::surface::wgpu;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -648,7 +910,13 @@ impl Renderer {
         });
         let viewport = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map.trace3.viewport"),
-            size: 16,
+            size: 32,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let marker_viewport = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("map.trace3.marker_viewport"),
+            size: 32,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -660,19 +928,23 @@ impl Renderer {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: std::num::NonZeroU64::new(16),
+                    min_binding_size: std::num::NonZeroU64::new(32),
                 },
                 count: None,
             }],
         });
-        let viewport_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &viewport_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: viewport.as_entire_binding(),
-            }],
-        });
+        let bind = |buffer: &wgpu::Buffer| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &viewport_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+            })
+        };
+        let viewport_bind = bind(&viewport);
+        let marker_bind = bind(&marker_viewport);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[Some(view), Some(&viewport_layout)],
@@ -750,18 +1022,23 @@ impl Renderer {
             cache: None,
         });
         Self {
-            ground_builds: 0,
             pipeline,
             viewport,
             viewport_bind,
+            marker_viewport,
+            marker_bind,
             geometry: Default::default(),
+            ground_geometry: Default::default(),
             marker: Default::default(),
-            last_time: None,
-            ground: Default::default(),
             detail: Default::default(),
             held_paths: None,
             held_colors: None,
             key: None,
+            basis: None,
+            builder: PathBuilder::default(),
+            worker: PathWorker::spawn(wake),
+            sent: None,
+            marker_key: None,
         }
     }
     pub fn prepare(
@@ -772,45 +1049,53 @@ impl Renderer {
         orbit: super::terrain::Orbit,
         css: [f64; 2],
     ) {
-        let viewport = [css[0].max(1.) as f32, css[1].max(1.) as f32, 0., 0.];
-        gpu.queue().write_buffer(
-            &self.viewport,
-            0,
-            &viewport
-                .iter()
-                .flat_map(|v| v.to_ne_bytes())
-                .collect::<Vec<_>>(),
-        );
         let key = geometry_key(scene, camera, orbit, css);
-        let changed = self.key.as_ref() != Some(&key);
-        if changed {
-            self.key = Some(key);
+        let terrain = if scene.ground_projection {
+            super::ground_path::key(&scene.tiles)
+        } else {
+            Vec::new()
+        };
+        let wanted = (key.clone(), terrain.clone());
+        if self.key.as_ref().is_none_or(|(sync, _)| *sync != key.0) {
+            // Paths, colors, scale or patterns changed: old buffers are wrong.
             self.held_paths = Some(scene.paths.clone());
             self.held_colors = Some(scene.colors.clone());
-            if scene.ground_projection {
-                self.ground.prepare(&scene.paths, &scene.tiles);
-            } else {
-                self.ground = Default::default();
-            }
-            let before = self.ground.builds;
-            self.detail.retain(&scene.paths);
-            self.geometry.upload(
-                gpu,
-                &vertices_layer(
-                    scene,
-                    camera,
-                    orbit,
-                    css,
-                    false,
-                    &mut self.ground,
-                    &mut self.detail,
-                ),
-            );
-            self.ground_builds += self.ground.builds - before;
+            let built = self.builder.build(scene, camera, orbit, css, &key);
+            self.apply(gpu, key.clone(), built);
+            self.sent = Some(wanted);
+        } else if self.sent.as_ref() != Some(&wanted) {
+            self.worker.queue.lock().unwrap().job = Some(PathJob {
+                scene: scene.clone(),
+                camera,
+                orbit,
+                css,
+                key: key.clone(),
+            });
+            self.worker.changed.notify_one();
+            self.sent = Some(wanted);
         }
-        let time = Some(scene.time.map(f64::to_bits));
-        if changed || self.last_time != time {
-            self.last_time = time;
+        let done = self.worker.queue.lock().unwrap().done.take();
+        // Results for older paths or styles would draw wrong geometry.
+        if let Some(done) = done.filter(|done| done.key.0 == key.0) {
+            self.apply(gpu, done.key, done.built);
+        }
+        let now = Basis::of(scene, camera);
+        let offset = self.basis.map_or([0., 0., 0., 1.], |basis| {
+            basis.offset(now, orbit.exaggeration)
+        });
+        let size = [css[0].max(1.) as f32, css[1].max(1.) as f32, 0., 0.];
+        for (buffer, offset) in [
+            (&self.viewport, offset),
+            (&self.marker_viewport, [0., 0., 0., 1.]),
+        ] {
+            let values = size.iter().chain(&offset);
+            let bytes = values.flat_map(|v| v.to_ne_bytes()).collect::<Vec<_>>();
+            gpu.queue().write_buffer(buffer, 0, &bytes);
+        }
+        // Markers follow the camera, time and the terrain under the path.
+        let marker_key = Some((key, scene.time.map(f64::to_bits), terrain));
+        if self.marker_key != marker_key {
+            self.marker_key = marker_key;
             self.marker.upload(
                 gpu,
                 &vertices_layer(
@@ -818,22 +1103,34 @@ impl Renderer {
                     camera,
                     orbit,
                     css,
-                    true,
-                    &mut self.ground,
+                    Layer::Timeline,
+                    &mut self.builder.ground,
                     &mut self.detail,
                 ),
             );
         }
     }
+    fn apply(&mut self, gpu: &zgui::surface::GpuShare, key: RenderKey, built: Built) {
+        if let Some(trace) = built.trace {
+            self.geometry.upload(gpu, &trace);
+        }
+        if let Some(ground) = built.ground {
+            self.ground_geometry.upload(gpu, &ground);
+        }
+        self.key = Some(key);
+        self.basis = Some(built.basis);
+    }
     pub fn draw(&self, pass: &mut zgui::surface::wgpu::RenderPass<'_>) {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(1, &self.viewport_bind, &[]);
+        self.ground_geometry.draw_ground(pass);
         self.geometry.draw(pass);
+        pass.set_bind_group(1, &self.marker_bind, &[]);
         self.marker.draw(pass);
     }
     pub fn work(&self) -> Work {
         Work {
-            ground_builds: self.ground_builds,
+            ground_builds: self.builder.ground.builds + self.worker.queue.lock().unwrap().builds,
             trace_uploads: self.geometry.uploads,
             trace_bytes: self.geometry.uploaded_bytes,
             marker_uploads: self.marker.uploads,
@@ -871,6 +1168,55 @@ mod tests {
             )
             .unwrap(),
         }
+    }
+    #[test]
+    fn offset_moves_old_vertices_onto_the_current_camera() {
+        let point = [1200., -800., 75.];
+        let built = Basis {
+            center: [0., 0.],
+            scale: 0.76,
+            base: 1300.,
+        };
+        let now = Basis {
+            center: [350., -420.],
+            scale: 0.7605,
+            base: 1342.,
+        };
+        let [x, y, z] = built.place(point, 20., 2.);
+        let [dx, dy, dz, w] = built.offset(now, 2.);
+        let moved = [x * w + dx, y + dy, z * w + dz];
+        let expected = now.place(point, 20., 2.);
+        for axis in 0..3 {
+            assert!(
+                (moved[axis] - expected[axis]).abs() < 1e-3,
+                "{moved:?} vs {expected:?}"
+            );
+        }
+    }
+    #[test]
+    fn emphasis_follows_legend_order_and_raises_hovered_trace() {
+        let path = |id| Path3 {
+            id,
+            origin: [0., 0.],
+            points: Arc::from([]),
+            times: Arc::from([]),
+            color: [255; 4],
+            width: 2.,
+            drawing: Default::default(),
+            radius: 3.,
+            marker: plot::plot_data::MarkerShape::Circle,
+            local: false,
+        };
+        let paths = [path(1), path(2), path(3)];
+        let ids = |paths: &[Path3]| paths.iter().map(|p| p.id).collect::<Vec<_>>();
+        let none = BTreeSet::new();
+        assert_eq!(ids(&emphasize(&paths, &[3, 1, 2], &none, None)), [3, 1, 2]);
+        let hidden = BTreeSet::from(["1".to_string()]);
+        assert_eq!(ids(&emphasize(&paths, &[3, 1, 2], &hidden, None)), [3, 2]);
+        let styled = emphasize(&paths, &[3, 1, 2], &hidden, Some("1"));
+        assert_eq!(ids(&styled), [3, 2, 1]);
+        assert_eq!((styled[2].width, styled[2].color[3]), (3.5, 255));
+        assert_eq!((styled[0].width, styled[0].color[3]), (2., 77));
     }
     #[test]
     fn projected_3d_segment_pins_interpolated_timeline_time() {

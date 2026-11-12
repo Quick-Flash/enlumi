@@ -1,8 +1,10 @@
 //! Drape each segment over terrain triangle edges so hills cannot hide its middle.
 use super::{camera::WORLD, flight3::Path3, terrain::Tile};
 pub type Key = Vec<(super::camera::TileId, super::camera::TileId, usize)>;
+/// Sorted: scene tile order varies frame to frame for the same terrain,
+/// and an order-only change must not rebuild draped paths.
 pub fn key(tiles: &[Tile]) -> Key {
-    tiles
+    let mut key: Key = tiles
         .iter()
         .map(|tile| {
             (
@@ -13,7 +15,9 @@ pub fn key(tiles: &[Tile]) -> Key {
                     .map_or(0, |elevation| std::sync::Arc::as_ptr(elevation) as usize),
             )
         })
-        .collect()
+        .collect();
+    key.sort_unstable();
+    key
 }
 
 pub(super) fn cuts(tile: &Tile, a: [f64; 2], b: [f64; 2], cuts: &mut Vec<f64>) {
@@ -71,14 +75,21 @@ pub(super) fn cuts(tile: &Tile, a: [f64; 2], b: [f64; 2], cuts: &mut Vec<f64>) {
 
 #[cfg(test)]
 pub fn segments(path: &Path3, tiles: &[Tile]) -> Vec<[[f64; 3]; 2]> {
-    build(path, &super::ground_mesh::Sampler::new(tiles))
+    let indices = (0..path.points.len()).collect::<Vec<_>>();
+    build(path, &indices, &super::ground_mesh::Sampler::new(tiles))
 }
-fn build(path: &Path3, sampler: &super::ground_mesh::Sampler) -> Vec<[[f64; 3]; 2]> {
-    let mut output = Vec::with_capacity(path.points.len().saturating_sub(1));
+/// Drape the chords between `indices` samples. Callers pass the trace's
+/// screen-accurate reduction, so dense logs do not drape every raw sample.
+fn build(
+    path: &Path3,
+    indices: &[usize],
+    sampler: &super::ground_mesh::Sampler,
+) -> Vec<[[f64; 3]; 2]> {
+    let mut output = Vec::with_capacity(indices.len().saturating_sub(1));
     let mut edges = Vec::with_capacity(16);
     let mut previous = None;
     let mut last_end: Option<[f64; 3]> = None;
-    for point in path.points.iter() {
+    for point in indices.iter().map(|&index| &path.points[index]) {
         let valid = |p: &[f64; 3]| p[..2].iter().all(|v| v.is_finite());
         if !valid(point) {
             previous = None;
@@ -117,6 +128,7 @@ fn build(path: &Path3, sampler: &super::ground_mesh::Sampler) -> Vec<[[f64; 3]; 
 pub type Segments = std::sync::Arc<[[[f64; 3]; 2]]>;
 struct CachedPath {
     points: std::sync::Arc<[[f64; 3]]>,
+    indices: Vec<usize>,
     ground: Segments,
     bounds: ([f64; 2], [f64; 2]),
     terrain: Key,
@@ -148,20 +160,29 @@ impl Cache {
         let key = key(tiles);
         if self.sampler.is_none() || self.terrain != key {
             self.terrain = key;
-            self.sampler = Some(super::ground_mesh::Sampler::new(tiles));
+            self.sampler = Some(super::ground_mesh::Sampler::reusing(
+                tiles,
+                self.sampler.as_ref(),
+            ));
         }
         self.paths
             .retain(|id, _| paths.iter().any(|path| path.id == *id));
     }
-    pub fn get(&mut self, path: &Path3) -> Segments {
+    /// Segments from the last `get` for this path.
+    pub fn cached(&self, id: u64) -> Option<Segments> {
+        self.paths.get(&id).map(|cached| cached.ground.clone())
+    }
+    pub fn get(&mut self, path: &Path3, indices: &[usize]) -> Segments {
         if let Some(cached) = self.paths.get(&path.id)
             && std::sync::Arc::ptr_eq(&cached.points, &path.points)
+            && cached.indices == indices
             && cached.terrain == region(&self.terrain, cached.bounds)
         {
             return cached.ground.clone();
         }
         let ground: Segments = build(
             path,
+            indices,
             self.sampler
                 .as_ref()
                 .expect("Prepare ground cache before use"),
@@ -186,6 +207,7 @@ impl Cache {
             path.id,
             CachedPath {
                 points: path.points.clone(),
+                indices: indices.to_vec(),
                 ground: ground.clone(),
                 bounds,
                 terrain: region(&self.terrain, bounds),
@@ -265,12 +287,15 @@ mod tests {
         let mut cache = Cache::default();
         cache.prepare(std::slice::from_ref(&path), &tiles);
         let start = std::time::Instant::now();
-        let first = cache.get(&path);
+        let first = cache.get(&path, &(0..path.points.len()).collect::<Vec<_>>());
         eprintln!("cached projection cold: {:?}", start.elapsed());
         let start = std::time::Instant::now();
         for _ in 0..100 {
             cache.prepare(std::slice::from_ref(&path), &tiles);
-            assert!(Arc::ptr_eq(&first, &cache.get(&path)));
+            assert!(Arc::ptr_eq(
+                &first,
+                &cache.get(&path, &(0..path.points.len()).collect::<Vec<_>>())
+            ));
         }
         eprintln!(
             "cached projection warm per frame: {:?}",
@@ -283,12 +308,15 @@ mod tests {
         let tile = flat(super::super::camera::TileId { z: 0, x: 0, y: 0 }, 5.);
         let mut cache = Cache::default();
         cache.prepare(std::slice::from_ref(&path), std::slice::from_ref(&tile));
-        let first = cache.get(&path);
+        let first = cache.get(&path, &(0..path.points.len()).collect::<Vec<_>>());
         path.color = [100, 200, 30, 255];
         cache.prepare(std::slice::from_ref(&path), std::slice::from_ref(&tile));
-        assert!(Arc::ptr_eq(&first, &cache.get(&path)));
+        assert!(Arc::ptr_eq(
+            &first,
+            &cache.get(&path, &(0..path.points.len()).collect::<Vec<_>>())
+        ));
         cache.prepare(std::slice::from_ref(&path), &[flat(tile.id, 20.)]);
-        let updated = cache.get(&path);
+        let updated = cache.get(&path, &(0..path.points.len()).collect::<Vec<_>>());
         assert!(!Arc::ptr_eq(&first, &updated));
         assert!(updated.iter().flatten().all(|p| p[2] == 20.));
     }
@@ -305,7 +333,7 @@ mod tests {
         );
         let mut cache = Cache::default();
         cache.prepare(std::slice::from_ref(&path), std::slice::from_ref(&tile));
-        let first = cache.get(&path);
+        let first = cache.get(&path, &(0..path.points.len()).collect::<Vec<_>>());
         let remote = flat(
             super::super::camera::TileId {
                 z: 14,
@@ -315,7 +343,10 @@ mod tests {
             20.,
         );
         cache.prepare(std::slice::from_ref(&path), &[tile, remote]);
-        assert!(Arc::ptr_eq(&first, &cache.get(&path)));
+        assert!(Arc::ptr_eq(
+            &first,
+            &cache.get(&path, &(0..path.points.len()).collect::<Vec<_>>())
+        ));
         assert_eq!(cache.builds, 1);
     }
     #[test]

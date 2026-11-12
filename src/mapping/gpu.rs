@@ -351,10 +351,22 @@ impl Drop for Producer {
     }
 }
 
-fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Capture) {
+fn produce(shared: &Arc<Shared>, handle: &SurfaceHandle, stats: &Stats, capture: &Capture) {
+    // Background path work redraws the current scene when it finishes.
+    let wake: super::flight3::Wake = {
+        let shared = shared.clone();
+        Arc::new(move || {
+            let mut state = shared.state.lock().unwrap();
+            state.revision = state.revision.wrapping_add(1);
+            shared.changed.notify_one();
+        })
+    };
     let mut revision = None;
     let mut pipeline = None::<(u64, Renderer)>;
     let mut failed_generation = None;
+    // Previous frame's GPU work: waited on just before the next submit, so CPU
+    // preparation of one frame overlaps GPU execution of the last.
+    let mut in_flight: Option<(u64, wgpu::SubmissionIndex)> = None;
     loop {
         let snapshot = {
             let mut state = shared.state.lock().unwrap();
@@ -387,6 +399,7 @@ fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Cap
                     Renderer::Terrain(Box::new(terrain_gpu::Renderer::new(
                         gpu.device(),
                         gpu.queue(),
+                        wake.clone(),
                     )))
                 } else {
                     Renderer::Checker(Pipeline::new(gpu.device()))
@@ -488,18 +501,21 @@ fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Cap
                 .resident_bytes
                 .store(renderer.resident_bytes as u64, Ordering::Release);
         }
-        let submission = gpu.queue().submit([encoder.finish()]);
         stats.prepare_ns.fetch_add(
             prepare_started.elapsed().as_nanos() as u64,
             Ordering::Release,
         );
         let wait_started = std::time::Instant::now();
-        // Bound in-flight work; waiting is confined to this producer. Each changed
-        // frame has a fresh texture, so the UI can safely retain the previous one.
-        if let Err(error) = device.poll(wgpu::PollType::Wait {
-            submission_index: Some(submission),
-            timeout: Some(std::time::Duration::from_secs(1)),
-        }) {
+        // Bound in-flight work to one frame; waiting is confined to this producer.
+        // Each frame has a fresh texture, so the UI can safely retain the previous
+        // one, and it samples on the same queue, after this frame's rendering.
+        if let Some((generation, submission)) = in_flight.take()
+            && generation == gpu.generation()
+            && let Err(error) = device.poll(wgpu::PollType::Wait {
+                submission_index: Some(submission),
+                timeout: Some(std::time::Duration::from_secs(1)),
+            })
+        {
             eprintln!("Map preview GPU submission failed: {error}");
             // Do not keep submitting to a stalled device. A DeviceLost event with
             // a replacement generation wakes us and rebuilds the pipeline.
@@ -510,6 +526,7 @@ fn produce(shared: &Shared, handle: &SurfaceHandle, stats: &Stats, capture: &Cap
         stats
             .wait_ns
             .fetch_add(wait_started.elapsed().as_nanos() as u64, Ordering::Release);
+        in_flight = Some((gpu.generation(), gpu.queue().submit([encoder.finish()])));
         let state = shared.state.lock().unwrap();
         // Present completed work while a newer camera revision is queued, so
         // continuous orbit/pan input cannot starve the display. A changed

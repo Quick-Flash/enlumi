@@ -14,11 +14,14 @@ use zgui::{
 
 struct Probe {
     log: RefCell<Option<BufWriter<std::fs::File>>>,
+    /// Per-frame section times (see `frame_profile`).
+    profile: RefCell<Option<BufWriter<std::fs::File>>>,
     started: Instant,
 }
 impl FrameProbe for Probe {
     fn frame_ended(&self, _window: &Window) {}
     fn frame_reported(&self, _window: &Window, report: &FrameReport) {
+        self.write_profile(report);
         let stats = match report.outcome {
             FrameOutcome::Presented(stats) => Some(stats),
             _ => None,
@@ -46,6 +49,50 @@ impl FrameProbe for Probe {
     }
 }
 
+impl Probe {
+    fn write_profile(&self, report: &FrameReport) {
+        let mut output = self.profile.borrow_mut();
+        let Some(log) = output.as_mut() else {
+            return;
+        };
+        let sections = crate::frame_profile::take();
+        let frame_ms = report.elapsed.as_secs_f64() * 1000.;
+        let mut row = format!(
+            "{:.3},{},{frame_ms:.3},{:.3}",
+            self.started.elapsed().as_secs_f64() * 1000.,
+            u8::from(matches!(report.outcome, FrameOutcome::Presented(_))),
+            report.paint_elapsed.as_secs_f64() * 1000.
+        );
+        for ms in sections {
+            row.push_str(&format!(",{ms:.3}"));
+        }
+        // Sections can also run between frames (input handling), so "other"
+        // is only frame time not covered by them.
+        row.push_str(&format!(",{:.3}", frame_ms - sections.iter().sum::<f64>()));
+        if writeln!(log, "{row}").and_then(|()| log.flush()).is_err() {
+            *output = None;
+        }
+    }
+}
+
+fn create_log(variable: &str, header: &str) -> Option<BufWriter<std::fs::File>> {
+    let path = std::env::var_os(variable)?;
+    match std::fs::File::create(&path).and_then(|file| {
+        let mut log = BufWriter::new(file);
+        writeln!(log, "{header}")?;
+        Ok(log)
+    }) {
+        Ok(log) => Some(log),
+        Err(error) => {
+            eprintln!(
+                "Cannot create performance log {}: {error}",
+                std::path::Path::new(&path).display()
+            );
+            None
+        }
+    }
+}
+
 pub fn probe() -> Rc<dyn FrameProbe> {
     let log = std::env::var_os("ENLUMI_PERF_LOG").and_then(|path| {
         match std::fs::File::create(&path).and_then(|file| {
@@ -57,8 +104,13 @@ pub fn probe() -> Rc<dyn FrameProbe> {
             Err(error)=>{eprintln!("Cannot create performance log {}: {error}",std::path::Path::new(&path).display());None}
         }
     });
+    let header = format!(
+        "at_ms,presented,frame_ms,paint_submit_ms,{},other_ms",
+        crate::frame_profile::SECTIONS.join(",")
+    );
     Rc::new(Probe {
         log: RefCell::new(log),
+        profile: RefCell::new(create_log("ENLUMI_PROFILE_LOG", &header)),
         started: Instant::now(),
     })
 }
