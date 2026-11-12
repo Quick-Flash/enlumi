@@ -67,3 +67,33 @@
 .timeline-readout { min-width: 84px; font-size: var(--app-font-xs); }
 
 .timeline-time-input { width: 62px; min-width: 48px; max-width: 62px; }
+.trace-card { flex: none; gap: 0; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); overflow: hidden; }
+.trace-card.trace-card-open { border-color: var(--app-border-strong); }
+.trace-card-summary { flex: none; align-items: center; gap: 7px; padding: 6px 8px; cursor: pointer; }
+.trace-card-summary:hover { background: var(--app-hover); }
+.trace-card-chevron { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: var(--app-muted); --zgui-stroke-width: 1.5px; pointer-events: none; }
+.trace-card-swatch { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.trace-card-swatch.trace-card-swatch-empty { border: 1px dashed var(--app-border-strong); background: transparent; }
+.trace-card-name { flex: 1; min-width: 0; gap: 1px; }
+.trace-card-title { font-size: var(--app-font-sm); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.trace-card-detail { color: var(--app-muted); font-size: var(--app-font-tiny); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.trace-card-body { flex: none; gap: 6px; padding: 4px 8px 8px; border-top: 1px solid var(--app-border); }
+.trace-card-group { flex: none; gap: 5px; padding: 0; }
+.trace-card-group-title { flex: none; align-items: center; justify-content: space-between; gap: 6px; padding-top: 4px; color: var(--app-dim); font-size: var(--app-font-tiny); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.trace-card-body .trajectory-axis-headings { border-bottom: none; background: transparent; }
+.trace-card-body .trajectory-axis-headings > text { padding: 2px 4px; }
+.trace-card-body .trajectory-pair-inputs { border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-inset); }
+.trace-card-segment { flex: none; gap: 3px; flex-wrap: wrap; align-items: center; }
+.trace-card-segment .app-action.zui-button[data-variant="ghost"] { height: 22px; min-height: 22px; padding: 0 7px; font-size: var(--app-font-xs); }
+.trace-card-label { color: var(--app-muted); font-size: var(--app-font-xs); margin-right: 2px; }
+.trace-card-gap { width: 8px; }
+.trace-card-badge { padding: 1px 6px; border-radius: var(--app-radius-sm); background: var(--app-selected); color: var(--app-accent-text); font-size: var(--app-font-tiny); text-transform: none; letter-spacing: 0; font-weight: 500; }
+.trace-card-group-title .trace-card-badge-warn.app-action.zui-button[data-variant="ghost"] { height: 18px; min-height: 18px; padding: 0 6px; border-color: var(--app-warning); background: transparent; color: var(--app-warning); font-size: var(--app-font-tiny); text-transform: none; letter-spacing: 0; }
+.trace-card-default { flex: none; align-items: center; justify-content: space-between; gap: 6px; padding-top: 4px; border-top: 1px dashed var(--app-border); }
+.trace-card-default .app-action.zui-button[data-variant="ghost"] { height: 22px; min-height: 22px; font-size: var(--app-font-xs); }
+.local-start .start-lat-lon { width: 100%; font-size: var(--app-font-xs); }
+.altitude-slot, .color-field-slot { flex: none; min-height: 30px; padding: 4px 6px; border: 1px dashed var(--app-border-strong); border-radius: var(--app-radius-sm); }
+.altitude-slot.axis-slot-filled, .color-field-slot.axis-slot-filled { border-style: solid; }
+.color-field-card { padding: 4px 8px 8px; gap: 5px; }
+.trace-card .trajectory-pair-drag { border-top: 1px solid var(--app-border); }
+.trajectory-readout { position: absolute; right: 10px; bottom: 34px; z-index: 2; gap: 1px; padding: 4px 8px; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-overlay); color: var(--app-foreground); font-size: var(--app-font-xs); font-variant-numeric: tabular-nums; pointer-events: none; }

@@ -129,9 +129,12 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
     let viewport = harness.app().windows()[0]
         .box_with_class("flight-map-view")
         .unwrap();
-    assert_eq!(
-        map_box.size.height, viewport.size.height,
-        "Toolbar must not consume map height"
+    let profile = harness.app().windows()[0]
+        .box_with_class("map-profile")
+        .map_or(0., |b| b.size.height.0);
+    assert!(
+        (map_box.size.height.0 - viewport.size.height.0 - profile).abs() < 2.,
+        "Toolbar must not consume map height; only the profile strip may"
     );
     let gear = harness.app().windows()[0]
         .box_with_class("plot-settings-trigger")
@@ -152,19 +155,13 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
             && gear.origin.x.0 + gear.size.width.0 <= legend.origin.x.0 + legend.size.width.0,
         "Settings gear must stay inside legend"
     );
-    click(&mut harness, "plot-settings-trigger", "");
+    click(&mut harness, "map-layers", "");
     click(&mut harness, "map-backend-trigger", "OpenStreetMap");
     click(&mut harness, "zui-select__item", "Esri World Imagery");
     assert_eq!(map().provider, super::tiles::Provider::EsriImagery);
-    click(&mut harness, "settings-done", "Done");
-    assert!(
-        harness.app().windows()[0]
-            .nodes_with_class("plot-settings-surface")
-            .is_empty(),
-        "Done must close legend settings"
-    );
+    click(&mut harness, "map-layers", "");
     workbench.timeline.time.set(Some(1.5));
-    click(&mut harness, "map-follow", "Follow");
+    click(&mut harness, "map-follow", "");
     assert!(map().follow);
     assert!((map().camera.unwrap().center[0] - 20.).abs() < 1e-6);
     assert_eq!(map().camera.unwrap().zoom, 14.);
@@ -204,17 +201,17 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
     harness.settle(128);
     click(&mut harness, "map-compass", "");
     assert_eq!(map().orbit.bearing, 0.);
-    click(&mut harness, "map-fit", "Fit");
+    click(&mut harness, "map-fit", "");
     settle_until(&mut harness, |_| {
         map().camera.is_some_and(|camera| camera != spatial)
     });
     let fitted_3d = map().camera;
     assert!(!map().follow);
     assert_eq!(map().orbit.bearing, 0.);
-    click(&mut harness, "plot-settings-trigger", "");
+    click(&mut harness, "map-layers", "");
     click(&mut harness, "map-ground-projection", "Ground path");
     assert!(map().ground_projection);
-    click(&mut harness, "settings-done", "Done");
+    click(&mut harness, "map-layers", "");
     click(&mut harness, "map-mode-2d", "2D");
     assert_eq!(map().camera, Some(remembered));
     assert_eq!(map().camera_3d, fitted_3d);
@@ -326,4 +323,99 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
     let restored: crate::trajectory::Spec =
         serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
     assert_eq!(restored, spec);
+}
+
+/// Renders the map controls, profile, flight-mode markers and a measurement.
+/// Run with `ENLUMI_MAP_CONTROLS_PREVIEW=path.ppm cargo test -- --ignored map_controls_preview`.
+#[test]
+#[ignore = "visual preview; needs a graphics device"]
+fn map_controls_preview() {
+    let Some(path) = std::env::var_os("ENLUMI_MAP_CONTROLS_PREVIEW") else {
+        return;
+    };
+    let Some(graphics) = super::test_renderer::graphics() else {
+        return;
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let local = directory.path().to_path_buf();
+    let captured = Rc::new(RefCell::new(None));
+    let saved = captured.clone();
+    let handler=app().with_size(1400.,760.).with_stylesheet(super::preview::stylesheet())
+        .with_renderer(Box::new(move |_,target|{
+            let mut renderer=graphics.renderer_offscreen(target,zgui::surface::wgpu::TextureFormat::Bgra8Unorm,false)?;
+            zgui_render_vector_vello::attach(&mut renderer,target.size);Ok(Box::new(super::test_renderer::ReadbackRenderer(renderer)))
+        }))
+        .into_handler(move || {
+            let workbench=Workbench::new();let pane=workbench.pane();
+            let (lines,mut spec,tracks)=super::telemetry::tests::fixture();
+            spec.map=Some(Config{trail:super::flight::Trail::Flown,..Default::default()});
+            pane.lines.set(lines);pane.trajectory_data.set(Some(tracks));pane.trajectory.set(Some(spec));
+            let tint=crate::state_tint::tests::fixture();
+            let mut band=crate::geometry::Geometry::new(99,crate::geometry::GeometryKind::Band,kurbo::Point::ZERO);
+            band.name="Flight mode".into();band.states=Some(tint.states);band.opacity=tint.opacity;
+            workbench.geometry.items.update(|items|items.push(band));workbench.attach_geometry(99,pane,true);
+            workbench.timeline.time.set(Some(2.5));
+            workbench.map_tiles.set_value(Some(super::tiles::Service::new(super::tiles::Config{cache:local.join("cache"),local:Some(local.clone()),network:false})));
+            workbench.edit_trajectory(pane);
+            *saved.borrow_mut()=Some((workbench,pane));
+            use crate::trajectory_cards::TrajectorySetupProps;
+            let builder=workbench.trajectory_builder().pane;
+            view!{AppTheme(palette=crate::theme::Palette::Forest){row(class="page workbench",style:width="1400px",style:height="760px"){column(style:width="1050px",style:height="760px"){FlightMap(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} column(style:width="350px",style:height="760px"){TrajectorySetup(workbench=workbench,pane=builder)}}}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1400.),
+        DevicePx(760.),
+    )));
+    for _ in 0..20 {
+        harness.advance(Duration::from_millis(17));
+        harness.settle(64);
+    }
+    click(&mut harness, "map-measure-tool", "");
+    let view = harness.app().windows()[0]
+        .box_with_class("flight-map-view")
+        .unwrap();
+    for x in [0.3, 0.7] {
+        let mut event = PointerEvent::mouse(Point::new(
+            CssPx(view.origin.x.0 + view.size.width.0 * x),
+            CssPx(view.origin.y.0 + view.size.height.0 * 0.35),
+        ));
+        event.button = Some(PointerButton::Primary);
+        for action in [PointerAction::Pressed, PointerAction::Released] {
+            harness.deliver_to_first(SurfaceEvent::Pointer {
+                action,
+                event,
+                modifiers: Modifiers::NONE,
+                timestamp: Timestamp::ORIGIN,
+            });
+        }
+        harness.settle(64);
+    }
+    for _ in 0..10 {
+        harness.advance(Duration::from_millis(17));
+        harness.settle(64);
+    }
+    let pixels = harness.app().windows()[0]
+        .renderer()
+        .as_any()
+        .unwrap()
+        .downcast_ref::<zgui_render_wgpu::WgpuRenderer>()
+        .unwrap()
+        .read_composed();
+    super::tests::capture(&pixels, &path);
+    click(&mut harness, "map-layers", "");
+    for _ in 0..4 {
+        harness.advance(Duration::from_millis(17));
+        harness.settle(64);
+    }
+    let pixels = harness.app().windows()[0]
+        .renderer()
+        .as_any()
+        .unwrap()
+        .downcast_ref::<zgui_render_wgpu::WgpuRenderer>()
+        .unwrap()
+        .read_composed();
+    let mut layers = std::path::PathBuf::from(&path);
+    layers.set_extension("layers.ppm");
+    super::tests::capture(&pixels, layers);
 }

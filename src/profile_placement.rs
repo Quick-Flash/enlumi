@@ -78,7 +78,8 @@ impl Workbench {
             | Destination::AnalysisCondition
             | Destination::SaveSelection
             | Destination::TrajectoryAxis(_, _)
-            | Destination::TrajectoryAltitude(_) => {
+            | Destination::TrajectoryAltitude(_)
+            | Destination::TrajectoryColor => {
                 self.use_profile_items(
                     vec![profile::identity::Drag { profile: key, item }],
                     target,

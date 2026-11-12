@@ -83,7 +83,51 @@ pub(crate) fn set_origin_at(pane: Pane, index: usize, origin: [f64; 2]) -> Resul
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+/// How much of the flight a map draws relative to the timeline marker.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Trail {
+    /// Whole flight at full strength.
+    #[default]
+    Full,
+    /// Path up to the marker; the rest faded.
+    Flown,
+    /// Last thirty seconds before the marker; the rest faded.
+    Recent,
+}
+impl Trail {
+    pub const RECENT_SECONDS: f64 = 30.;
+}
+fn enabled() -> bool {
+    true
+}
+
+/// Time span drawn at full strength on a map: the linked time-plot X range,
+/// narrowed by the Show path setting. `None` draws the whole flight normally.
+pub(crate) fn highlight_window(workbench: Workbench, pane: Pane) -> Option<[f64; 2]> {
+    let map = pane.trajectory.with(|s| s.as_ref().and_then(|s| s.map))?;
+    let mut window = [f64::NEG_INFINITY, f64::INFINITY];
+    let mut active = false;
+    if map.range_link
+        && pane.timeline_link.get()
+        && let Some(range) = workbench.timeline.window.get()
+    {
+        window = range;
+        active = true;
+    }
+    if map.trail != Trail::Full
+        && let Some(time) = workbench.timeline.time.get()
+    {
+        window[1] = window[1].min(time);
+        if map.trail == Trail::Recent {
+            window[0] = window[0].max(time - Trail::RECENT_SECONDS);
+        }
+        active = true;
+    }
+    active.then_some(window)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -106,6 +150,37 @@ pub struct Config {
     pub coloring: super::telemetry::ColorBy,
     #[serde(default)]
     pub orbit: super::terrain::Orbit,
+    /// Altitude-vs-distance strip under 2D maps.
+    #[serde(default = "enabled")]
+    pub profile: bool,
+    /// Dim the path outside the X bounds of linked time plots.
+    #[serde(default = "enabled")]
+    pub range_link: bool,
+    /// Mark flight-mode changes from the plot's state bands along the path.
+    #[serde(default = "enabled")]
+    pub modes: bool,
+    #[serde(default)]
+    pub trail: Trail,
+}
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            camera: None,
+            camera_2d: None,
+            camera_3d: None,
+            provider: Provider::default(),
+            offline: false,
+            terrain: false,
+            follow: false,
+            ground_projection: false,
+            coloring: Default::default(),
+            orbit: Default::default(),
+            profile: true,
+            range_link: true,
+            modes: true,
+            trail: Trail::Full,
+        }
+    }
 }
 impl Config {
     pub fn remember_camera(&mut self, camera: Camera) {
@@ -435,7 +510,15 @@ pub fn FlightMap(
         let pixels = size.get();
         let data = pane.trajectory_data.get();
         // Legend hover can reveal a hidden trace; fit only visible ones.
-        let hidden = pane.plot.hidden.get();
+        let mut hidden = pane.plot.hidden.get();
+        if let (Some(only), Some(data)) = (pane.fit_trace.get(), data.as_ref()) {
+            hidden.extend(
+                data.traces
+                    .iter()
+                    .filter(|trace| trace.id != only)
+                    .map(|trace| trace.id.to_string()),
+            );
+        }
         let spatial_paths: std::sync::Arc<[super::flight3::Path3]> = paths
             .get()
             .iter()
@@ -500,6 +583,9 @@ pub fn FlightMap(
                     map.remember_camera(next);
                 }
             });
+            if pane.fit_trace.get_untracked().is_some() {
+                pane.fit_trace.set(None);
+            }
         }
     });
     let view = RenderEffect::new(move |_| {
@@ -608,7 +694,31 @@ pub fn FlightMap(
     use super::hover::HoverViewProps;
     use super::toolbar::MapToolbarProps;
     let press = StoredValue::new_local(None::<[f64; 2]>);
-    view! {column(class="flight-map",on:key_down=move |e|{if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape)&&pane.map_origin_target.get_untracked().is_some(){pane.map_origin_target.set(None);e.prevent_default();e.stop_propagation();}}) {
+    let measuring = RwSignal::new_local(false);
+    let marks = RwSignal::new_local(Vec::<super::measure::Mark>::new());
+    let stop_measuring = RenderEffect::new(move |_| {
+        if !measuring.get() {
+            marks.set(Vec::new());
+        }
+    });
+    on_cleanup_local(move || drop(stop_measuring));
+    // The strip needs a bound Z; without one it would only take map space.
+    let profile = Memo::new(move |_| {
+        !terrain.get()
+            && pane.trajectory.with(|s| {
+                s.as_ref().is_some_and(|s| {
+                    s.map.is_some_and(|m| m.profile)
+                        && s.altitudes.values().any(|a| !a.source.is_empty())
+                })
+            })
+    });
+    use super::measure::MeasureViewProps;
+    use super::modes::ModeMarkersProps;
+    use super::profile::AltitudeProfileProps;
+    view! {column(class="flight-map",class:with-profile=move ||profile.get(),on:key_down=move |e|{
+        if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape)&&measuring.get_untracked(){measuring.set(false);e.prevent_default();e.stop_propagation();return;}
+        if matches!(&e.key,zgui::vocab::Key::Character(c) if c.eq_ignore_ascii_case("m")){measuring.update(|on|*on= !*on);e.prevent_default();e.stop_propagation();return;}
+        if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape)&&pane.map_origin_target.get_untracked().is_some(){pane.map_origin_target.set(None);e.prevent_default();e.stop_propagation();}}) {
         if move ||pane.map_origin_target.get().is_some(){row(class="flight-map-controls"){text(class="map-origin-prompt"){"Choose anchor on 2D map"}ActionButton(on:click=move |_|pane.map_origin_target.set(None)){"Cancel"}}}
         column(class="flight-map-view",node_ref=host,on:pointer_move:capture=move |e| {
             if terrain.get_untracked() {return;}
@@ -618,6 +728,19 @@ pub fn FlightMap(
             let hit=plot::zgui_renderer::local_position(&host,e.position).and_then(|(x,y)|pane.trajectory_data.with_untracked(|data|data.as_ref().and_then(|data|super::hover::flat(data,camera.get_untracked(),size.get_untracked(),[x,y],&pane.plot.hidden.get_untracked()))));
             changed.run(hit);
         },on:pointer_leave=move |_|changed.run(None),on:wheel:capture=move |_|{changed.run(None);stop_follow();},style:background=move ||Some(pane.background.get().map_or_else(||"#12181e".into(),|[r,g,b]|format!("#{r:02x}{g:02x}{b:02x}"))),on:pointer_down:capture=move |e| {
+            if measuring.get_untracked() && e.button==Some(zgui::vocab::PointerButton::Primary) {
+                let over_legend=plot::zgui_renderer::local_position(&legend,e.position).zip(legend.window_bounds()).is_some_and(|((x,y),b)|x>=0.&&y>=0.&&x<f64::from(b.size.width.0/legend.scale())&&y<f64::from(b.size.height.0/legend.scale()));
+                if !over_legend {
+                    let mark=hover.get_untracked().map(|hit|super::measure::Mark::from_hit(&hit)).or_else(||{
+                        if terrain.get_untracked() {return None;}
+                        let (x,y)=plot::zgui_renderer::local_position(&host,e.position)?;
+                        let size=size.get_untracked();let g=Camera::geometry(size)?;let ranges=camera.get_untracked().ranges(size);
+                        Some(super::measure::Mark{point:[g.x_value(x,ranges.x),g.y_value(y,ranges.y)],sample:None,elevation:None})
+                    });
+                    if let Some(mark)=mark {marks.update(|marks|{if marks.len()>=2{marks.clear();}marks.push(mark);});}
+                    e.prevent_default();e.stop_propagation();return;
+                }
+            }
             changed.run(None);
             if let Some((x,y))=plot::zgui_renderer::local_position(&legend,e.position) &&let Some(b)=legend.window_bounds()
                 &&x>=0.&&y>=0.&&x<f64::from(b.size.width.0/legend.scale())&&y<f64::from(b.size.height.0/legend.scale()) {press.set_value(None);return;}
@@ -656,11 +779,17 @@ pub fn FlightMap(
                     TrajectoryOverlay(workbench=workbench,pane=pane,visible=visible)
                 }
                 HoverView(pane=pane,hit=hover,size=Signal::derive_local(move ||size.get()))
-                ColorLegend(colors=colors)
-                column(class="trajectory-plot-controls",node_ref=legend,on:pointer_enter=move |_|changed.run(None),on:pointer_down:capture=move |_|press.set_value(None)) {TrajectoryLegend(workbench=workbench,pane=pane)}
+                ModeMarkers(workbench=workbench,pane=pane,camera=camera,size=size,terrain=terrain)
+                MeasureView(pane=pane,marks=marks,measuring=measuring,camera=camera,size=size,terrain=terrain)
+                column(class="trajectory-plot-controls",node_ref=legend,on:pointer_enter=move |_|changed.run(None),on:pointer_down:capture=move |_|press.set_value(None)) {TrajectoryLegend(workbench=workbench,pane=pane) ColorLegend(colors=colors)}
             }
         }
-        MapToolbar(workbench=workbench,pane=pane,orbit=orbit)
+        if move ||profile.get() && visible.get() {AltitudeProfile(workbench=workbench,pane=pane)}
+        MapToolbar(workbench=workbench,pane=pane,orbit=orbit,camera=camera,measuring=measuring)
+        row(class="map-attribution-overlay") {
+            ActionButton(class="map-attribution-link",on:click=move |_|super::preview::open_attribution(provider.get_untracked().attribution_url())){{move ||provider.get().attribution()}}
+            if move ||terrain.get() {ActionButton(class="map-attribution-link",on:click=move |_|super::preview::open_attribution("https://mapterhorn.com/attribution/")){"Terrain © Mapterhorn"}}
+        }
     }}
 }
 

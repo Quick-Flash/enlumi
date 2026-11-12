@@ -11,6 +11,8 @@ pub struct Timeline {
     pub time: RwSignal<Option<f64>, LocalStorage>,
     pub follow: RwSignal<bool, LocalStorage>,
     pub height: RwSignal<f32, LocalStorage>,
+    /// Visible X range of the time plot changed most recently; maps highlight it.
+    pub window: RwSignal<Option<[f64; 2]>, LocalStorage>,
 }
 impl Timeline {
     pub fn new() -> Self {
@@ -18,6 +20,7 @@ impl Timeline {
             time: RwSignal::new_local(Some(0.)),
             follow: RwSignal::new_local(false),
             height: RwSignal::new_local(34.),
+            window: RwSignal::new_local(None),
         }
     }
     pub fn hover(self, time: f64) {

@@ -27,8 +27,14 @@ pub struct Spec {
     pub connected: bool,
     pub equal: bool,
     pub points: bool,
+    /// Direction chevrons along each trace, spaced in screen pixels.
+    #[serde(default = "enabled")]
+    pub arrows: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra: Vec<Pair>,
+}
+fn enabled() -> bool {
+    true
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -74,6 +80,7 @@ impl Default for Spec {
             connected: true,
             equal: true,
             points: false,
+            arrows: true,
             extra: Vec::new(),
         }
     }

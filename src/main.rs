@@ -139,6 +139,7 @@ mod timeline;
 mod trace_color;
 mod trajectory;
 mod trajectory_axes;
+mod trajectory_cards;
 mod trajectory_plot;
 mod trajectory_render;
 mod tree_lines;

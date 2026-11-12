@@ -1,4 +1,4 @@
-use super::{terrain::Orbit, tiles::Provider};
+use super::tiles::Provider;
 use crate::{
     action_button::ActionButtonProps,
     state::{Pane, Workbench},
@@ -7,7 +7,7 @@ use crate::{
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
-pub(super) fn target(workbench: Workbench, pane: Pane) -> Pane {
+pub(crate) fn target(workbench: Workbench, pane: Pane) -> Pane {
     if pane.id == 0 {
         workbench
             .trajectory_builder()
@@ -64,6 +64,38 @@ pub(crate) fn bind_altitude(workbench: Workbench, pane: Pane, index: usize, sour
         workbench.add(source);
     }
 }
+/// Set the map-wide color field; traces switch to field coloring while one is bound.
+pub(crate) fn bind_color(workbench: Workbench, pane: Pane, source: String) {
+    update(workbench, pane, |spec| spec.color_source = source.clone());
+    let target = target(workbench, pane);
+    if target.id == 0 {
+        return;
+    }
+    if !source.is_empty() {
+        workbench.activate(target.id);
+        workbench.add(source.clone());
+    }
+    let traces = target.trajectory.with_untracked(|s| {
+        s.as_ref()
+            .map(|s| s.pairs().into_iter().map(|p| p.y).collect::<Vec<_>>())
+            .unwrap_or_default()
+    });
+    for id in target.lines.with_untracked(|lines| {
+        lines
+            .iter()
+            .filter(|line| traces.contains(&line.source))
+            .map(|line| line.id)
+            .collect::<Vec<_>>()
+    }) {
+        let _ = crate::trace_color::change(target, Some(id), |color| {
+            if !source.is_empty() {
+                color.mode = crate::trace_color::Mode::Field;
+            } else if color.mode == crate::trace_color::Mode::Field {
+                color.mode = crate::trace_color::Mode::Solid;
+            }
+        });
+    }
+}
 pub(crate) fn set_provider(workbench: Workbench, pane: Pane, provider: Provider) {
     let edit = |spec: &mut Spec| {
         if let Some(map) = spec.map.as_mut() {
@@ -89,35 +121,6 @@ pub fn MapBackend(workbench: Workbench, pane: Pane) -> impl IntoView {
     }}
 }
 #[component]
-pub fn MapSettings(workbench: Workbench, pane: Pane) -> impl IntoView {
-    install_stylesheet("enlumi-map", include_str!("preview.css"));
-    let map = Memo::new(move |_| {
-        target(workbench, pane)
-            .trajectory
-            .with(|s| s.as_ref().and_then(|s| s.map))
-            .unwrap_or_default()
-    });
-    let service = workbench.shared_map_tiles();
-    view! {column(class="map-sidebar-settings") {
-        MapBackend(workbench=workbench,pane=pane)
-        row(class="map-coordinate-units") {
-            ActionButton(class:setting-active=move ||!map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.set_terrain(false);})){"2D map"}
-            ActionButton(class:setting-active=move ||map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.set_terrain(true);})){"3D map"}
-            ActionButton(class:setting-active=move ||map.get().offline,on:click=move |_|{let next=!map.get_untracked().offline;update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.offline=next;});}){{move ||if map.get().offline{"Offline tiles only"}else{"Online tiles"}}}
-        }
-        row(class="map-coordinate-units") {
-            ActionButton(on:click=move |_|{update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.camera=None;});}){"Fit traces"}
-            ActionButton(on:click=move |_|service.retry()){"Retry tiles"}
-            ActionButton(class:setting-active=move ||target(workbench,pane).timeline_link.get(),on:click=move |_|target(workbench,pane).timeline_link.update(|linked|*linked= !*linked)){"Link timeline"}
-            if move ||map.get().terrain {ActionButton(on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.orbit=Orbit::default();})){"Reset orbit"}}
-        }
-        if move ||map.get().terrain {text(class="muted"){"Drag to orbit; middle-drag or Ctrl-drag to pan; wheel to zoom. Local Z uses one terrain height at trace start."}}
-        ActionButton(on:click=move |_|super::preview::open_attribution(map.get_untracked().provider.attribution_url())){{move ||map.get().provider.attribution()}}
-        if move ||map.get().terrain {ActionButton(on:click=move |_|super::preview::open_attribution("https://mapterhorn.com/attribution/")){"Terrain: (c) Mapterhorn / source datasets"}}
-        text(class="muted",a11y:role=Role::Status){{move ||service.status()}}
-    }}
-}
-#[component]
 pub fn AltitudeOptions(
     workbench: Workbench,
     pane: Pane,
@@ -138,25 +141,48 @@ pub fn AltitudeOptions(
             .with(|s| s.as_ref().and_then(|s| s.altitudes.get(&index).cloned()))
             .unwrap_or_default()
     });
-    let draft = RwSignal::new_local(altitude.get_untracked().source);
-    let sync = zgui::reactive::RenderEffect::new(move |_| draft.set(altitude.get().source));
-    on_cleanup_local(move || drop(sync));
-    view! {if move ||force||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some_and(|m|m.terrain||m.coloring==super::telemetry::ColorBy::Altitude))) {
-        column(class="map-altitude-options",node_ref=node) {
-            text {"Z / altitude"}
-            Input(a11y:label="Z field ID",placeholder="Drop Z field here, or enter field ID",value=Binding::controlled(Signal::derive_local(move ||draft.get()),move |value:String|draft.set(value)),on:key_down=move |e|{if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter){bind_altitude(workbench,pane,index,draft.get_untracked().trim().to_owned());}})
-            row(class="map-coordinate-units") {
-                ActionButton(on:click=move |_|bind_altitude(workbench,pane,index,draft.get_untracked().trim().to_owned())){"Bind Z"}
-                ActionButton(on:click=move |_|bind_altitude(workbench,pane,index,String::new())){"Clear Z"}
+    let update_altitude = move |edit: fn(&mut crate::trajectory::Altitude)| {
+        update(workbench, pane, move |s| {
+            edit(s.altitudes.entry(index).or_default());
+            if let Some(map) = s.map.as_mut()
+                && map.terrain
+            {
+                map.camera = None;
             }
-            row(class="map-coordinate-units") {for mode in move ||[(true,false,"Local Z offset"),(true,true,"First Z on ground"),(false,false,"Global elevation")],key=|mode|mode.2 {
-                ActionButton(class:setting-active=move ||{let a=altitude.get();a.local==mode.0&&a.at_first==mode.1},on:click=move |_|update(workbench,pane,|s|{let a=s.altitudes.entry(index).or_default();a.local=mode.0;a.at_first=mode.1;if let Some(map)=s.map.as_mut(){map.camera=None;}})){{mode.2}}
-            }}
-            row(class="map-coordinate-units") {for unit in move ||[(1.,"Metres"),(0.001,"Millimetres"),(0.3048,"Feet")],key=|unit|unit.1 {
-                ActionButton(class:setting-active=move ||altitude.get().scale.abs()==unit.0,on:click=move |_|update(workbench,pane,|s|{let altitude=s.altitudes.entry(index).or_default();altitude.scale=unit.0*altitude.scale.signum();if let Some(map)=s.map.as_mut(){map.camera=None;}})){{unit.1}}
-            }}
-            ActionButton(class:setting-active=move ||altitude.get().scale<0.,on:click=move |_|update(workbench,pane,|s|{let altitude=s.altitudes.entry(index).or_default();altitude.scale= -altitude.scale;if let Some(map)=s.map.as_mut(){map.camera=None;}})){{move ||if altitude.get().scale<0.{"Z increases down"}else{"Z increases up"}}}
-            text(class="muted") {"First Z on ground removes starting altitude. Local Z offset adds Z to terrain. Global elevation uses absolute metres. No Z field: Z=0. Missing altitude samples break trace."}
+        });
+    };
+    let reference = Memo::new(move |_| {
+        let a = altitude.get();
+        (a.local, a.at_first)
+    });
+    let unit = Memo::new(move |_| altitude.get().scale.abs());
+    view! {if move ||force||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some_and(|m|m.terrain||m.coloring==super::telemetry::ColorBy::Altitude))) {
+        column(class="map-altitude-options trace-card-group") {
+            row(class="trace-card-group-title") {text {"Altitude"}}
+            column(class="trajectory-axis-slot altitude-slot",class:axis-slot-filled=move ||!altitude.get().source.is_empty(),node_ref=node) {
+                if move ||altitude.get().source.is_empty() {text(class="trajectory-drop-label") {"Drop Z field (optional)"}}
+                if move ||!altitude.get().source.is_empty() {
+                    row(class="trajectory-input-chip") {
+                        text(class="signal-name") {{move ||workbench.field_name(&altitude.get().source)}}
+                        ActionButton(icon=true,class="trajectory-remove-input",a11y:label="Remove Z input",on:click=move |_|bind_altitude(workbench,pane,index,String::new())) {
+                            vector(class="trajectory-control-icon",prop:viewBox="0 0 16 16",prop:d="M4 4 L12 12 M12 4 L4 12",a11y:hidden=true)
+                        }
+                    }
+                }
+            }
+            row(class="trace-card-segment",a11y:role=Role::Group,a11y:label="Altitude reference") {
+                ActionButton(class="altitude-amsl",class:setting-active=move ||!reference.get().0,a11y:label="Z is absolute elevation above sea level",on:click=move |_|update_altitude(|a|{a.local=false;a.at_first=false;})) {"AMSL"}
+                ActionButton(class="altitude-terrain",class:setting-active=move ||reference.get()==(true,false),a11y:label="Z is added to terrain height at the trace start",on:click=move |_|update_altitude(|a|{a.local=true;a.at_first=false;})) {"Above terrain"}
+                ActionButton(class="altitude-ground",class:setting-active=move ||reference.get()==(true,true),a11y:label="The first Z sample sits on the ground",on:click=move |_|update_altitude(|a|{a.local=true;a.at_first=true;})) {"Start on ground"}
+            }
+            row(class="trace-card-segment") {
+                ActionButton(class="altitude-metres",class:setting-active=move ||unit.get()==1.,on:click=move |_|update_altitude(|a|a.scale=a.scale.signum())) {"m"}
+                ActionButton(class="altitude-millimetres",class:setting-active=move ||unit.get()==0.001,on:click=move |_|update_altitude(|a|a.scale=0.001*a.scale.signum())) {"mm"}
+                ActionButton(class="altitude-feet",class:setting-active=move ||unit.get()==0.3048,on:click=move |_|update_altitude(|a|a.scale=0.3048*a.scale.signum())) {"ft"}
+                box(class="trace-card-gap") {}
+                ActionButton(class="altitude-up",class:setting-active=move ||altitude.get().scale>0.,on:click=move |_|update_altitude(|a|a.scale=a.scale.abs())) {"Up +"}
+                ActionButton(class="altitude-down",class:setting-active=move ||altitude.get().scale<0.,on:click=move |_|update_altitude(|a|a.scale= -a.scale.abs())) {"Down + (NED)"}
+            }
         }
     }}
 }
@@ -166,7 +192,7 @@ mod tests {
     use super::*;
     #[test]
     fn line_settings_choose_independent_2d_and_3d_map_backends() {
-        use crate::{plot_menu::PlotMenuEditorProps, theme::AppThemeProps};
+        use crate::theme::AppThemeProps;
         use std::{cell::RefCell, rc::Rc};
         use zgui::{
             geom::{CssPx, DevicePx, Point, Size},
@@ -204,8 +230,8 @@ mod tests {
                 *saved.borrow_mut() = Some((workbench, first, second, first_open, second_open));
                 view! {AppTheme(palette=crate::theme::Palette::Forest) {
                     column(class="page workbench") {
-                        PlotMenuEditor(workbench=workbench,pane=first,open=first_open)
-                        PlotMenuEditor(workbench=workbench,pane=second,open=second_open)
+                        if move ||first_open.get() {MapBackend(workbench=workbench,pane=first)}
+                        if move ||second_open.get() {MapBackend(workbench=workbench,pane=second)}
                     }
                 }}
             })

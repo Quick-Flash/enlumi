@@ -1,0 +1,1128 @@
+<title>Enlumi Plot &amp; Map Redesign</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: long scroll of demo "stages"; each stage = live app-frame mockup + notes column. Single dark look = Enlumi Forest theme. */
+:root {
+  color-scheme: dark;
+  --app-background: #12181c;
+  --plot-bg: #141f21;
+  --surface: #17221e;
+  --inset: #121b17;
+  --control: #25322f;
+  --hover: #375239;
+  --selected: #35553e;
+  --border: #304339;
+  --border-strong: #42554a;
+  --accent: #75a77b;
+  --accent-text: #a0dbad;
+  --fg: #d7e1d9;
+  --muted: #a8b6ad;
+  --dim: #78877d;
+  --focus: #77b9e8;
+  --warn: #eebe60;
+  --overlay: #15221ee6;
+  --l1: #f4a261;
+  --l2: #77b9e8;
+  --l3: #d8b0ed;
+  --map-shadow: #0000008c;
+  --f-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+[hidden] { display: none !important; }
+html, body { background: var(--app-background); color: var(--fg); }
+body { font-family: var(--f-body); font-size: 14px; line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+.page { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 34px; line-height: 1.15; }
+h2 { font-size: 24px; }
+h3 { font-size: 15px; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-text); }
+.lede { color: var(--muted); font-size: 15px; }
+header.intro { display: flex; flex-direction: column; gap: 14px; }
+.principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 8px; }
+.principle { border-top: 1px solid var(--border-strong); padding-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.principle b { font-weight: 600; }
+.principle span { color: var(--muted); font-size: 13px; }
+code, .mono { font-family: var(--f-mono); font-size: 12px; }
+code { background: var(--control); padding: 1px 5px; border-radius: 3px; color: var(--accent-text); }
+
+section.demo { display: flex; flex-direction: column; gap: 16px; }
+.demo-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.demo-head > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.seg { display: inline-flex; background: var(--inset); border: 1px solid var(--border); border-radius: 6px; padding: 2px; gap: 2px; }
+.seg button { font: 500 12px var(--f-body); color: var(--muted); background: transparent; border: 0; border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--selected); color: var(--fg); }
+.seg button:focus-visible, button:focus-visible, input:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
+.demo-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+@media (max-width: 980px) { .demo-body { grid-template-columns: minmax(0, 1fr); } }
+.scroller { overflow-x: auto; border-radius: 8px; }
+.notes { display: flex; flex-direction: column; gap: 12px; font-size: 13px; min-width: 0; }
+.notes h3 { font-size: 13px; color: var(--accent-text); font-family: var(--f-mono); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+.notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
+.notes ul b { color: var(--fg); font-weight: 600; }
+.notes .problems li::marker { color: var(--warn); }
+.notes .changes li::marker { color: var(--accent); }
+
+/* ---------- app frame (mimics Enlumi pane) ---------- */
+.frame { min-width: 860px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; font-size: 12px; user-select: none; }
+.frame.with-side { flex-direction: row; }
+.frame .pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.strip { display: flex; align-items: center; gap: 4px; padding: 4px 6px; background: var(--surface); border-bottom: 1px solid var(--border); min-height: 34px; }
+.tab { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--plot-bg); border: 1px solid var(--border); border-bottom-color: var(--plot-bg); border-radius: 5px 5px 0 0; margin-bottom: -5px; color: var(--fg); font-weight: 500; white-space: nowrap; }
+.tab .x { color: var(--dim); }
+.tab-add { color: var(--dim); padding: 0 6px; }
+.spacer { flex: 1; }
+.tbtn { font: 500 11px var(--f-body); color: var(--fg); background: var(--control); border: 1px solid var(--border-strong); border-radius: 3px; padding: 3px 7px; white-space: nowrap; cursor: default; }
+.tbtn.ghost { background: transparent; border-color: transparent; }
+.tbtn.on { background: var(--selected); border-color: var(--accent); }
+.ibtn { width: 26px; height: 26px; display: inline-grid; place-items: center; background: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--muted); cursor: pointer; position: relative; padding: 0; }
+.ibtn:hover { background: var(--hover); color: var(--fg); }
+.ibtn.on { color: var(--accent-text); background: var(--selected); border-color: var(--accent); }
+.ibtn svg, .mbtn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ibtn[data-tip]:hover::after, .mbtn[data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; background: #0c1210; color: var(--fg); border: 1px solid var(--border-strong); font: 500 11px var(--f-body); padding: 3px 7px; border-radius: 4px; white-space: nowrap; z-index: 20; pointer-events: none; }
+.mbtn[data-tip]:hover::after { top: 50%; right: calc(100% + 8px); transform: translateY(-50%); }
+.divider { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+.links-pill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px 0 6px; border-radius: 12px; border: 1px solid var(--border-strong); color: var(--muted); background: transparent; font: 500 11px var(--f-body); cursor: pointer; position: relative; }
+.links-pill svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+.links-pill .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); }
+.pop { position: absolute; top: calc(100% + 6px); right: 0; background: #0f1714; border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 30; min-width: 190px; box-shadow: 0 8px 24px var(--map-shadow); text-align: left; }
+.profile { position: relative; height: 130px; border-top: 1px solid var(--border); background: var(--plot-bg); }
+.profile canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.linkedts { margin-top: 10px; }
+.tshint { color: var(--dim); font-size: 11px; padding-right: 6px; }
+.eye { width: 18px; height: 18px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); padding: 0; cursor: pointer; border-radius: 3px; flex: none; }
+.eye:hover { color: var(--fg); background: var(--control); }
+.eye svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.lrow.sel { background: var(--selected); }
+.lpop { margin: 2px 4px 4px; padding: 6px; border: 1px solid var(--border-strong); border-radius: 5px; background: #0f1714; display: flex; flex-direction: column; gap: 6px; }
+.lpop .hint { padding: 0; }
+.lpop-row { display: flex; justify-content: space-between; gap: 8px; }
+.filled { font-size: 11px; color: var(--accent-text); background: var(--selected); border-radius: 4px; padding: 4px 7px; margin-top: 8px; }
+.stage.dropping::after { content: "Drop to add a trace"; position: absolute; inset: 10px; border: 2px dashed var(--accent); border-radius: 8px; display: grid; place-items: center; color: var(--accent-text); background: #75a77b1c; font-weight: 600; font-size: 13px; }
+.pop2 { flex-direction: row; gap: 10px; }
+.pop2 .col { display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
+.pop label { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; color: var(--fg); cursor: pointer; font-weight: 400; }
+.pop label:hover { background: var(--hover); }
+.pop .hint { color: var(--dim); font-size: 11px; padding: 2px 6px 4px; }
+.pop hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }
+.pop .item { padding: 5px 8px; border-radius: 4px; color: var(--fg); display: flex; justify-content: space-between; gap: 16px; cursor: pointer; }
+.pop .item:hover { background: var(--hover); }
+.pop .item kbd { font-family: var(--f-mono); font-size: 10px; color: var(--dim); }
+.pop input[type="checkbox"], .pop input[type="radio"] { accent-color: var(--accent); margin: 0; }
+.stage { position: relative; height: 430px; background: var(--plot-bg); overflow: hidden; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.timebar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--surface); }
+.timebar input[type="range"] { flex: 1; accent-color: var(--accent); }
+.timebar .t { font-family: var(--f-mono); font-size: 11px; color: var(--muted); width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+.timebar .lbl { color: var(--dim); font-size: 11px; }
+
+/* floating overlays */
+.float { position: absolute; background: var(--overlay); border: 1px solid var(--border); border-radius: 6px; backdrop-filter: blur(6px); box-shadow: 0 4px 14px var(--map-shadow); }
+.legend { top: 10px; left: 10px; padding: 5px; display: flex; flex-direction: column; gap: 1px; min-width: 210px; }
+.legend.right { left: auto; right: 10px; }
+.lrow { display: flex; align-items: center; gap: 7px; padding: 3px 6px; border-radius: 4px; cursor: pointer; }
+.lrow:hover { background: var(--hover); }
+.lrow.off { opacity: 0.45; }
+.lrow .sw { width: 14px; height: 3px; border-radius: 2px; flex: none; }
+.lrow .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow .meta { color: var(--dim); font-family: var(--f-mono); font-size: 10px; }
+.grad { padding: 2px 6px 4px 27px; display: flex; flex-direction: column; gap: 2px; }
+.grad .bar { height: 6px; border-radius: 3px; }
+.grad .ends { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 10px; color: var(--muted); }
+.readout { bottom: 44px; right: 24px; padding: 5px 9px; font-family: var(--f-mono); font-size: 11px; display: grid; grid-template-columns: auto auto; column-gap: 10px; row-gap: 1px; font-variant-numeric: tabular-nums; }
+.readout span:nth-child(odd) { color: var(--dim); }
+.readout.left { right: auto; left: 10px; }
+.mapnav { right: 10px; bottom: 34px; display: flex; flex-direction: column; padding: 3px; gap: 2px; }
+.mbtn { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--fg); cursor: pointer; position: relative; padding: 0; }
+.mbtn:hover { background: var(--hover); }
+.mbtn.on { background: var(--selected); color: var(--accent-text); }
+.mapnav hr { border: 0; border-top: 1px solid var(--border); margin: 1px 3px; }
+.modebar { top: 10px; left: 10px; display: flex; align-items: center; gap: 6px; padding: 3px; }
+.modebar .seg { background: transparent; border: 0; padding: 0; }
+.layerbtn { position: relative; }
+.scale { position: absolute; left: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 2px; font-family: var(--f-mono); font-size: 10px; color: var(--fg); text-shadow: 0 1px 2px #000; }
+.scale .ruler { height: 5px; border: 1.5px solid var(--fg); border-top: 0; box-shadow: 0 1px 2px #000; }
+.attrib { position: absolute; right: 10px; bottom: 8px; font-size: 10px; color: var(--muted); text-shadow: 0 1px 2px #000; }
+.hoverchip { position: absolute; pointer-events: none; padding: 4px 8px; font-family: var(--f-mono); font-size: 10.5px; background: #0c1210ee; border: 1px solid var(--border-strong); border-radius: 4px; white-space: nowrap; color: var(--fg); transform: translate(12px, -50%); z-index: 5; font-variant-numeric: tabular-nums; }
+.hoverchip b { color: var(--accent-text); font-weight: 500; }
+
+/* "current" reconstruction */
+.cur-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.cur-legend { position: absolute; top: 10px; left: 10px; background: var(--surface); border: 1px solid var(--border-strong); padding: 6px 8px; font-size: 11px; display: flex; flex-direction: column; gap: 4px; }
+.cur-legend .r { display: flex; gap: 6px; align-items: center; }
+.cur-legend .r i { width: 10px; height: 10px; display: inline-block; }
+.cur-tag { position: absolute; top: 10px; right: 10px; font-family: var(--f-mono); font-size: 10px; color: var(--warn); border: 1px dashed var(--warn); padding: 2px 6px; border-radius: 3px; background: var(--app-background); }
+
+/* side panel (builder) */
+.side { width: 330px; flex: none; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; min-height: 0; max-height: 560px; }
+.side-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.side-head .t { font-weight: 600; font-size: 13px; flex: 1; }
+.side-body { overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.card { border: 1px solid var(--border); border-radius: 6px; background: var(--inset); }
+.card.open { border-color: var(--border-strong); }
+.card-sum { display: flex; align-items: center; gap: 8px; padding: 7px 8px; cursor: pointer; }
+.grip { color: var(--dim); cursor: grab; font-size: 14px; line-height: 1; letter-spacing: -2px; }
+.card-sum .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.card-sum .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.card-sum .nm b { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-sum .nm span { font-size: 10.5px; color: var(--dim); font-family: var(--f-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chev { color: var(--dim); transition: transform .15s; }
+.card.open .chev { transform: rotate(90deg); }
+.card-body { display: none; padding: 2px 10px 10px; flex-direction: column; gap: 10px; border-top: 1px solid var(--border); }
+.card.open .card-body { display: flex; }
+.grp { display: flex; flex-direction: column; gap: 5px; padding-top: 8px; }
+.grp-t { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.slotrow { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 6px; align-items: center; }
+.slotrow .ax { color: var(--muted); font-size: 11px; }
+.slot { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--control); min-width: 0; font-family: var(--f-mono); font-size: 10.5px; }
+.slot span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot .x { color: var(--dim); }
+.slot.empty { background: transparent; border-style: dashed; color: var(--dim); font-family: var(--f-body); font-size: 11px; }
+.seg.sm button { padding: 3px 6px; font-size: 11px; white-space: nowrap; }
+.seg.full { display: flex; }
+.seg.full button { flex: 1; }
+.badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--selected); color: var(--accent-text); font-weight: 500; text-transform: none; letter-spacing: 0; }
+.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.num { width: 54px; font: 11px var(--f-mono); color: var(--fg); background: var(--control); border: 1px solid var(--border-strong); border-radius: 3px; padding: 3px 5px; }
+.adv { color: var(--muted); font-size: 11px; cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.dragbar { margin-top: 2px; text-align: center; font-size: 11px; color: var(--accent-text); padding: 5px; border: 1px dashed var(--accent); border-radius: 4px; cursor: grab; }
+.card.bad { border-color: var(--warn); }
+.card.bad .card-sum .nm span { color: var(--warn); }
+.badge.warn { background: transparent; border: 1px solid var(--warn); color: var(--warn); cursor: pointer; font-family: var(--f-body); }
+.lbl2 { color: var(--dim); font-size: 11px; }
+.swaprow { display: flex; justify-content: flex-end; margin: -3px 0; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent-text); font: 500 11px var(--f-body); cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.sel, .txt { width: 100%; box-sizing: border-box; font: 11px var(--f-mono); color: var(--fg); background: var(--control); border: 1px solid var(--border-strong); border-radius: 4px; padding: 4px 6px; }
+.coordline { font-family: var(--f-mono); font-size: 10.5px; color: var(--fg); display: flex; flex-direction: column; gap: 1px; }
+.coordline span { font-family: var(--f-body); color: var(--dim); }
+.coordline.warn { color: var(--warn); font-family: var(--f-body); }
+.tbtn.wide { width: 100%; padding: 5px; cursor: pointer; }
+.defrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 6px; }
+.defrow b { color: var(--fg); font-weight: 500; }
+.fpick { position: absolute; top: calc(100% + 3px); left: 0; right: 0; z-index: 10; background: #0f1714; border: 1px solid var(--border-strong); border-radius: 5px; box-shadow: 0 8px 20px var(--map-shadow); padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.fpick input { font: 11px var(--f-body); color: var(--fg); background: var(--control); border: 1px solid var(--border-strong); border-radius: 3px; padding: 4px 6px; }
+.flist { max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; }
+.fopt { font: 10.5px var(--f-mono); padding: 3px 6px; border-radius: 3px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fopt:hover { background: var(--hover); }
+.card-body .bar { height: 5px; border-radius: 3px; }
+.adv { background: none; border: 0; padding: 0; text-align: left; font-family: var(--f-body); }
+.sugg { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+.chipbtn { font: 500 11px var(--f-body); color: var(--accent-text); background: var(--selected); border: 1px solid var(--accent); border-radius: 12px; padding: 3px 10px; cursor: pointer; }
+.pickbanner { top: 10px; left: 50%; transform: translateX(-50%); padding: 6px 12px; font-size: 12px; color: var(--fg); border-color: var(--accent); }
+.stage.picking { cursor: crosshair; }
+.tray { width: 170px; flex: none; border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; max-height: 560px; padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.tray-h { font-weight: 600; font-size: 12px; padding: 2px 4px 4px; }
+.tray-g { font-size: 10.5px; line-height: 1.5; color: var(--dim); padding: 6px 4px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tray-f { font: 11px var(--f-mono); padding: 3px 6px 3px 12px; border-radius: 3px; cursor: grab; border: 1px solid transparent; }
+.tray-f:hover { background: var(--hover); border-color: var(--border-strong); }
+#bBody.dragging .slot, #bBody.dragging .addtrace { border-color: var(--accent); border-style: dashed; }
+#bBody .slot.over, #bBody .addtrace.over { background: var(--selected); border-style: solid; }
+.addtrace { border: 1px dashed var(--border-strong); border-radius: 6px; padding: 10px; text-align: center; color: var(--muted); font-size: 11px; }
+
+/* current builder */
+.cur-side { width: 330px; flex: none; border-left: 1px solid var(--border); background: var(--surface); padding: 10px; display: flex; flex-direction: column; gap: 7px; max-height: 510px; overflow-y: auto; font-size: 11px; }
+.cur-side .h { font-weight: 600; font-size: 12px; }
+.cur-side .m { color: var(--muted); font-size: 11px; }
+.cur-side .row { display: flex; flex-wrap: wrap; gap: 4px; }
+.cur-side .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cur-side .inp { border: 1px solid var(--border-strong); background: var(--inset); padding: 4px 6px; color: var(--dim); border-radius: 3px; }
+.cur-side .chip { border: 1px solid var(--border-strong); background: var(--control); padding: 4px 6px; border-radius: 3px; font-family: var(--f-mono); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.plan { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.step { border: 1px solid var(--border); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); }
+.step .n { font-family: var(--f-mono); font-size: 11px; color: var(--accent-text); }
+.step p { color: var(--muted); font-size: 13px; }
+.step .files { font-family: var(--f-mono); font-size: 11px; color: var(--dim); }
+@media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
+</style>
+
+<div class="page">
+<header class="intro">
+  <span class="eyebrow">Enlumi · UI proposal · trajectory &amp; map panes</span>
+  <h1>Redesigning the 2D X/Y and map plots</h1>
+  <p class="lede">Interactive mockups built from the Forest theme tokens. Each demo has a <b>Proposed</b> view you can poke at (hover, drag, scrub the timeline, toggle legend rows) and a <b>Current</b> view reconstructed from <code>plot_actions.rs</code>, <code>mapping/toolbar.rs</code>, <code>mapping/settings.rs</code> and <code>trajectory_axes.rs</code>. Flight data is synthetic, placed at the PX4 SITL home (47.3977 N, 8.5456 E).</p>
+  <div class="principles">
+    <div class="principle"><b>Controls live where they act</b><span>Map navigation floats on the map. The pane header keeps only pane-level actions.</span></div>
+    <div class="principle"><b>Icons for frequent actions, menu for rare ones</b><span>Duplicate, background, presets and units move into one overflow menu.</span></div>
+    <div class="principle"><b>Show state, skip the instructions</b><span>Replace explanatory paragraphs with visible state: link chips, gradient legends, unit badges.</span></div>
+    <div class="principle"><b>One control per job</b><span>The map pane currently shows 2D/3D, Fit, Follow/Link and Reset in two places each.</span></div>
+  </div>
+</header>
+
+<!-- ============ 2D X/Y PLOT ============ -->
+<section class="demo" id="xy">
+  <div class="demo-head">
+    <div><span class="eyebrow">Demo 1</span><h2>2D X/Y plot</h2></div>
+    <div class="seg" role="group" aria-label="Variant"><button aria-pressed="true" data-v="new">Proposed</button><button aria-pressed="false" data-v="cur">Current</button></div>
+  </div>
+  <div class="demo-body">
+    <div class="scroller">
+      <div class="frame v-new">
+        <div class="strip">
+          <span class="tab">Local position XY <span class="x">×</span></span><span class="tab-add">+</span>
+          <span class="spacer"></span>
+          <button class="links-pill" id="xyLinks" type="button"><svg viewBox="0 0 16 16"><path d="M6.5 9.5l3-3M5 8l-1.5 1.5a2.1 2.1 0 003 3L8 11M11 8l1.5-1.5a2.1 2.1 0 00-3-3L8 5"/></svg><span class="dot"></span><span id="xyLinksLbl">Pointer · Time</span>
+            <div class="pop" id="xyLinksPop" hidden>
+              <label><input type="checkbox" data-l="x"> X bounds</label>
+              <label><input type="checkbox" data-l="y"> Y bounds</label>
+              <label><input type="checkbox" data-l="p" checked> Pointer</label>
+              <label><input type="checkbox" data-l="t" checked> Timeline</label>
+              <div class="hint">Shared with other spatial plots</div>
+            </div>
+          </button>
+          <span class="divider"></span>
+          <button class="ibtn on" id="xyAspect" data-tip="Equal axis scale (1:1)" type="button"><svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1"/><path d="M3 8h10M8 3v10" stroke-dasharray="1.5 1.5"/></svg></button>
+          <button class="ibtn on" id="xyDir" data-tip="Direction arrows + start/end" type="button"><svg viewBox="0 0 16 16"><path d="M2 12c3-8 9-8 12 0"/><path d="M6.5 5.2l1.8.4-.6 1.8"/></svg></button>
+          <button class="ibtn" data-tip="Fit (double-click plot)" type="button" id="xyFit"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
+          <button class="ibtn" data-tip="Edit traces" type="button"><svg viewBox="0 0 16 16"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg></button>
+          <button class="ibtn" data-tip="Screenshot / export" type="button"><svg viewBox="0 0 16 16"><rect x="2" y="4.5" width="12" height="9" rx="1.5"/><circle cx="8" cy="9" r="2.3"/><path d="M5.5 4.5l1-2h3l1 2"/></svg></button>
+          <button class="ibtn" id="xyMore" data-tip="More" type="button"><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/></svg>
+            <div class="pop" id="xyMorePop" hidden>
+              <div class="item">Duplicate plot <kbd>Ctrl D</kbd></div>
+              <div class="item">Save as preset…</div>
+              <div class="item">Background…</div>
+              <hr>
+              <div class="item">Separate by unit</div>
+              <div class="item">Close plot</div>
+            </div>
+          </button>
+          <button class="ibtn" data-tip="Maximize" type="button"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9"/></svg></button>
+        </div>
+        <div class="stage" id="xyStage">
+          <canvas id="xyCanvas"></canvas>
+          <div class="float legend right" id="xyLegend"></div>
+          <div class="float readout" id="xyReadout"></div>
+          <div class="hoverchip" id="xyChip" hidden></div>
+        </div>
+        <div class="timebar"><span class="lbl">Time</span><input type="range" id="xyTime" min="0" max="1000" value="620" aria-label="Timeline"><span class="t" id="xyTimeLbl"></span></div>
+      </div>
+      <div class="frame v-cur" hidden>
+        <div class="strip">
+          <span class="tab">Plot 3 <span class="x">×</span></span><span class="tab-add">+</span>
+          <span class="spacer"></span>
+          <span class="tbtn">Links: pointer, timeline ▾</span>
+          <span class="tbtn">Edit X/Y</span><span class="tbtn">📷</span><span class="tbtn">Preset ▾</span><span class="tbtn">Background</span><span class="tbtn">Duplicate</span><span class="tbtn">Maximize</span>
+        </div>
+        <div class="stage"><canvas id="xyCurCanvas"></canvas>
+          <div class="cur-legend"><div class="r"><i style="background:var(--l1)"></i>vehicle_local_position/0/x vs vehicle_local_position/0/y ⚙ ×</div><div class="r"><i style="background:var(--l2)"></i>vehicle_local_position_setpoint/0/x vs vehicle_local_position_setpoint/0/y ⚙ ×</div><div class="r" style="color:var(--muted)">x 31.204  y −12.810</div></div>
+          <span class="cur-tag">reconstructed</span>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>Today</h3>
+      <ul class="problems">
+        <li>Header is seven text buttons wide. On a half-width dock it wraps or truncates before the plot gets room.</li>
+        <li>Legend names are full <code>topic/0/x vs topic/0/y</code> strings, so the legend covers the path.</li>
+        <li>No start, end or direction cues. A loop and its return leg look identical.</li>
+        <li>Axes scale independently, so a circle flown in metres draws as an ellipse.</li>
+      </ul>
+      <h3>Proposed</h3>
+      <ul class="changes">
+        <li><b>Icon header</b> with tooltips. Rare actions go under <b>⋯</b>.</li>
+        <li><b>Links pill</b> shows active links as text; click for checkboxes.</li>
+        <li><b>1:1 aspect</b> on by default for spatial pairs with equal units.</li>
+        <li><b>Direction chevrons, start ▲ and end ■</b> markers on every trace.</li>
+        <li><b>Legend top right</b> with short names (topic + axes) and the unit as metadata. Click a row to hide it.</li>
+        <li><b>Pinned readout</b> for the timeline cursor (t, x, y, speed) and a hover chip that snaps to the nearest sample.</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ MAP ============ -->
+<section class="demo" id="map">
+  <div class="demo-head">
+    <div><span class="eyebrow">Demo 2</span><h2>Map plot, 2D and 3D</h2></div>
+    <div class="seg" role="group" aria-label="Variant"><button aria-pressed="true" data-v="new">Proposed</button><button aria-pressed="false" data-v="cur">Current</button></div>
+  </div>
+  <div class="demo-body">
+    <div class="scroller">
+      <div class="frame v-new">
+        <div class="strip">
+          <span class="tab">Flight map <span class="x">×</span></span><span class="tab-add">+</span>
+          <span class="spacer"></span>
+          <button class="links-pill" id="mapLinks" type="button"><svg viewBox="0 0 16 16"><path d="M6.5 9.5l3-3M5 8l-1.5 1.5a2.1 2.1 0 003 3L8 11M11 8l1.5-1.5a2.1 2.1 0 00-3-3L8 5"/></svg><span class="dot"></span><span id="mapLinksLbl">Pointer · Time · Range</span>
+            <div class="pop" id="mapLinksPop" hidden>
+              <label><input type="checkbox" data-l="p" checked> Pointer</label>
+              <label><input type="checkbox" data-l="t" checked> Timeline</label>
+              <label><input type="checkbox" data-l="r" id="linkRange" checked> Time range</label>
+              <div class="hint">Time range dims the path outside the<br>X bounds of linked time plots.</div>
+            </div>
+          </button>
+          <span class="divider"></span>
+          <button class="ibtn" data-tip="Edit traces" type="button"><svg viewBox="0 0 16 16"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg></button>
+          <button class="ibtn" data-tip="Screenshot / export" type="button"><svg viewBox="0 0 16 16"><rect x="2" y="4.5" width="12" height="9" rx="1.5"/><circle cx="8" cy="9" r="2.3"/><path d="M5.5 4.5l1-2h3l1 2"/></svg></button>
+          <button class="ibtn" data-tip="More" type="button"><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/></svg></button>
+          <button class="ibtn" data-tip="Maximize" type="button"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9"/></svg></button>
+        </div>
+        <div class="stage" id="mapStage">
+          <canvas id="mapCanvas"></canvas>
+          <div class="float modebar">
+            <div class="seg sm" role="group" aria-label="Map mode"><button aria-pressed="true" data-mode="2d" type="button">Map</button><button aria-pressed="false" data-mode="3d" type="button">3D</button></div>
+            <span class="divider"></span>
+            <button class="ibtn layerbtn" id="layerBtn" type="button" aria-label="Layers"><svg viewBox="0 0 16 16"><path d="M8 2l6 3.2-6 3.2-6-3.2z"/><path d="M2 8.4l6 3.2 6-3.2"/><path d="M2 11.2l6 3.2 6-3.2" opacity=".5"/></svg>
+              <div class="pop pop2" id="layerPop" hidden style="left:0;right:auto">
+                <div class="col">
+                  <div class="hint">Basemap</div>
+                  <label><input type="radio" name="bm" value="street" checked> OpenStreetMap</label>
+                  <label><input type="radio" name="bm" value="sat"> Esri World Imagery</label>
+                  <label><input type="radio" name="bm" value="none"> None (grid)</label>
+                  <label><input type="checkbox"> Offline tiles only</label>
+                  <hr>
+                  <div class="hint">3D</div>
+                  <label><input type="checkbox" id="optGround" checked> Ground path</label>
+                  <label><input type="checkbox" id="optExag"> Terrain height ×2</label>
+                </div>
+                <div class="col">
+                  <div class="hint">Trace</div>
+                  <label><input type="checkbox" id="optArrows" checked> Direction arrows</label>
+                  <label><input type="checkbox" id="optModes" checked> Flight mode changes</label>
+                  <label><input type="checkbox" id="optProfile" checked> Altitude profile <span class="hint" style="padding:0;margin-left:auto">2D</span></label>
+                  <hr>
+                  <div class="hint">Show path</div>
+                  <label><input type="radio" name="trail" value="full" checked> Whole flight</label>
+                  <label><input type="radio" name="trail" value="past"> Flown so far</label>
+                  <label><input type="radio" name="trail" value="trail"> Last 30 s</label>
+                </div>
+              </div>
+            </button>
+          </div>
+          <div class="float legend right" id="mapLegend"></div>
+          <div class="float mapnav">
+            <button class="mbtn" data-tip="Zoom in" type="button" id="zIn"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+            <button class="mbtn" data-tip="Zoom out" type="button" id="zOut"><svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg></button>
+            <hr>
+            <button class="mbtn" data-tip="North up (drag in 3D to rotate)" type="button" id="compass"><svg viewBox="0 0 16 16" id="compassSvg"><path d="M8 1.5l3 7H5z" fill="#e07a5f" stroke="none"/><path d="M8 14.5l-3-6h6z" stroke="currentColor"/></svg></button>
+            <button class="mbtn" data-tip="Measure (M)" type="button" id="measureBtn"><svg viewBox="0 0 16 16"><path d="M2 11.5L11.5 2l2.5 2.5L4.5 14z"/><path d="M5 9.5l1.2 1.2M7 7.5l1.2 1.2M9 5.5l1.2 1.2"/></svg></button>
+            <button class="mbtn" data-tip="Fit traces" type="button" id="mapFit"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
+            <button class="mbtn on" data-tip="Follow timeline marker" type="button" id="follow"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15"/></svg></button>
+          </div>
+          <div class="scale" id="mapScale"><span id="scaleLbl">50 m</span><div class="ruler" id="scaleRuler" style="width:80px"></div></div>
+          <div class="attrib" id="attrib">© OpenStreetMap contributors</div>
+          <div class="hoverchip" id="mapChip" hidden></div>
+          <div class="float pickbanner" id="measBanner" hidden>Click two points · snaps to samples · M or Esc to finish</div>
+        </div>
+        <div class="profile" id="mapProfile"><canvas id="profCanvas"></canvas></div>
+        <div class="timebar"><span class="lbl">Time</span><input type="range" id="mapTime" min="0" max="1000" value="540" aria-label="Timeline"><span class="t" id="mapTimeLbl"></span></div>
+      </div>
+      <div class="frame v-new linkedts">
+        <div class="strip"><span class="tab">Speed · time plot <span class="x">×</span></span><span class="spacer"></span><span class="tshint">Linked to the map · drag to zoom X · wheel zooms · double-click resets</span></div>
+        <div class="stage" id="tsStage" style="height:140px"><canvas id="tsCanvas"></canvas></div>
+</div>
+      <div class="frame v-cur" hidden>
+        <div class="strip">
+          <span class="tab">Plot 5 <span class="x">×</span></span><span class="tab-add">+</span><span class="spacer"></span>
+          <span class="tbtn">Edit coordinates</span><span class="tbtn">📷</span><span class="tbtn">Preset ▾</span><span class="tbtn">Background</span><span class="tbtn">Duplicate</span><span class="tbtn">Maximize</span>
+        </div>
+        <div class="cur-toolbar"><span class="tbtn">2D</span><span class="tbtn on">3D</span><span class="tbtn">Fit</span><span class="tbtn on">Follow</span><span class="tbtn">▲</span><span class="tbtn on">Ground path</span><span class="tbtn">Reset view</span></div>
+        <div class="stage" style="height:398px"><canvas id="mapCurCanvas"></canvas>
+          <div class="cur-legend"><div class="r"><i style="background:var(--l1)"></i>vehicle_global_position/0/lon vs vehicle_global_position/0/lat ⚙ × Set start</div><div class="r"><i style="background:var(--l2)"></i>vehicle_gps_position/0/longitude_deg vs …latitude_deg ⚙ ×</div></div>
+          <span class="cur-tag">reconstructed</span>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>Today</h3>
+      <ul class="problems">
+        <li>Three control rows (pane header, map toolbar, view options) stack above the map and take about 70 px.</li>
+        <li>The same jobs show up twice: <b>2D/3D</b>, <b>Fit</b> / Fit traces, <b>Follow</b> / Link timeline, <b>Reset view</b> / Reset orbit, split between the toolbar and the builder sidebar.</li>
+        <li>Basemap, offline mode and attribution are only in the builder, so switching to satellite means opening setup.</li>
+        <li>Gradient coloring has no on-map key, so you can't read speed or altitude from the colors.</li>
+      </ul>
+      <h3>Proposed</h3>
+      <ul class="changes">
+        <li><b>The map takes the whole pane.</b> Controls float in the corners, like map apps already do.</li>
+        <li><b>Top left:</b> Map/3D switch and a layers popover (basemap, ground path, exaggeration, offline).</li>
+        <li><b>Bottom right:</b> zoom, a compass that rotates with bearing (click for north-up), Fit, and Follow.</li>
+        <li><b>Top right:</b> legend with an inline gradient key and its min/max.</li>
+        <li><b>Bottom:</b> scale bar plus required attribution, always visible.</li>
+        <li><b>Time range link</b> (Links pill): dims the path outside the X bounds of linked time plots. Zoom the speed plot below and the map, profile and arrows follow.</li>
+        <li><b>Measure (M)</b>: two clicks give distance and bearing. Clicks snap to samples; with both ends on samples it shows 3D distance plus its horizontal and vertical parts, and two samples on one trace add Δt, distance flown and average speed. Works in 3D on samples.</li>
+        <li><b>Altitude profile</b> under 2D maps (toggle in layers): AMSL and terrain against distance flown, hover-linked to the map.</li>
+        <li><b>Legend quick settings</b>: eye toggles visibility; clicking a name opens color-by and Fit to trace without opening setup.</li>
+        <li><b>Direction arrows</b> along every trace in 2D and 3D, spaced by screen distance so they stay readable at any zoom.</li>
+        <li><b>Flight mode changes</b> marked on the path (from the same state mappings as time-plot bands). Hover shows the mode too.</li>
+        <li><b>Show path</b>: whole flight, flown so far, or last 30 s around the timeline marker, for replaying a flight.</li>
+        <li>The timeline marker is the same <b>heading arrow in 2D and 3D</b>; in 3D a dashed drop line ties it to the ground. Follow keeps it centred in both modes.</li>
+        <li>Hover snaps to a sample and shows time, altitude and speed. Try 3D: drag to orbit.</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ BUILDER ============ -->
+<section class="demo" id="builder">
+  <div class="demo-head">
+    <div><span class="eyebrow">Demo 3</span><h2>Trace setup panel</h2></div>
+    <div class="seg" role="group" aria-label="Variant"><button aria-pressed="true" data-v="new">Proposed</button><button aria-pressed="false" data-v="cur">Current</button></div>
+  </div>
+  <div class="demo-body">
+    <div class="scroller">
+      <div class="frame with-side v-new">
+        <div class="tray" id="bTray"></div>
+        <div class="pane"><div class="stage" id="bStage" style="height:560px"><canvas id="bCanvas"></canvas><div class="float pickbanner" id="bBanner" hidden>Click the map to set the start location · Esc cancels</div></div></div>
+        <div class="side">
+          <div class="side-head"><span class="t">Map traces</span><button class="ibtn" type="button" aria-label="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+          <div class="side-body" id="bBody"></div>
+        </div>
+      </div>
+      <div class="frame with-side v-cur" hidden>
+        <div class="pane"><div class="stage" style="height:510px"><canvas id="bCurCanvas"></canvas><span class="cur-tag">reconstructed</span></div></div>
+        <div class="cur-side">
+          <div class="row" style="justify-content:space-between"><span class="h">Map plots</span><span class="tbtn ghost">×</span></div>
+          <div class="m">Bind coordinates and units, then drag a trace to a plot</div>
+          <div class="cols"><span class="m">Longitude / east</span><span class="m">Latitude / north</span></div>
+          <div class="cols"><span class="chip">vehicle_global_position/0/lon ×</span><span class="chip">vehicle_global_position/0/lat ×</span></div>
+          <div class="row"><span class="tbtn">⇄</span><span class="tbtn">×</span></div>
+          <div class="row"><span class="m">Units</span><span class="tbtn on">Degrees</span><span class="tbtn">Degrees ×1e7</span><span class="tbtn">Radians</span><span class="tbtn">Local metres</span></div>
+          <div class="inp">Fix type field ID (optional)</div>
+          <div class="m" style="font-weight:600;color:var(--fg)">Z / altitude</div>
+          <div class="inp">Drop Z field here, or enter field ID</div>
+          <div class="row"><span class="tbtn">Bind Z</span><span class="tbtn">Clear Z</span></div>
+          <div class="row"><span class="tbtn">Local Z offset</span><span class="tbtn">First Z on ground</span><span class="tbtn on">Global elevation</span></div>
+          <div class="row"><span class="tbtn on">Metres</span><span class="tbtn">Millimetres</span><span class="tbtn">Feet</span></div>
+          <div class="row"><span class="tbtn">Z increases up</span></div>
+          <div class="m">First Z on ground removes starting altitude. Local Z offset adds Z to terrain. Global elevation uses absolute metres. No Z field: Z=0. Missing altitude samples break trace.</div>
+          <div class="m" style="font-weight:600;color:var(--fg)">Color: vehicle_global_position/0/lon vs …</div>
+          <div class="inp" style="color:var(--fg)">Speed gradient ▾</div>
+          <div class="m">Horizontal speed in m/s. Values outside limits use endpoint colors.</div>
+          <div class="cols"><div class="inp">0</div><div class="inp">14</div></div>
+          <div class="row"><span class="tbtn">Apply limits</span></div>
+          <div style="border:1px dashed var(--border-strong);padding:6px;text-align:center" class="m">Drag pair to a plot</div>
+          <div class="m">Map backend</div><div class="inp" style="color:var(--fg)">OpenStreetMap ▾</div>
+          <div class="row"><span class="tbtn">2D map</span><span class="tbtn on">3D map</span><span class="tbtn">Online tiles</span><span class="tbtn">Fit traces</span><span class="tbtn">Retry tiles</span><span class="tbtn on">Link timeline</span><span class="tbtn">Reset orbit</span></div>
+          <div class="m">Drag to orbit; middle-drag or Ctrl-drag to pan; wheel to zoom. Local Z uses one terrain height at trace start.</div>
+          <div class="row"><span class="tbtn">© OpenStreetMap contributors</span><span class="tbtn">Terrain: (c) Mapterhorn / source datasets</span></div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>Today</h3>
+      <ul class="problems">
+        <li>One long column mixes per-trace settings (units, Z, color) with per-map settings (backend, 2D/3D, orbit). It's hard to tell what a button affects.</li>
+        <li>Fix type and Z can be typed as raw field IDs, with separate Bind and Clear buttons.</li>
+        <li>Altitude modes need a paragraph to explain them.</li>
+        <li>Gradient limits need an explicit <b>Apply limits</b> click.</li>
+      </ul>
+      <h3>Proposed</h3>
+      <ul class="changes">
+        <li><b>One collapsible card per trace</b> with a summary line. The open card's trace is highlighted on the map; others dim.</li>
+        <li><b>Local m opens a Start location section</b>: <b>Default</b>, <b>From GPS</b> (first valid fix of a GPS trace in this map, so local and GPS line up), <b>Click map</b> (crosshair click, live lat/lon readout, pin), or pasted <b>Lat, lon</b>.</li>
+        <li><b>Put here</b> picks whether the first sample or local (0, 0) lands on the start. The map shows the difference immediately.</li>
+        <li><b>Saved default start</b>: any start can become the default for new local traces (stored in preferences, beside the theme).</li>
+        <li><b>NED / ENU axes</b> switch relabels the slots, so x-north logs don't need a manual swap.</li>
+        <li><b>Unit check</b>: if the data doesn't match the chosen unit, the card turns amber and offers the detected unit in one click.</li>
+        <li><b>One drop per trace</b>: drop any field from a topic (here or on the map) and its lat/lon/alt or x/y/z siblings fill in, with a note saying what was filled. Try dropping <code>vehicle_gps_position › altitude_msl_m</code>.</li>
+        <li><b>Color by any field</b>: pick Field and drop e.g. <code>battery_status › voltage_v</code>. The range fills from the data; Auto trims to the 2nd–98th percentile.</li>
+        <li><b>Slots are drag and drop only</b>, same as the rest of the app: drag from Fields (left) onto a slot, or onto the dashed box to start a new trace.</li>
+        <li>Map-level settings move to the on-map layers popover (Demo 2).</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="demo" id="plan">
+  <div><span class="eyebrow">Implementation</span><h2>Suggested order</h2></div>
+  <div class="plan">
+    <div class="step"><span class="n">Step 1 · small</span><h3>Icon header + overflow menu</h3><p>Swap text ActionButtons for icon buttons with tooltips. Move Duplicate, Background, Preset and Units into one DropdownMenu. Shorten the Links trigger to a pill.</p><span class="files">plot_actions.rs · plot_links.rs · plot_appearance.rs · style.css</span></div>
+    <div class="step"><span class="n">Step 2 · small</span><h3>Trajectory readability</h3><p>Start/end markers, direction chevrons every N px of screen-space arc length, 1:1 aspect when both axes share a unit, short legend names.</p><span class="files">trajectory_render.rs · trajectory_plot.rs · trajectory.css</span></div>
+    <div class="step"><span class="n">Step 3 · medium</span><h3>On-map control overlay</h3><p>Merge MapToolbar, MapViewOptions and the map half of the sidebar settings into absolutely positioned clusters inside <code>.trajectory-chart</code>. Drop the duplicate controls.</p><span class="files">mapping/toolbar.rs · mapping/view_options.rs · mapping/settings.rs · mapping/scale.rs</span></div>
+    <div class="step"><span class="n">Step 4 · medium</span><h3>Gradient key in legend</h3><p>Render the color ramp and its limits under any gradient-colored legend row. Reuse the existing color_legend output.</p><span class="files">mapping/color_legend.rs · mapping/gradient_legend_row.rs</span></div>
+    <div class="step"><span class="n">Step 5 · larger</span><h3>Trace cards in the builder</h3><p>Restructure the pair list into cards with summary lines. Replace typed field-ID inputs with drop slots plus a search combobox. Use segmented controls for units and the altitude reference.</p><span class="files">trajectory_axes.rs · mapping/settings.rs · mapping/gradient_controls.rs</span></div>
+  </div>
+</section>
+</div>
+
+<script>
+(function(){
+const css = getComputedStyle(document.documentElement);
+const V = n => css.getPropertyValue(n).trim();
+const C = { bg: V('--plot-bg'), grid: '#22302c', axis: V('--border-strong'), muted: V('--muted'), dim: V('--dim'), fg: V('--fg'), l1: V('--l1'), l2: V('--l2'), l3: V('--l3'), accent: V('--accent') };
+
+/* ---------- synthetic flight (local NED-ish: x north, y east, metres) ---------- */
+const HOME = { lat: 47.397742, lon: 8.545594, amsl: 488 };
+function flight(){
+  const N = 1400, pts = [], sp = [];
+  for (let i = 0; i < N; i++){
+    const t = i / (N - 1) * 300; // seconds
+    let x, y, z;
+    if (t < 20){ x = 0; y = 0; z = t / 20 * 40; }
+    else if (t < 240){
+      const s = (t - 20) / 220; // survey: lawnmower legs + loop
+      const legs = 5, L = s * legs, leg = Math.floor(Math.min(L, legs - 1e-9)), f = L - leg;
+      const dir = leg % 2 ? -1 : 1;
+      const turn = 0.12;
+      if (f < 1 - turn){ x = 20 + leg * 26; y = -90 + dir * (f / (1 - turn)) * 180; if (dir < 0) y = 90 - (f / (1 - turn)) * 180; }
+      else { const a = (f - (1 - turn)) / turn * Math.PI; x = 20 + leg * 26 + 13 - 13 * Math.cos(a); y = (dir > 0 ? 90 : -90) + (dir > 0 ? 1 : -1) * 12 * Math.sin(a); }
+      z = 40 + 6 * Math.sin(s * 9) + s * 15;
+    } else {
+      const s = (t - 240) / 60; const x0 = 20 + 4 * 26 + 26, y0 = -90;
+      x = x0 * (1 - s) + 18 * Math.sin(s * Math.PI); y = y0 * (1 - s) - 30 * Math.sin(s * Math.PI); z = 55 * (1 - s) ** 1.5;
+    }
+    pts.push({ t, sx: x, sy: y, sz: z });
+  }
+  // actual = setpoint + lag/noise
+  let ex = 0, ey = 0;
+  for (let i = 0; i < N; i++){
+    const p = pts[i]; const k = Math.max(0, i - 6);
+    ex = 0.9 * ex + 0.6 * Math.sin(i * 0.37) * 0.4; ey = 0.9 * ey + 0.6 * Math.cos(i * 0.23) * 0.4;
+    p.x = pts[k].sx + ex; p.y = pts[k].sy + ey; p.z = pts[k].sz + 0.4 * Math.sin(i * 0.5);
+  }
+  for (let i = 0; i < N; i++){ const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N - 1, i + 1)]; const dt = b.t - a.t || 1; pts[i].spd = Math.hypot(b.x - a.x, b.y - a.y) / dt; }
+  return pts;
+}
+const P = flight();
+const at = v => P[Math.round(v / 1000 * (P.length - 1))];
+const RAMP = ['#2c3e70','#2f6e8e','#3a9a8a','#7cc06a','#d9d84e','#f6b24a'];
+function rampColor(u){ u = Math.max(0, Math.min(1, u)); const f = u * (RAMP.length - 1), i = Math.min(RAMP.length - 2, Math.floor(f)), r = f - i; const h = s => [1,3,5].map(j => parseInt(s.substr(j,2),16)); const a = h(RAMP[i]), b = h(RAMP[i+1]); return `rgb(${a.map((v,k)=>Math.round(v + (b[k]-v)*r)).join(',')})`; }
+const RAMP_CSS = `linear-gradient(90deg, ${RAMP.join(',')})`;
+
+function fitCanvas(cv){ const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; if (cv.width !== Math.round(r.width*d) || cv.height !== Math.round(r.height*d)){ cv.width = Math.round(r.width*d); cv.height = Math.round(r.height*d); } const g = cv.getContext('2d'); g.setTransform(d,0,0,d,0,0); return { g, w: r.width, h: r.height }; }
+function niceStep(range, n){ const raw = range / n, p = 10 ** Math.floor(Math.log10(raw)), m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
+
+/* ---------- variant toggles ---------- */
+document.querySelectorAll('section.demo').forEach(sec => {
+  const btns = sec.querySelectorAll('.demo-head .seg button');
+  btns.forEach(b => b.addEventListener('click', () => {
+    btns.forEach(x => x.setAttribute('aria-pressed', x === b));
+    sec.querySelectorAll('.v-new').forEach(e => e.hidden = b.dataset.v !== 'new');
+    sec.querySelectorAll('.v-cur').forEach(e => e.hidden = b.dataset.v !== 'cur');
+    redrawAll();
+  }));
+});
+function popToggle(btn, pop){ btn.addEventListener('click', e => { if (pop.contains(e.target) && e.target !== btn) return; pop.hidden = !pop.hidden; e.stopPropagation(); }); document.addEventListener('click', e => { if (!btn.contains(e.target)) pop.hidden = true; }); }
+
+/* =============== DEMO 1: XY =============== */
+const xy = { aspect: true, dir: true, hidden: new Set(), hover: null, view: null };
+const XY_TRACES = [
+  { key: 'pos', name: 'local_position', sub: 'x / y', color: C.l1, fx: p => p.y, fy: p => p.x },
+  { key: 'sp', name: 'local_position_setpoint', sub: 'x / y', color: C.l2, fx: p => p.sy, fy: p => p.sx },
+];
+function xyBounds(){ let a = [1e9,-1e9,1e9,-1e9]; for (const p of P){ a[0]=Math.min(a[0],p.y); a[1]=Math.max(a[1],p.y); a[2]=Math.min(a[2],p.x); a[3]=Math.max(a[3],p.x);} const px = (a[1]-a[0])*0.08, py = (a[3]-a[2])*0.08; return [a[0]-px,a[1]+px,a[2]-py,a[3]+py]; }
+function xyMap(w, h, aspect){
+  const m = { l: 52, r: 14, t: 14, b: 34 }; const pw = w - m.l - m.r, ph = h - m.t - m.b;
+  let [x0,x1,y0,y1] = xy.view || xyBounds();
+  if (aspect){ const sx = pw / (x1-x0), sy = ph / (y1-y0), s = Math.min(sx, sy); const cx = (x0+x1)/2, cy = (y0+y1)/2; x0 = cx - pw/s/2; x1 = cx + pw/s/2; y0 = cy - ph/s/2; y1 = cy + ph/s/2; }
+  return { m, pw, ph, x0, x1, y0, y1, X: v => m.l + (v - x0) / (x1 - x0) * pw, Y: v => m.t + (1 - (v - y0) / (y1 - y0)) * ph, iX: px => x0 + (px - m.l) / pw * (x1 - x0), iY: py => y0 + (1 - (py - m.t) / ph) * (y1 - y0) };
+}
+function drawAxes(g, M, xl, yl, polished){
+  g.fillStyle = C.bg; g.fillRect(0, 0, M.m.l + M.pw + M.m.r, M.m.t + M.ph + M.m.b);
+  const sx = niceStep(M.x1 - M.x0, polished ? 7 : 10), sy = niceStep(M.y1 - M.y0, polished ? 6 : 10);
+  g.lineWidth = 1; g.font = '10.5px "JetBrains Mono", monospace'; g.fillStyle = polished ? C.dim : C.muted; g.textAlign = 'center'; g.textBaseline = 'top';
+  for (let v = Math.ceil(M.x0 / sx) * sx; v <= M.x1; v += sx){ const X = Math.round(M.X(v)) + .5; g.strokeStyle = C.grid; g.beginPath(); g.moveTo(X, M.m.t); g.lineTo(X, M.m.t + M.ph); g.stroke(); g.fillText(+v.toFixed(6) + '', X, M.m.t + M.ph + 5); }
+  g.textAlign = 'right'; g.textBaseline = 'middle';
+  for (let v = Math.ceil(M.y0 / sy) * sy; v <= M.y1; v += sy){ const Y = Math.round(M.Y(v)) + .5; g.strokeStyle = C.grid; g.beginPath(); g.moveTo(M.m.l, Y); g.lineTo(M.m.l + M.pw, Y); g.stroke(); g.fillText(+v.toFixed(6) + '', M.m.l - 6, Y); }
+  g.strokeStyle = C.axis; g.strokeRect(M.m.l + .5, M.m.t + .5, M.pw, M.ph);
+  if (polished){ g.fillStyle = C.muted; g.font = '500 11px Inter, sans-serif'; g.textAlign = 'right'; g.textBaseline = 'bottom'; g.fillText(xl, M.m.l + M.pw, M.m.t + M.ph + 32); g.save(); g.translate(12, M.m.t); g.rotate(-Math.PI/2); g.textAlign = 'right'; g.textBaseline = 'top'; g.fillText(yl, 0, 0); g.restore(); }
+}
+function drawTrace(g, M, tr, opts){
+  g.save(); g.beginPath(); g.rect(M.m.l, M.m.t, M.pw, M.ph); g.clip();
+  g.strokeStyle = tr.color; g.lineWidth = opts.width || 1.5; g.lineJoin = 'round'; g.globalAlpha = opts.alpha || 1;
+  g.beginPath(); P.forEach((p, i) => { const X = M.X(tr.fx(p)), Y = M.Y(tr.fy(p)); i ? g.lineTo(X, Y) : g.moveTo(X, Y); }); g.stroke();
+  if (opts.dir){
+    // chevrons every ~70px screen arc length
+    let acc = 0, prev = null; g.fillStyle = tr.color;
+    for (const p of P){ const X = M.X(tr.fx(p)), Y = M.Y(tr.fy(p)); if (prev){ acc += Math.hypot(X - prev[0], Y - prev[1]); if (acc > 70){ acc = 0; const a = Math.atan2(Y - prev[1], X - prev[0]); g.save(); g.translate(X, Y); g.rotate(a); g.beginPath(); g.moveTo(4, 0); g.lineTo(-3, -3.5); g.lineTo(-1.5, 0); g.lineTo(-3, 3.5); g.closePath(); g.fill(); g.restore(); } } prev = [X, Y]; }
+    const s = P[0], e = P[P.length - 1];
+    const sX = M.X(tr.fx(s)), sY = M.Y(tr.fy(s)), eX = M.X(tr.fx(e)), eY = M.Y(tr.fy(e));
+    g.globalAlpha = 1; g.strokeStyle = C.bg; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(sX, sY - 6); g.lineTo(sX + 5.5, sY + 4); g.lineTo(sX - 5.5, sY + 4); g.closePath(); g.fill(); g.stroke();
+    g.fillRect(eX - 4, eY - 4, 8, 8); g.strokeRect(eX - 4, eY - 4, 8, 8);
+  }
+  g.restore();
+}
+function nearestScreen(M, traces, mx, my){ let best = null; for (const tr of traces){ for (let i = 0; i < P.length; i += 2){ const p = P[i]; const d = Math.hypot(M.X(tr.fx(p)) - mx, M.Y(tr.fy(p)) - my); if (!best || d < best.d) best = { d, p, tr }; } } return best && best.d < 30 ? best : null; }
+function marker(g, X, Y, color){ g.beginPath(); g.arc(X, Y, 6, 0, 7); g.fillStyle = color; g.globalAlpha = .25; g.fill(); g.globalAlpha = 1; g.beginPath(); g.arc(X, Y, 3.5, 0, 7); g.fillStyle = C.fg; g.fill(); g.strokeStyle = color; g.lineWidth = 2; g.stroke(); }
+const fmt = (v, d = 1) => (v < 0 ? '−' : '') + Math.abs(v).toFixed(d);
+
+function drawXY(){
+  const cv = document.getElementById('xyCanvas'); if (!cv.offsetParent) return;
+  const { g, w, h } = fitCanvas(cv); const M = xyMap(w, h, xy.aspect);
+  drawAxes(g, M, 'East  y  [m]', 'North  x  [m]', true);
+  const vis = XY_TRACES.filter(t => !xy.hidden.has(t.key));
+  vis.slice().reverse().forEach(tr => drawTrace(g, M, tr, { dir: xy.dir, alpha: tr.key === 'sp' ? .75 : 1, width: tr.key === 'sp' ? 1.2 : 1.6 }));
+  const cur = at(+document.getElementById('xyTime').value);
+  g.save(); g.beginPath(); g.rect(M.m.l, M.m.t, M.pw, M.ph); g.clip();
+  vis.forEach(tr => marker(g, M.X(tr.fx(cur)), M.Y(tr.fy(cur)), tr.color));
+  if (xy.hover){ const { p, tr } = xy.hover; g.strokeStyle = C.dim; g.setLineDash([3, 3]); g.lineWidth = 1; const X = M.X(tr.fx(p)), Y = M.Y(tr.fy(p)); g.beginPath(); g.moveTo(X, M.m.t); g.lineTo(X, M.m.t + M.ph); g.moveTo(M.m.l, Y); g.lineTo(M.m.l + M.pw, Y); g.stroke(); g.setLineDash([]); marker(g, X, Y, tr.color); }
+  g.restore();
+  document.getElementById('xyTimeLbl').textContent = cur.t.toFixed(2) + ' s';
+  document.getElementById('xyReadout').innerHTML = `<span>t</span><span>${cur.t.toFixed(2)} s</span><span>x</span><span>${fmt(cur.x, 2)} m</span><span>y</span><span>${fmt(cur.y, 2)} m</span><span>|v|</span><span>${cur.spd.toFixed(1)} m/s</span>`;
+  xy._M = M;
+}
+function drawXYCur(){
+  const cv = document.getElementById('xyCurCanvas'); if (!cv.offsetParent) return;
+  const { g, w, h } = fitCanvas(cv); const M = xyMap(w, h, false);
+  drawAxes(g, M, '', '', false);
+  XY_TRACES.slice().reverse().forEach(tr => drawTrace(g, M, tr, { dir: false }));
+}
+function legendXY(){
+  const el = document.getElementById('xyLegend');
+  el.innerHTML = XY_TRACES.map(t => `<div class="lrow ${xy.hidden.has(t.key) ? 'off' : ''}" data-k="${t.key}" role="button" tabindex="0"><span class="sw" style="background:${t.color}"></span><span class="nm">${t.name} <span style="color:var(--dim)">${t.sub}</span></span><span class="meta">m</span></div>`).join('');
+  el.querySelectorAll('.lrow').forEach(r => r.addEventListener('click', () => { const k = r.dataset.k; xy.hidden.has(k) ? xy.hidden.delete(k) : xy.hidden.add(k); legendXY(); drawXY(); }));
+}
+legendXY();
+(function(){
+  const st = document.getElementById('xyStage'), chip = document.getElementById('xyChip');
+  st.addEventListener('mousemove', e => { if (!xy._M || e.target.closest('.float')) { xy.hover = null; chip.hidden = true; drawXY(); return; } const r = st.getBoundingClientRect(); const mx = e.clientX - r.left, my = e.clientY - r.top; const vis = XY_TRACES.filter(t => !xy.hidden.has(t.key)); const n = nearestScreen(xy._M, vis, mx, my); xy.hover = n; if (n){ chip.hidden = false; chip.style.left = xy._M.X(n.tr.fx(n.p)) + 'px'; chip.style.top = xy._M.Y(n.tr.fy(n.p)) + 'px'; chip.innerHTML = `<b>${n.tr.name}</b>  t ${n.p.t.toFixed(2)} s<br>x ${fmt(n.tr.fy(n.p),2)}  y ${fmt(n.tr.fx(n.p),2)} m`; } else chip.hidden = true; drawXY(); });
+  st.addEventListener('mouseleave', () => { xy.hover = null; chip.hidden = true; drawXY(); });
+  st.addEventListener('click', () => { if (xy.hover){ const i = P.indexOf(xy.hover.p); document.getElementById('xyTime').value = Math.round(i / (P.length - 1) * 1000); drawXY(); } });
+  st.addEventListener('wheel', e => { e.preventDefault(); const M = xy._M; const r = st.getBoundingClientRect(); const cx = M.iX(e.clientX - r.left), cy = M.iY(e.clientY - r.top); const k = e.deltaY > 0 ? 1.15 : 1/1.15; xy.view = [cx + (M.x0 - cx) * k, cx + (M.x1 - cx) * k, cy + (M.y0 - cy) * k, cy + (M.y1 - cy) * k]; drawXY(); }, { passive: false });
+  st.addEventListener('dblclick', () => { xy.view = null; drawXY(); });
+  document.getElementById('xyFit').onclick = () => { xy.view = null; drawXY(); };
+  document.getElementById('xyAspect').onclick = e => { xy.aspect = !xy.aspect; e.currentTarget.classList.toggle('on', xy.aspect); drawXY(); };
+  document.getElementById('xyDir').onclick = e => { xy.dir = !xy.dir; e.currentTarget.classList.toggle('on', xy.dir); drawXY(); };
+  document.getElementById('xyTime').oninput = drawXY;
+  popToggle(document.getElementById('xyLinks'), document.getElementById('xyLinksPop'));
+  popToggle(document.getElementById('xyMore'), document.getElementById('xyMorePop'));
+  document.querySelectorAll('#xyLinksPop input').forEach(i => i.addEventListener('change', () => { const on = [...document.querySelectorAll('#xyLinksPop input')].filter(i => i.checked).map(i => ({ x: 'X', y: 'Y', p: 'Pointer', t: 'Time' })[i.dataset.l]); document.getElementById('xyLinksLbl').textContent = on.length ? on.join(' · ') : 'Unlinked'; document.querySelector('#xyLinks .dot').style.background = on.length ? 'var(--accent)' : 'var(--dim)'; }));
+})();
+
+/* =============== DEMO 2: MAP =============== */
+const mp = { mode: '2d', bm: 'street', zoom: 1, center: null, follow: true, yaw: -0.6, pitch: 0.75, ground: true, exag: false, hidden: new Set(), hover: null, arrows: true, modes: true, trail: 'full', rangeLink: true, range: [95, 170], measuring: false, meas: [], mq: null, profile: true, lpop: null };
+const MAP_TRACES = [ { key: 'gp', name: 'Global position', color: C.l1, cmode: 'speed', fx: p => p.y, fy: p => p.x, fz: p => p.z }, { key: 'gps', name: 'GPS raw', color: C.l2, cmode: 'solid', fx: p => p.sy + 1.5 * Math.sin(p.t), fy: p => p.sx + 1.5 * Math.cos(p.t * .7), fz: p => p.sz } ];
+const SPD_MAX = 14;
+const CMODES = { speed: { f: p => p.spd, lo: 0, hi: 14, unit: 'm/s', label: 'speed' }, alt: { f: p => p.z, lo: 0, hi: 60, unit: 'm', label: 'altitude' }, volt: { f: p => 16.8 - p.t / 300 * 2.1 - 0.35 * Math.min(1, p.spd / 10), lo: 14.4, hi: 16.8, unit: 'V', label: 'voltage_v' } };
+const colorOf = (tr, i) => { const c = CMODES[tr.cmode]; return c ? rampColor((c.f(P[i]) - c.lo) / (c.hi - c.lo)) : tr.color; };
+const EYE = '<svg viewBox="0 0 16 16"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 16 16"><path d="M2 2l12 12M6.3 4A7 7 0 0114.5 8a10 10 0 01-1.8 2.3M9.8 11.9A7 7 0 011.5 8a10 10 0 012.2-2.6"/></svg>';
+const MODES = [{ t: 0, name: 'Takeoff', c: '#77b9e8' }, { t: 20, name: 'Mission', c: '#75a77b' }, { t: 240, name: 'Return', c: '#eebe60' }, { t: 288, name: 'Land', c: '#e07a5f' }];
+const modeAt = t => MODES.filter(m => m.t <= t).pop();
+const GAP = [150, 166]; const inGap = p => p.t >= GAP[0] && p.t < GAP[1];
+function segAlpha(p, curT){ const a = segAlpha0(p, curT); return mp.rangeLink && mp.range && (p.t < mp.range[0] || p.t > mp.range[1]) ? Math.min(a, .16) : a; }
+function segAlpha0(p, curT){ if (mp.trail === 'full') return 1; if (p.t > curT) return mp.trail === 'past' ? .14 : .1; if (mp.trail === 'trail' && curT - p.t > 30) return .14; return 1; }
+function chevron(g, X, Y, ang, color){ g.save(); g.translate(X, Y); g.rotate(ang); g.beginPath(); g.moveTo(5.5, 0); g.lineTo(-4, -4.5); g.lineTo(-1.5, 0); g.lineTo(-4, 4.5); g.closePath(); g.fillStyle = color; g.strokeStyle = '#000c'; g.lineWidth = 1.2; g.stroke(); g.fill(); g.restore(); }
+// pts: screen points (null = no sample), shared by 2D and 3D
+function drawSegs(g, pts, tr, curT){
+  const col = i => colorOf(tr, i);
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  for (const pass of [0, 1]){
+    g.lineWidth = pass ? 2.6 : 4.8;
+    for (let i = 1; i < pts.length; i++){ const a = pts[i - 1], b = pts[i]; if (!a || !b) continue; g.globalAlpha = segAlpha(P[i], curT) * (pass ? 1 : .7); g.strokeStyle = pass ? col(i) : '#000'; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
+  }
+  g.globalAlpha = 1; g.lineCap = 'butt';
+  if (tr.gap){ const i0 = P.findIndex(inGap), i1 = P.length - 1 - [...P].reverse().findIndex(inGap); const a = pts[i0 - 1], b = pts[i1 + 1];
+    if (a && b){ g.strokeStyle = tr.color; g.lineWidth = 1.5; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.setLineDash([]); const lbl = `no GPS fix · ${GAP[1] - GAP[0]} s`; g.font = '500 10px Inter, sans-serif'; const w = g.measureText(lbl).width + 10, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; g.fillStyle = '#0c1210e6'; g.fillRect(mx - w / 2, my - 9, w, 17); g.fillStyle = tr.color; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(lbl, mx, my); g.textAlign = 'start'; g.textBaseline = 'alphabetic'; } }
+  if (mp.arrows){ let acc = 0; for (let i = 2; i < pts.length; i++){ const a = pts[i - 2], b = pts[i]; if (!a || !b){ acc = 0; continue; } acc += Math.hypot(b[0] - pts[i - 1][0], b[1] - pts[i - 1][1]) || 0; if (acc > 85 && segAlpha(P[i], curT) > .5){ acc = 0; chevron(g, b[0], b[1], Math.atan2(b[1] - a[1], b[0] - a[0]), col(i)); } } }
+  if (mp.modes && tr.key === 'gp'){ const placed = []; for (const m of MODES){ const i = P.findIndex(p => p.t >= m.t); const v = pts[i]; if (!v) continue; const dy = placed.filter(q => Math.hypot(q[0] - v[0], q[1] - v[1]) < 20).length * 18; placed.push(v); g.globalAlpha = segAlpha(P[i], curT) > .5 ? 1 : .35; g.beginPath(); g.arc(v[0], v[1], 5, 0, 7); g.fillStyle = m.c; g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1.5; g.stroke(); g.font = '600 10.5px Inter, sans-serif'; const w = g.measureText(m.name).width + 10; g.fillStyle = '#0c1210e6'; g.fillRect(v[0] + 8, v[1] - 22 - dy, w, 16); g.fillStyle = m.c; g.fillRect(v[0] + 8, v[1] - 22 - dy, 2, 16); g.fillStyle = C.fg; g.fillText(m.name, v[0] + 13, v[1] - 10.5 - dy); g.globalAlpha = 1; } }
+}
+// procedural basemap features in metres (east, north)
+function seeded(s){ return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const FEAT = (() => { const r = seeded(7), fields = []; for (let i = 0; i < 46; i++){ const cx = -260 + r() * 520, cy = -160 + r() * 420, w = 30 + r() * 70, h = 25 + r() * 60, a = (r() - .5) * .5; fields.push({ cx, cy, w, h, a, c: r() }); } return { fields }; })();
+function terrainH(e, n){ return 18 * Math.sin(e / 90) * Math.cos(n / 120) + 10 * Math.sin((e + n) / 55) + 0.08 * n; }
+function mapProj(w, h){ const base = Math.min(w / 360, h / 300) * mp.zoom; let c = mp.center || [0, 60]; if (mp.follow){ const cur = at(+document.getElementById('mapTime').value); c = [cur.y, cur.x]; } return { s: base, c, X: e => w / 2 + (e - c[0]) * base, Y: n => h / 2 - (n - c[1]) * base, iE: X => c[0] + (X - w / 2) / base, iN: Y => c[1] - (Y - h / 2) / base }; }
+function drawBase2D(g, w, h, M){
+  if (mp.bm === 'none'){ g.fillStyle = C.bg; g.fillRect(0, 0, w, h); const st = niceStep(400 / mp.zoom, 8); g.strokeStyle = C.grid; g.lineWidth = 1; for (let e = Math.floor(M.iE(0) / st) * st; e < M.iE(w); e += st){ g.beginPath(); g.moveTo(M.X(e), 0); g.lineTo(M.X(e), h); g.stroke(); } for (let n = Math.floor(M.iN(h) / st) * st; n < M.iN(0); n += st){ g.beginPath(); g.moveTo(0, M.Y(n)); g.lineTo(w, M.Y(n)); g.stroke(); } return; }
+  const sat = mp.bm === 'sat';
+  g.fillStyle = sat ? '#26301f' : '#2a2f2b'; g.fillRect(0, 0, w, h);
+  FEAT.fields.forEach(f => { g.save(); g.translate(M.X(f.cx), M.Y(f.cy)); g.rotate(f.a); g.fillStyle = sat ? `hsl(${70 + f.c * 40}, ${22 + f.c * 15}%, ${16 + f.c * 10}%)` : `hsl(${110 + f.c * 30}, 10%, ${19 + f.c * 4}%)`; g.fillRect(-f.w * M.s / 2, -f.h * M.s / 2, f.w * M.s, f.h * M.s); g.restore(); });
+  // river
+  g.strokeStyle = sat ? '#1d2c33' : '#2b4150'; g.lineWidth = 16 * M.s; g.lineCap = 'round'; g.beginPath(); for (let n = -300; n <= 500; n += 10){ const e = 190 + 40 * Math.sin(n / 80); n === -300 ? g.moveTo(M.X(e), M.Y(n)) : g.lineTo(M.X(e), M.Y(n)); } g.stroke();
+  // roads
+  g.strokeStyle = sat ? '#5c5a50' : '#4a514b'; g.lineWidth = Math.max(2, 7 * M.s);
+  g.beginPath(); g.moveTo(M.X(-400), M.Y(-30)); g.bezierCurveTo(M.X(-100), M.Y(-60), M.X(60), M.Y(10), M.X(400), M.Y(-20)); g.stroke();
+  g.lineWidth = Math.max(1.5, 4 * M.s); g.beginPath(); g.moveTo(M.X(-150), M.Y(-300)); g.bezierCurveTo(M.X(-120), M.Y(60), M.X(-170), M.Y(200), M.X(-140), M.Y(500)); g.stroke();
+  if (!sat){ g.fillStyle = '#6f7a72'; g.font = 'italic 10px Inter, sans-serif'; g.fillText('Glatt', M.X(200), M.Y(250)); }
+  g.lineCap = 'butt';
+}
+function drawMapTraces2D(g, M){
+  const curT = at(+document.getElementById('mapTime').value).t;
+  MAP_TRACES.filter(t => !mp.hidden.has(t.key)).slice().reverse().forEach(tr => {
+    const pts = P.map(p => tr.gap && inGap(p) ? null : [M.X(tr.fx(p)), M.Y(tr.fy(p))]); tr._pts2 = pts;
+    drawSegs(g, pts, tr, curT);
+  });
+}
+function vehicle(g, X, Y, heading){ g.save(); g.translate(X, Y); g.rotate(heading); g.beginPath(); g.moveTo(0, -9); g.lineTo(6.5, 7); g.lineTo(0, 3.5); g.lineTo(-6.5, 7); g.closePath(); g.fillStyle = C.fg; g.strokeStyle = '#000'; g.lineWidth = 1.5; g.fill(); g.stroke(); g.restore(); }
+function heading(tr, i){ const a = P[Math.max(0, i - 3)], b = P[Math.min(P.length - 1, i + 3)]; return Math.atan2(tr.fx(b) - tr.fx(a), tr.fy(b) - tr.fy(a)); }
+
+function proj3(w, h){
+  const ex = mp.exag ? 2 : 1; const cur = at(+document.getElementById('mapTime').value);
+  const c = mp.follow ? [cur.y, cur.x, 0] : (mp.center ? [mp.center[0], mp.center[1], 0] : [0, 60, 0]);
+  const dist = 520 / mp.zoom, f = Math.min(w, h) * 1.25;
+  const cy = Math.cos(mp.yaw), sy = Math.sin(mp.yaw), cp = Math.cos(mp.pitch), sp = Math.sin(mp.pitch);
+  return { ex, c, P: (e, n, z) => { const x = e - c[0], y = n - c[1]; const rx = x * cy - y * sy, ry = x * sy + y * cy; const vz = z; const depth = ry * cp + vz * sp + dist; const up = -ry * sp + vz * cp; return depth < 10 ? null : [w / 2 + rx / depth * f, h * 0.55 - up / depth * f, depth]; } };
+}
+function drawMap3D(g, w, h){
+  const T = proj3(w, h);
+  const sky = g.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#1b2a2c'); sky.addColorStop(1, '#101716'); g.fillStyle = sky; g.fillRect(0, 0, w, h);
+  // terrain mesh quads, painter's order by depth
+  const step = 30, R = 420, quads = [];
+  for (let e = -R; e < R; e += step) for (let n = -R + 60; n < R + 60; n += step){
+    const ee = e + Math.round(T.c[0] / step) * step, nn = n + Math.round(T.c[1] / step) * step;
+    const z = (a, b) => terrainH(a, b) * T.ex;
+    const q = [T.P(ee, nn, z(ee, nn)), T.P(ee + step, nn, z(ee + step, nn)), T.P(ee + step, nn + step, z(ee + step, nn + step)), T.P(ee, nn + step, z(ee, nn + step))];
+    if (q.some(v => !v)) continue; const d = (q[0][2] + q[2][2]) / 2; const hh = terrainH(ee + step / 2, nn + step / 2);
+    quads.push({ q, d, hh, ee, nn });
+  }
+  quads.sort((a, b) => b.d - a.d);
+  const sat = mp.bm === 'sat';
+  for (const { q, d, hh, ee, nn } of quads){
+    const shade = 0.75 + 0.25 * Math.sin((ee + nn) / 70); const fog = Math.min(1, d / (1100 / mp.zoom));
+    const l = (sat ? 15 : 19) + hh * 0.18 * shade; g.fillStyle = mp.bm === 'none' ? `hsl(160, 8%, ${12 + hh * .1}%)` : `hsl(${sat ? 80 : 125}, ${sat ? 24 : 10}%, ${Math.max(8, l * (1 - fog * .35))}%)`;
+    g.beginPath(); q.forEach((v, i) => i ? g.lineTo(v[0], v[1]) : g.moveTo(v[0], v[1])); g.closePath(); g.fill(); g.strokeStyle = '#ffffff0d'; g.lineWidth = .6; g.stroke();
+  }
+  const cur = at(+document.getElementById('mapTime').value), ci = P.indexOf(cur);
+  MAP_TRACES.filter(t => !mp.hidden.has(t.key)).forEach(tr => {
+    const z0 = terrainH(tr.fx(P[0]), tr.fy(P[0]));
+    const pts = P.map(p => tr.gap && inGap(p) ? null : T.P(tr.fx(p), tr.fy(p), (z0 + tr.fz(p)) * 1 + (T.ex - 1) * z0));
+    if (mp.ground){ g.strokeStyle = '#00000080'; g.lineWidth = 2; g.beginPath(); P.forEach((p, i) => { const v = T.P(tr.fx(p), tr.fy(p), terrainH(tr.fx(p), tr.fy(p)) * T.ex + .5); if (v) i ? g.lineTo(v[0], v[1]) : g.moveTo(v[0], v[1]); }); g.stroke();
+      g.strokeStyle = '#ffffff22'; g.lineWidth = 1; for (let i = 0; i < P.length; i += 40){ const a = pts[i], b = T.P(tr.fx(P[i]), tr.fy(P[i]), terrainH(tr.fx(P[i]), tr.fy(P[i])) * T.ex); if (a && b){ g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); } } }
+    drawSegs(g, pts, tr, cur.t);
+    const v = pts[ci], ah = pts[Math.min(P.length - 1, ci + 4)] || v, bh = pts[Math.max(0, ci - 4)] || v; if (v && tr.key === 'gp'){ const gnd = T.P(tr.fx(P[ci]), tr.fy(P[ci]), terrainH(tr.fx(P[ci]), tr.fy(P[ci])) * T.ex); if (gnd){ g.strokeStyle = '#ffffff99'; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(v[0], v[1]); g.lineTo(gnd[0], gnd[1]); g.stroke(); g.setLineDash([]); g.beginPath(); g.ellipse(gnd[0], gnd[1], 5, 2.5, 0, 0, 7); g.fillStyle = '#0008'; g.fill(); } vehicle(g, v[0], v[1], Math.atan2(ah[0] - bh[0], -(ah[1] - bh[1]))); }
+    tr._pts = pts;
+  });
+  mp._T = T;
+}
+function drawMap(){
+  const cv = document.getElementById('mapCanvas'); if (!cv.offsetParent) return;
+  const { g, w, h } = fitCanvas(cv);
+  const cur = at(+document.getElementById('mapTime').value), ci = P.indexOf(cur);
+  if (mp.mode === '2d'){
+    const M = mapProj(w, h); mp._M = M; drawBase2D(g, w, h, M); drawMapTraces2D(g, M);
+    MAP_TRACES.filter(t => !mp.hidden.has(t.key)).forEach(tr => { if (tr.key === 'gp') vehicle(g, M.X(tr.fx(cur)), M.Y(tr.fy(cur)), heading(tr, ci)); });
+    if (mp.hover){ const { p, tr } = mp.hover; marker(g, M.X(tr.fx(p)), M.Y(tr.fy(p)), tr.color); }
+    // scale bar
+    const target = 90 / M.s; const nice = [5,10,20,25,50,100,200,250,500,1000].find(v => v >= target * .6) || 1000; document.getElementById('scaleRuler').style.width = (nice * M.s) + 'px'; document.getElementById('scaleLbl').textContent = nice + ' m';
+    document.getElementById('compassSvg').style.transform = 'none';
+  } else {
+    drawMap3D(g, w, h);
+    if (mp.hover && mp.hover.v){ marker(g, mp.hover.v[0], mp.hover.v[1], mp.hover.tr.color); }
+    document.getElementById('compassSvg').style.transform = `rotate(${mp.yaw}rad)`;
+  }
+  document.getElementById('mapScale').hidden = mp.mode !== '2d';
+  document.getElementById('mapTimeLbl').textContent = cur.t.toFixed(2) + ' s';
+  drawMeasure(g); drawProfile(); drawTS();
+}
+function legendMap(){
+  const el = document.getElementById('mapLegend');
+  el.innerHTML = MAP_TRACES.map(t => { const off = mp.hidden.has(t.key), cm = CMODES[t.cmode];
+    return `<div class="lrow ${off ? 'off' : ''} ${mp.lpop === t.key ? 'sel' : ''}" data-k="${t.key}" role="button" tabindex="0"><button type="button" class="eye" data-eye="${t.key}" aria-label="Show or hide ${t.name}">${off ? EYE_OFF : EYE}</button><span class="sw" style="background:${cm ? RAMP_CSS : t.color}"></span><span class="nm">${t.name}</span><span class="meta">${cm ? cm.label : 'solid'}</span></div>`
+      + (cm && !off ? `<div class="grad"><div class="bar" style="background:${RAMP_CSS}"></div><div class="ends"><span>${cm.lo}</span><span>${+((cm.lo + cm.hi) / 2).toFixed(1)}</span><span>${cm.hi} ${cm.unit}</span></div></div>` : '')
+      + (mp.lpop === t.key ? `<div class="lpop"><div class="hint">Color by · or drop any field on this row</div><div class="seg sm full">${[['solid', 'Solid'], ['speed', 'Speed'], ['alt', 'Altitude'], ['volt', 'voltage_v']].map(([v, l]) => `<button type="button" data-cm="${v}" aria-pressed="${t.cmode === v}">${l}</button>`).join('')}</div><div class="lpop-row"><button type="button" class="linkbtn" data-fit="${t.key}">Fit to trace</button><button type="button" class="linkbtn">Edit trace…</button></div></div>` : '');
+  }).join('');
+}
+document.getElementById('mapLegend').addEventListener('click', e => {
+  const eye = e.target.closest('[data-eye]'), cm = e.target.closest('[data-cm]'), fit = e.target.closest('[data-fit]'), row = e.target.closest('.lrow');
+  if (eye){ const k = eye.dataset.eye; mp.hidden.has(k) ? mp.hidden.delete(k) : mp.hidden.add(k); }
+  else if (cm){ MAP_TRACES.find(t => t.key === mp.lpop).cmode = cm.dataset.cm; }
+  else if (fit){ const tr = MAP_TRACES.find(t => t.key === fit.dataset.fit); let b = [1e9, -1e9, 1e9, -1e9]; P.forEach(p => { b = [Math.min(b[0], tr.fx(p)), Math.max(b[1], tr.fx(p)), Math.min(b[2], tr.fy(p)), Math.max(b[3], tr.fy(p))]; }); mp.follow = false; document.getElementById('follow').classList.remove('on'); mp.center = [(b[0] + b[1]) / 2, (b[2] + b[3]) / 2]; mp.zoom = 1; }
+  else if (row){ mp.lpop = mp.lpop === row.dataset.k ? null : row.dataset.k; }
+  else return;
+  e.stopPropagation(); legendMap(); drawMap();
+});
+legendMap();
+(function(){
+  const st = document.getElementById('mapStage'), chip = document.getElementById('mapChip');
+  let drag = null;
+  const geo = (e, n) => { const lat = HOME.lat + n / 111320, lon = HOME.lon + e / (111320 * Math.cos(HOME.lat * Math.PI / 180)); return `${lat.toFixed(6)}, ${lon.toFixed(6)}`; };
+  st.addEventListener('mousedown', e => { if (e.target.closest('.float')) return; drag = { x: e.clientX, y: e.clientY, yaw: mp.yaw, pitch: mp.pitch, c: mp._M ? [mp._M.c[0], mp._M.c[1]] : null }; });
+  addEventListener('mouseup', () => drag = null);
+  st.addEventListener('mousemove', e => {
+    const r = st.getBoundingClientRect(); const mx = e.clientX - r.left, my = e.clientY - r.top;
+    if (drag){ const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (mp.mode === '3d'){ mp.yaw = drag.yaw + dx * .008; mp.pitch = Math.max(.15, Math.min(1.45, drag.pitch + dy * .006)); } else if (drag.c){ setFollow(false); mp.center = [drag.c[0] - dx / mp._M.s, drag.c[1] + dy / mp._M.s]; } chip.hidden = true; mp.hover = null; drawMap(); return; }
+    if (e.target.closest('.float')){ chip.hidden = true; mp.hover = null; drawMap(); return; }
+    let best = null; const vis = MAP_TRACES.filter(t => !mp.hidden.has(t.key));
+    for (const tr of vis) for (let i = 0; i < P.length; i += 2){ let X, Y; if (mp.mode === '2d'){ if (tr.gap && inGap(P[i])) continue; X = mp._M.X(tr.fx(P[i])); Y = mp._M.Y(tr.fy(P[i])); } else { const v = tr._pts && tr._pts[i]; if (!v) continue; X = v[0]; Y = v[1]; } const d = Math.hypot(X - mx, Y - my); if (!best || d < best.d) best = { d, p: P[i], tr, v: [X, Y] }; }
+    if (best && best.d < 24){ mp.hover = best; chip.hidden = false; chip.style.left = best.v[0] + 'px'; chip.style.top = best.v[1] + 'px'; const p = best.p; chip.innerHTML = `<b>${best.tr.name}</b>  t ${p.t.toFixed(1)} s · ${modeAt(p.t).name}<br>${geo(best.tr.fx(p), best.tr.fy(p))}<br>alt ${(HOME.amsl + best.tr.fz(p)).toFixed(1)} m AMSL · ${p.spd.toFixed(1)} m/s`; }
+    else { mp.hover = null; chip.hidden = true; }
+    drawMap();
+  });
+  st.addEventListener('mouseleave', () => { mp.hover = null; chip.hidden = true; drawMap(); });
+  st.addEventListener('click', e => { if (mp.measuring && !e.target.closest('.float')){ const q = measurePoint(e); if (q){ if (mp.meas.length >= 2) mp.meas = []; mp.meas.push(q); mp.mq = null; drawMap(); } return; } if (mp.hover && !e.target.closest('.float')){ const i = P.indexOf(mp.hover.p); document.getElementById('mapTime').value = Math.round(i / (P.length - 1) * 1000); drawMap(); } });
+  st.addEventListener('wheel', e => { if (e.target.closest('.float')) return; e.preventDefault(); mp.zoom = Math.max(.4, Math.min(8, mp.zoom * (e.deltaY > 0 ? 1/1.15 : 1.15))); drawMap(); }, { passive: false });
+  function setFollow(v){ mp.follow = v; document.getElementById('follow').classList.toggle('on', v); if (!v && !mp.center && mp._M) mp.center = mp._M.c.slice(); }
+  document.getElementById('follow').onclick = () => { setFollow(!mp.follow); drawMap(); };
+  document.getElementById('zIn').onclick = () => { mp.zoom = Math.min(8, mp.zoom * 1.3); drawMap(); };
+  document.getElementById('zOut').onclick = () => { mp.zoom = Math.max(.4, mp.zoom / 1.3); drawMap(); };
+  document.getElementById('mapFit').onclick = () => { setFollow(false); mp.center = [0, 60]; mp.zoom = 1; drawMap(); };
+  document.getElementById('compass').onclick = () => { mp.yaw = 0; drawMap(); };
+  document.querySelectorAll('.modebar .seg button').forEach(b => b.onclick = () => { mp.mode = b.dataset.mode; document.querySelectorAll('.modebar .seg button').forEach(x => x.setAttribute('aria-pressed', x === b)); if (mp.mode === '3d') mp.zoom = Math.min(mp.zoom, 2.5); drawMap(); });
+  popToggle(document.getElementById('layerBtn'), document.getElementById('layerPop'));
+  document.querySelectorAll('input[name="bm"]').forEach(i => i.onchange = () => { mp.bm = i.value; document.getElementById('attrib').textContent = { street: '© OpenStreetMap contributors', sat: 'Esri, Maxar, Earthstar Geographics', none: '' }[mp.bm] + (mp.mode === '3d' ? ' · Terrain © Mapterhorn' : ''); drawMap(); });
+  document.getElementById('optGround').onchange = e => { mp.ground = e.target.checked; drawMap(); };
+  document.getElementById('optExag').onchange = e => { mp.exag = e.target.checked; drawMap(); };
+  document.getElementById('optArrows').onchange = e => { mp.arrows = e.target.checked; drawMap(); };
+  document.getElementById('optModes').onchange = e => { mp.modes = e.target.checked; drawMap(); };
+  document.getElementById('optProfile').onchange = e => { mp.profile = e.target.checked; drawMap(); };
+  popToggle(document.getElementById('mapLinks'), document.getElementById('mapLinksPop'));
+  document.querySelectorAll('#mapLinksPop input').forEach(i => i.addEventListener('change', () => { const on = [...document.querySelectorAll('#mapLinksPop input')].filter(i => i.checked).map(i => ({ p: 'Pointer', t: 'Time', r: 'Range' })[i.dataset.l]); mp.rangeLink = document.getElementById('linkRange').checked; document.getElementById('mapLinksLbl').textContent = on.length ? on.join(' · ') : 'Unlinked'; drawMap(); }));
+  let over = false; st.addEventListener('mouseenter', () => over = true); st.addEventListener('mouseleave', () => over = false);
+  const setMeasure = v => { mp.measuring = v; if (!v){ mp.meas = []; mp.mq = null; } document.getElementById('measureBtn').classList.toggle('on', v); st.classList.toggle('picking', v); document.getElementById('measBanner').hidden = !v; drawMap(); };
+  document.getElementById('measureBtn').onclick = () => setMeasure(!mp.measuring);
+  addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if ((e.key === 'm' || e.key === 'M') && over) setMeasure(!mp.measuring); if (e.key === 'Escape' && mp.measuring) setMeasure(false); });
+  st.addEventListener('mousemove', e => { if (mp.measuring && mp.meas.length === 1){ mp.mq = measurePoint(e); drawMap(); } });
+  document.querySelectorAll('input[name="trail"]').forEach(i => i.onchange = () => { mp.trail = i.value; drawMap(); });
+  document.getElementById('mapTime').oninput = drawMap;
+})();
+function measurePoint(e){
+  if (mp.hover){ const i = P.indexOf(mp.hover.p), tr = mp.hover.tr; return { tr, i, e: tr.fx(P[i]), n: tr.fy(P[i]) }; }
+  if (mp.mode === '2d' && mp._M){ const r = document.getElementById('mapStage').getBoundingClientRect(); return { e: mp._M.iE(e.clientX - r.left), n: mp._M.iN(e.clientY - r.top) }; }
+  return null;
+}
+const mScreen = q => mp.mode === '2d' ? [mp._M.X(q.e), mp._M.Y(q.n)] : (q.tr && q.tr._pts ? q.tr._pts[q.i] : null);
+function drawMeasure(g){
+  const q = mp.meas.slice(); if (q.length === 1 && mp.mq) q.push(mp.mq); if (!q.length) return;
+  const sc = q.map(mScreen); if (sc.some(v => !v)) return;
+  g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(sc[0][0], sc[0][1]); if (sc[1]) g.lineTo(sc[1][0], sc[1][1]); g.stroke(); g.setLineDash([]);
+  sc.forEach(v => { g.beginPath(); g.arc(v[0], v[1], 4, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1.5; g.stroke(); });
+  if (q.length < 2) return;
+  const de = q[1].e - q[0].e, dn = q[1].n - q[0].n, dist = Math.hypot(de, dn), brg = ((Math.atan2(de, dn) * 180 / Math.PI) + 360) % 360;
+  const fm = v => v < 1000 ? v.toFixed(1) + ' m' : (v / 1000).toFixed(2) + ' km', brgTxt = `bearing ${brg.toFixed(0).padStart(3, '0')}°`;
+  const zOf = p => p.tr ? p.tr.fz(P[p.i]) : null, z0 = zOf(q[0]), z1 = zOf(q[1]);
+  const lines = z0 != null && z1 != null ? [`3D ${fm(Math.hypot(dist, z1 - z0))} · ${brgTxt}`, `horizontal ${fm(dist)} · vertical ${z1 - z0 >= 0 ? '+' : '−'}${fm(Math.abs(z1 - z0))}`] : [`horizontal ${fm(dist)} · ${brgTxt}`, 'snap both ends to samples for 3D'];
+  if (q[0].tr && q[1].tr && q[0].tr === q[1].tr){ const [a, b] = q[0].i < q[1].i ? [q[0].i, q[1].i] : [q[1].i, q[0].i]; let flown = 0; for (let i = a + 1; i <= b; i++) flown += Math.hypot(q[0].tr.fx(P[i]) - q[0].tr.fx(P[i - 1]), q[0].tr.fy(P[i]) - q[0].tr.fy(P[i - 1])); const dt = P[q[1].i].t - P[q[0].i].t, dz = q[0].tr.fz(P[q[1].i]) - q[0].tr.fz(P[q[0].i]);
+    lines.push(`Δt ${dt.toFixed(1)} s · flown ${flown.toFixed(0)} m · avg ${(flown / Math.abs(dt || 1)).toFixed(1)} m/s`); }
+  g.font = '11px "JetBrains Mono", monospace'; const w = Math.max(...lines.map(l => g.measureText(l).width)) + 14, mx = (sc[0][0] + sc[1][0]) / 2, my = (sc[0][1] + sc[1][1]) / 2;
+  g.fillStyle = '#0c1210ee'; g.strokeStyle = '#ffffff55'; g.lineWidth = 1; g.fillRect(mx + 10, my - 8, w, lines.length * 15 + 8); g.strokeRect(mx + 10.5, my - 7.5, w, lines.length * 15 + 8);
+  g.fillStyle = C.fg; lines.forEach((l, k) => g.fillText(l, mx + 17, my + 8 + k * 15));
+}
+const DIST = (() => { const tr = MAP_TRACES[0], d = [0]; for (let i = 1; i < P.length; i++) d.push(d[i - 1] + Math.hypot(tr.fx(P[i]) - tr.fx(P[i - 1]), tr.fy(P[i]) - tr.fy(P[i - 1]))); return d; })();
+function drawProfile(){
+  const box = document.getElementById('mapProfile'); box.hidden = !(mp.profile && mp.mode === '2d'); if (box.hidden) return;
+  const { g, w, h } = fitCanvas(document.getElementById('profCanvas')); const tr = MAP_TRACES[0], m = { l: 52, r: 14, t: 18, b: 20 }, D = DIST[DIST.length - 1];
+  const alt = i => HOME.amsl + tr.fz(P[i]), gnd = i => HOME.amsl + terrainH(tr.fx(P[i]), tr.fy(P[i])) - terrainH(tr.fx(P[0]), tr.fy(P[0]));
+  let lo = Infinity, hi = -Infinity; for (let i = 0; i < P.length; i += 4){ lo = Math.min(lo, gnd(i), alt(i)); hi = Math.max(hi, alt(i)); } lo -= 4; hi += 6;
+  const X = dd => m.l + dd / D * (w - m.l - m.r), Y = v => m.t + (1 - (v - lo) / (hi - lo)) * (h - m.t - m.b); mp._prof = { X, m, w, D };
+  g.fillStyle = C.bg; g.fillRect(0, 0, w, h); g.font = '10px "JetBrains Mono", monospace'; g.lineWidth = 1;
+  const sy = niceStep(hi - lo, 3); g.textAlign = 'right'; g.textBaseline = 'middle'; for (let v = Math.ceil(lo / sy) * sy; v <= hi; v += sy){ g.strokeStyle = C.grid; g.beginPath(); g.moveTo(m.l, Math.round(Y(v)) + .5); g.lineTo(w - m.r, Math.round(Y(v)) + .5); g.stroke(); g.fillStyle = C.dim; g.fillText(v.toFixed(0), m.l - 6, Y(v)); }
+  const sx = niceStep(D, 8); g.textAlign = 'center'; g.textBaseline = 'top'; for (let v = 0; v <= D; v += sx){ g.fillStyle = C.dim; g.fillText(v.toFixed(0), X(v), h - m.b + 5); }
+  g.beginPath(); g.moveTo(X(0), h - m.b); for (let i = 0; i < P.length; i += 3) g.lineTo(X(DIST[i]), Y(gnd(i))); g.lineTo(X(D), h - m.b); g.closePath(); g.fillStyle = '#2c3a31'; g.fill();
+  const curT = at(+document.getElementById('mapTime').value).t;
+  if (mp.rangeLink && mp.range){ const a = P.findIndex(p => p.t >= mp.range[0]), b = P.findIndex(p => p.t >= mp.range[1]); g.fillStyle = '#ffffff0d'; g.fillRect(X(DIST[a]), m.t, X(DIST[b < 0 ? P.length - 1 : b]) - X(DIST[a]), h - m.t - m.b); }
+  g.lineWidth = 2; for (let i = 1; i < P.length; i++){ g.globalAlpha = segAlpha(P[i], curT); g.strokeStyle = colorOf(tr, i); g.beginPath(); g.moveTo(X(DIST[i - 1]), Y(alt(i - 1))); g.lineTo(X(DIST[i]), Y(alt(i))); g.stroke(); } g.globalAlpha = 1;
+  const ci = P.indexOf(at(+document.getElementById('mapTime').value)); g.strokeStyle = C.fg; g.lineWidth = 1; g.beginPath(); g.moveTo(X(DIST[ci]) + .5, m.t); g.lineTo(X(DIST[ci]) + .5, h - m.b); g.stroke(); marker(g, X(DIST[ci]), Y(alt(ci)), tr.color);
+  if (mp.hover && mp.hover.tr === tr){ const i = P.indexOf(mp.hover.p); g.setLineDash([3, 3]); g.strokeStyle = C.dim; g.beginPath(); g.moveTo(X(DIST[i]) + .5, m.t); g.lineTo(X(DIST[i]) + .5, h - m.b); g.stroke(); g.setLineDash([]); g.fillStyle = C.fg; g.textAlign = 'left'; g.textBaseline = 'bottom'; g.fillText(`${alt(i).toFixed(1)} m AMSL · ${(alt(i) - gnd(i)).toFixed(1)} m AGL`, Math.min(X(DIST[i]) + 6, w - 230), m.t + 12); }
+  g.textAlign = 'left'; g.textBaseline = 'top'; g.font = '500 10.5px Inter, sans-serif'; g.fillStyle = C.muted; g.fillText('Altitude profile · m AMSL vs distance flown (m) · Global position', m.l, 3); g.fillStyle = '#5d7563'; g.fillText('■ terrain', w - m.r - 52, 3);
+}
+const ts = {};
+function drawTS(){
+  const cv = document.getElementById('tsCanvas'); if (!cv.offsetParent) return;
+  const { g, w, h } = fitCanvas(cv); const m = { l: 52, r: 14, t: 10, b: 22 }; const v = mp.range || [0, 300];
+  const X = t => m.l + (t - v[0]) / (v[1] - v[0]) * (w - m.l - m.r), Y = s => m.t + (1 - s / 15) * (h - m.t - m.b); ts.X = X; ts.iX = x => v[0] + (x - m.l) / (w - m.l - m.r) * (v[1] - v[0]); ts.m = m; ts.w = w; ts.h = h;
+  g.fillStyle = C.bg; g.fillRect(0, 0, w, h); g.font = '10px "JetBrains Mono", monospace'; g.lineWidth = 1;
+  g.textAlign = 'right'; g.textBaseline = 'middle'; for (const s of [0, 5, 10, 15]){ g.strokeStyle = C.grid; g.beginPath(); g.moveTo(m.l, Math.round(Y(s)) + .5); g.lineTo(w - m.r, Math.round(Y(s)) + .5); g.stroke(); g.fillStyle = C.dim; g.fillText(s, m.l - 6, Y(s)); }
+  const st = niceStep(v[1] - v[0], 8); g.textAlign = 'center'; g.textBaseline = 'top'; for (let t = Math.ceil(v[0] / st) * st; t <= v[1]; t += st) g.fillText(+t.toFixed(2) + ' s', X(t), h - m.b + 5);
+  g.save(); g.beginPath(); g.rect(m.l, m.t, w - m.l - m.r, h - m.t - m.b); g.clip();
+  g.strokeStyle = C.l1; g.lineWidth = 1.4; g.beginPath(); P.forEach((p, i) => i ? g.lineTo(X(p.t), Y(p.spd)) : g.moveTo(X(p.t), Y(p.spd))); g.stroke();
+  const cur = at(+document.getElementById('mapTime').value); g.strokeStyle = C.fg; g.beginPath(); g.moveTo(X(cur.t) + .5, m.t); g.lineTo(X(cur.t) + .5, h - m.b); g.stroke();
+  if (mp.hover){ g.setLineDash([3, 3]); g.strokeStyle = C.dim; g.beginPath(); g.moveTo(X(mp.hover.p.t) + .5, m.t); g.lineTo(X(mp.hover.p.t) + .5, h - m.b); g.stroke(); g.setLineDash([]); }
+  if (ts.brush){ g.fillStyle = '#75a77b33'; g.fillRect(Math.min(ts.brush[0], ts.brush[1]), m.t, Math.abs(ts.brush[1] - ts.brush[0]), h - m.t - m.b); }
+  g.restore(); g.strokeStyle = C.axis; g.strokeRect(m.l + .5, m.t + .5, w - m.l - m.r, h - m.t - m.b);
+  g.fillStyle = C.muted; g.font = '500 10.5px Inter, sans-serif'; g.textAlign = 'right'; g.textBaseline = 'top'; g.fillText(`Visible X: ${v[0].toFixed(1)}–${v[1].toFixed(1)} s${mp.range ? ' → highlighted on the map' : ''}`, w - m.r - 6, m.t + 4);
+}
+(function(){
+  const st = document.getElementById('tsStage'), pf = document.getElementById('mapProfile');
+  const rel = (e, el) => e.clientX - el.getBoundingClientRect().left;
+  const hoverAt = i => { const tr = MAP_TRACES[0]; mp.hover = { p: P[i], tr, v: mp.mode === '2d' && mp._M ? [mp._M.X(tr.fx(P[i])), mp._M.Y(tr.fy(P[i]))] : (tr._pts && tr._pts[i]) }; };
+  const idxAtT = t => Math.max(0, Math.min(P.length - 1, Math.round(t / 300 * (P.length - 1))));
+  st.addEventListener('mousedown', e => { ts.brush = [rel(e, st), rel(e, st)]; });
+  st.addEventListener('mousemove', e => { const x = rel(e, st); if (ts.brush){ ts.brush[1] = x; } if (ts.iX) hoverAt(idxAtT(ts.iX(x))); drawMap(); });
+  addEventListener('mouseup', () => { if (!ts.brush) return; const [a, b] = ts.brush.map(ts.iX).sort((x, y) => x - y); ts.brush = null; if (b - a > 2) mp.range = [Math.max(0, a), Math.min(300, b)]; drawMap(); });
+  st.addEventListener('mouseleave', () => { mp.hover = null; drawMap(); });
+  st.addEventListener('dblclick', () => { mp.range = null; drawMap(); });
+  st.addEventListener('wheel', e => { e.preventDefault(); const v = mp.range || [0, 300], c = ts.iX(rel(e, st)), k = e.deltaY > 0 ? 1.2 : 1 / 1.2; const n = [Math.max(0, c + (v[0] - c) * k), Math.min(300, c + (v[1] - c) * k)]; mp.range = n[1] - n[0] >= 299 ? null : n; drawMap(); }, { passive: false });
+  pf.addEventListener('mousemove', e => { if (!mp._prof) return; const dd = (rel(e, pf) - mp._prof.m.l) / (mp._prof.w - mp._prof.m.l - mp._prof.m.r) * mp._prof.D; let i = DIST.findIndex(v => v >= dd); if (i < 0) i = P.length - 1; hoverAt(i); drawMap(); });
+  pf.addEventListener('mouseleave', () => { mp.hover = null; drawMap(); });
+  pf.addEventListener('click', () => { if (mp.hover){ document.getElementById('mapTime').value = Math.round(P.indexOf(mp.hover.p) / (P.length - 1) * 1000); drawMap(); } });
+})();
+function drawMapCur(){
+  const cv = document.getElementById('mapCurCanvas'); if (!cv.offsetParent) return;
+  const { g, w, h } = fitCanvas(cv); const save = { ...mp }; mp.mode = '3d'; mp.follow = false; mp.center = [0, 60]; mp.zoom = 1; mp.yaw = -0.6; mp.pitch = .75; mp.hidden = new Set(); mp.bm = 'street'; mp.arrows = false; mp.modes = false; mp.trail = 'full'; mp.rangeLink = false;
+  drawMap3D(g, w, h); Object.assign(mp, save);
+}
+
+/* =============== DEMO 3: BUILDER =============== */
+const FIELDS = ['battery_status/0/voltage_v','actuator_motors/0/control_0','input_rc/0/rssi','vehicle_global_position/0/lat','vehicle_global_position/0/lon','vehicle_global_position/0/alt','vehicle_gps_position/0/latitude_deg','vehicle_gps_position/0/longitude_deg','vehicle_gps_position/0/altitude_msl_m','vehicle_local_position/0/x','vehicle_local_position/0/y','vehicle_local_position/0/z','vehicle_local_position_setpoint/0/x','vehicle_local_position_setpoint/0/y','vehicle_local_position_setpoint/0/z','home_position/0/lat','home_position/0/lon'];
+const M_PER_DEG = 111320, COSLAT = Math.cos(HOME.lat * Math.PI / 180);
+const toEN = a => [(a.lon - HOME.lon) * M_PER_DEG * COSLAT, (a.lat - HOME.lat) * M_PER_DEG];
+const toLL = (e, n) => ({ lat: +(HOME.lat + n / M_PER_DEG).toFixed(6), lon: +(HOME.lon + e / (M_PER_DEG * COSLAT)).toFixed(6) });
+const llTxt = a => `${a.lat.toFixed(6)}, ${a.lon.toFixed(6)}`;
+const FIELD_FN = { 'battery_status/0/voltage_v': { f: CMODES.volt.f, unit: 'V' }, 'actuator_motors/0/control_0': { f: p => .42 + .3 * Math.min(1, p.spd / 12) + .06 * Math.sin(p.t * .8), unit: '' }, 'input_rc/0/rssi': { f: p => 96 - Math.hypot(p.x, p.y) * .22, unit: '%' } };
+const valOf = (t, p) => t.cmode === 'alt' ? p.z : t.cmode === 'field' ? (FIELD_FN[t.cfield] || { f: q => q.spd }).f(p) : p.spd;
+const unitOf = t => t.cmode === 'alt' ? 'm' : t.cmode === 'field' ? (FIELD_FN[t.cfield] || { unit: '' }).unit : 'm/s';
+function rangeOf(t, pct){ if (t.cmode === 'solid' || (t.cmode === 'field' && !t.cfield)) return { lo: t.lo, hi: t.hi }; const v = P.map(p => valOf(t, p)).sort((a, b) => a - b); const q = k => v[Math.floor(k * (v.length - 1))]; const lo = pct ? q(.02) : v[0], hi = pct ? q(.98) : v[v.length - 1]; const r = x => +x.toFixed(Math.abs(hi - lo) < 5 ? 2 : 1); return { lo: r(lo), hi: r(hi) }; }
+function newTrace(f){
+  const topic = f.split('/').slice(0, 2).join('/'), sib = FIELDS.filter(x => x.startsWith(topic + '/'));
+  const find = re => sib.find(x => re.test(x.split('/').pop())) || '';
+  let x = find(/^(lon|longitude(_deg)?)$/), y = find(/^(lat|latitude(_deg)?)$/), z = find(/^(alt|altitude(_msl_m)?)$/); const geo = !!(x && y);
+  if (!geo){ x = find(/^x$/); y = find(/^y$/); z = find(/^z$/); }
+  if (!x && !y) x = f;
+  const nm = f.split('/')[0].replace(/^vehicle_/, '').replace(/_/g, ' '), filled = [x, y, z].filter(Boolean).map(v => v.split('/').pop());
+  B.traces.forEach(t => t.open = false);
+  B.traces.push({ name: nm[0].toUpperCase() + nm.slice(1), color: C.accent, x, y, z, fix: '', unit: geo ? 'deg' : 'local', frame: 'ned', src: 'default', srcTrace: 0, start: null, place: 'first', altRef: geo ? 'amsl' : 'ground', zUnit: 'm', zDir: geo ? 'up' : 'down', cmode: 'solid', lo: 0, hi: 14, open: true, adv: false, filled: filled.length > 1 ? `Filled ${filled.join(', ')} from ${f.split('/')[0]}` : '' });
+}
+const DEF_KEY = 'enlumi-demo-default-start';
+let defStart = { lat: 47.397742, lon: 8.545594, label: 'PX4 SITL home' };
+try { const s = JSON.parse(localStorage.getItem(DEF_KEY) || 'null'); if (s && isFinite(s.lat) && isFinite(s.lon)) defStart = s; } catch (e) {}
+// local samples: EKF origin is not where the vehicle starts (first sample at N -12, E 25)
+const LOC_N = p => p.x - 12, LOC_E = p => p.y + 25;
+const B = { picking: null, pick: null, coordErr: '', traces: [
+  { name: 'Global position', color: C.l1, x: 'vehicle_global_position/0/lon', y: 'vehicle_global_position/0/lat', z: 'vehicle_global_position/0/alt', fix: '', unit: 'deg', frame: 'ned', src: 'default', srcTrace: 0, start: null, place: 'first', altRef: 'amsl', zUnit: 'm', zDir: 'up', cmode: 'speed', lo: 0, hi: 14, open: false, adv: false },
+  { name: 'GPS raw', gpsraw: true, color: C.l2, x: 'vehicle_gps_position/0/longitude_deg', y: 'vehicle_gps_position/0/latitude_deg', z: '', fix: '', unit: 'deg', frame: 'ned', src: 'default', srcTrace: 0, start: null, place: 'first', altRef: 'amsl', zUnit: 'm', zDir: 'up', cmode: 'solid', lo: 0, hi: 14, open: false, adv: false },
+  { name: 'Local position', color: C.l3, x: 'vehicle_local_position/0/x', y: 'vehicle_local_position/0/y', z: 'vehicle_local_position/0/z', fix: '', unit: 'local', frame: 'ned', src: 'trace', srcTrace: 0, start: null, place: 'first', altRef: 'ground', zUnit: 'm', zDir: 'down', cmode: 'solid', lo: 0, hi: 60, open: true, adv: false },
+] };
+const isGeoField = f => /lat|lon/.test(f);
+const guessUnit = t => isGeoField(t.x) && isGeoField(t.y) ? 'deg' : 'local';
+const UNIT_LBL = { deg: 'Degrees', e7: 'deg×10⁷', rad: 'Radians', local: 'Local m' };
+function startOf(t){
+  if (t.src === 'trace'){ const g = B.traces[t.srcTrace]; return { lat: HOME.lat, lon: HOME.lon, label: `${g ? g.name : 'trace'} · first fix` }; }
+  if (t.src === 'default') return { ...defStart };
+  return t.start || { ...defStart };
+}
+function traceEN(t){ // returns fn(p)->[e,n] or null if trace can't be drawn
+  if (!t.x || !t.y || t.unit !== guessUnit(t)) return null;
+  if (t.gpsraw){ const r = MAP_TRACES[1]; return p => [r.fx(p), r.fy(p)]; }
+  if (t.unit === 'deg') return p => [p.y, p.x];
+  const s = toEN(startOf(t)); const f = P[0];
+  const ln = p => t.frame === 'ned' ? [LOC_E(p), LOC_N(p)] : [LOC_N(p), LOC_E(p)];
+  const o = t.place === 'first' ? ln(f) : [0, 0];
+  return p => { const [e, n] = ln(p); return [s[0] + e - o[0], s[1] + n - o[1]]; };
+}
+function summary(t){
+  if (!t.x || !t.y) return 'drop X and Y fields';
+  if (t.unit !== guessUnit(t)) return `⚠ unit doesn't match data`;
+  const color = t.cmode === 'field' ? (t.cfield ? t.cfield.split('/').pop() : 'field?') : t.cmode;
+  if (t.unit === 'local'){ const s = startOf(t); return `${t.frame.toUpperCase()} m · from ${t.src === 'trace' ? B.traces[t.srcTrace].name : t.src === 'default' ? 'default start' : llTxt(s)} · ${color}`; }
+  return `lon/lat · ${UNIT_LBL[t.unit]}${t.z ? ` · alt ${t.altRef === 'amsl' ? 'AMSL' : t.altRef}` : ''} · ${color}`;
+}
+const seg = (act, cur, opts, full = true, cls = '') => `<div class="seg sm ${full ? 'full' : ''} ${cls}" role="group">${opts.map(([v, l, tip]) => `<button type="button" data-act="${act}" data-v="${v}" aria-pressed="${cur === v}" ${tip ? `title="${tip}"` : ''}>${l}</button>`).join('')}</div>`;
+function slot(ti, key, label, val, hint){
+  return `<div class="slotrow"><span class="ax">${label}</span><div class="slot ${val ? '' : 'empty'}" data-ti="${ti}" data-k="${key}"><span>${val || hint}</span>${val ? `<b class="x" data-act="clear" data-k="${key}" title="Clear">×</b>` : ''}</div></div>`;
+}
+function startUI(t, ti){
+  const s = startOf(t); const geo = B.traces.map((g, i) => [g, i]).filter(([g, i]) => i !== ti && g.unit === 'deg' && guessUnit(g) === 'deg');
+  let body = '';
+  if (t.src === 'trace') body = geo.length ? `<select class="sel" data-act="srcTrace">${geo.map(([g, i]) => `<option value="${i}" ${i === t.srcTrace ? 'selected' : ''}>${g.name} · first valid fix</option>`).join('')}</select><div class="coordline">${llTxt(s)} <span>aligns this trace with the GPS track</span></div>` : `<div class="coordline warn">No geographic trace on this map yet.</div>`;
+  else if (t.src === 'map') body = `<button type="button" class="tbtn ${B.picking === ti ? 'on' : ''} wide" data-act="pickmap">${B.picking === ti ? 'Click the map… (Esc cancels)' : '⌖ Click on map to place start'}</button><div class="coordline">${llTxt(s)}</div>`;
+  else if (t.src === 'coords') body = `<input class="txt" id="coordIn" value="${llTxt(s)}" aria-label="Start latitude, longitude" placeholder="47.397742, 8.545594"><div class="coordline ${B.coordErr ? 'warn' : ''}">${B.coordErr || 'Paste "lat, lon" in decimal degrees, Enter to apply'}</div>`;
+  else body = `<div class="coordline"><b>${defStart.label}</b> · ${llTxt(defStart)}</div>`;
+  return `<div class="grp">
+    <div class="grp-t">Start location</div>
+    ${seg('src', t.src, [['default', 'Default'], ['trace', 'From GPS'], ['map', 'Click map'], ['coords', 'Lat, lon']])}
+    ${body}
+    <div class="inline"><span class="lbl2">Put here</span>${seg('place', t.place, [['first', 'First sample', 'The first valid sample lands on the start location'], ['origin', 'Local (0, 0)', 'The local origin lands on the start location; the first sample may be offset']], false)}</div>
+    <div class="defrow"><span>★ Default start: <b>${defStart.label}</b></span>${t.src !== 'default' ? `<button type="button" class="linkbtn" data-act="savedef">Save this as default</button>` : `<button type="button" class="linkbtn" data-act="src" data-v="map">Change…</button>`}</div>
+  </div>`;
+}
+function cardHTML(t, ti){
+  const g = guessUnit(t), ok = g === t.unit, local = t.unit === 'local';
+  const lx = local ? (t.frame === 'ned' ? 'N (x)' : 'E (x)') : 'Lon', ly = local ? (t.frame === 'ned' ? 'E (y)' : 'N (y)') : 'Lat';
+  return `<div class="card ${t.open ? 'open' : ''} ${ok ? '' : 'bad'}" data-ti="${ti}">
+    <div class="card-sum" data-act="toggle"><span class="grip" title="Drag onto a plot">⋮⋮</span><span class="sw" style="background:${t.cmode === 'solid' ? t.color : RAMP_CSS}"></span><span class="nm"><b>${t.name}</b><span>${summary(t)}</span></span><span class="chev">›</span></div>
+    <div class="card-body">
+      ${t.filled ? `<div class="filled">✓ ${t.filled}</div>` : ''}
+      <div class="grp">
+        <div class="grp-t">Position ${ok ? `<span class="badge">${local ? 'metres detected' : 'degrees detected'}</span>` : `<button type="button" class="badge warn" data-act="unit" data-v="${g}">Data looks like ${UNIT_LBL[g]} · use it</button>`}</div>
+        ${slot(ti, 'x', lx, t.x, 'Drop a field or search…')}
+        <div class="swaprow"><button type="button" class="linkbtn" data-act="swap">⇅ Swap</button></div>
+        ${slot(ti, 'y', ly, t.y, 'Drop a field or search…')}
+        ${seg('unit', t.unit, [['deg', 'Degrees'], ['e7', 'deg×10⁷'], ['rad', 'Radians'], ['local', 'Local m']])}
+        ${local ? `<div class="inline"><span class="lbl2">Axes</span>${seg('frame', t.frame, [['ned', 'NED · x north'], ['enu', 'ENU · x east']], false)}</div>` : ''}
+      </div>
+      ${local ? startUI(t, ti) : ''}
+      <div class="grp">
+        <div class="grp-t">Altitude</div>
+        ${slot(ti, 'z', 'Z', t.z, 'Optional · drop a field')}
+        ${t.z ? `${seg('altRef', t.altRef, [['amsl', 'AMSL', 'Absolute metres above sea level'], ['terrain', 'Above terrain', 'Z is added to terrain height at the trace start'], ['ground', 'Start on ground', 'First Z sample sits on the ground']])}
+        <div class="inline">${seg('zUnit', t.zUnit, [['m', 'm'], ['mm', 'mm'], ['ft', 'ft']], false)}${seg('zDir', t.zDir, [['up', 'Up +'], ['down', 'Down + (NED)']], false)}</div>` : ''}
+      </div>
+      <div class="grp">
+        <div class="grp-t">Color</div>
+        ${seg('cmode', t.cmode, [['solid', 'Solid'], ['speed', 'Speed'], ['alt', 'Altitude'], ['field', 'Field']])}
+        ${t.cmode === 'field' ? slot(ti, 'cfield', 'By', t.cfield, 'Drop any field, e.g. voltage_v') : ''}
+        ${t.cmode === 'solid' || (t.cmode === 'field' && !t.cfield) ? '' : `<div class="inline"><input class="num" data-act="lo" value="${t.lo}" aria-label="Range minimum"><span style="color:var(--dim)">to</span><input class="num" data-act="hi" value="${t.hi}" aria-label="Range maximum"><span style="color:var(--dim)">${unitOf(t)}</span><button class="linkbtn" type="button" data-act="auto">Auto</button></div><div class="bar" style="background:${RAMP_CSS}"></div>`}
+      </div>
+
+      <div class="dragbar">⠿ Drag onto a plot to add this trace</div>
+    </div></div>`;
+}
+function renderBuilder(){
+  const el = document.getElementById('bBody');
+  el.innerHTML = B.traces.map(cardHTML).join('') + `<div class="addtrace">Drop a field here or on the map to start a trace.<br>Matching lat/lon/alt or x/y/z from the same topic fill in automatically.</div>`;
+  const ci = document.getElementById('coordIn'); if (ci){ const apply = () => { const m = ci.value.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/); const t = B.traces[+ci.closest('.card').dataset.ti]; if (!m || Math.abs(+m[1]) > 90 || Math.abs(+m[2]) > 180){ B.coordErr = 'Enter latitude, longitude, e.g. 47.397742, 8.545594'; } else { B.coordErr = ''; t.start = { lat: +m[1], lon: +m[2], label: 'Custom' }; } renderBuilder(); drawB(); }; ci.onkeydown = e => { if (e.key === 'Enter') apply(); }; ci.onblur = () => { if (ci.value !== llTxt(startOf(B.traces[+ci.closest('.card').dataset.ti]))) apply(); }; }
+  document.getElementById('bBanner').hidden = B.picking == null;
+  document.getElementById('bStage').classList.toggle('picking', B.picking != null);
+}
+(function(){
+  const el = document.getElementById('bBody');
+  el.addEventListener('click', e => {
+    const a = e.target.closest('[data-act]'); if (!a || a.tagName === 'INPUT' || a.tagName === 'SELECT') return;
+    const card = a.closest('.card'); const ti = card ? +card.dataset.ti : -1, t = B.traces[ti]; const v = a.dataset.v, act = a.dataset.act;
+    e.stopPropagation();
+    switch (act){
+      case 'toggle': if (e.target.closest('.grip')) return; t.open = !t.open; break;
+      case 'unit': t.unit = v; if (v === 'local' && t.altRef === 'amsl') t.altRef = 'ground'; break;
+      case 'frame': case 'place': case 'altRef': case 'zUnit': case 'zDir': t[act] = v; break;
+      case 'cmode': t.cmode = v; Object.assign(t, rangeOf(t)); break;
+      case 'auto': Object.assign(t, rangeOf(t, true)); break;
+      case 'src': t.src = v; B.coordErr = ''; if ((v === 'map' || v === 'coords') && !t.start) t.start = { ...startOf({ src: 'default' }), label: 'Custom' }; if (v === 'map') B.picking = ti; else B.picking = null; break;
+      case 'pickmap': B.picking = B.picking === ti ? null : ti; break;
+      case 'savedef': { const s = startOf(t); defStart = { lat: s.lat, lon: s.lon, label: t.src === 'trace' ? `${B.traces[t.srcTrace].name} start` : 'Saved start' }; try { localStorage.setItem(DEF_KEY, JSON.stringify(defStart)); } catch (err) {} break; }
+      case 'swap': [t.x, t.y] = [t.y, t.x]; break;
+      case 'adv': t.adv = !t.adv; break;
+      case 'clear': t[a.dataset.k] = ''; break;
+      case 'add': { const gps = v === 'gps'; if (B.traces.some(x => x.name === (gps ? 'GPS raw' : 'Position setpoint'))) break; B.traces.forEach(x => x.open = false); B.traces.push({ ...B.traces[gps ? 0 : 1], name: gps ? 'GPS raw' : 'Position setpoint', color: gps ? C.l2 : C.accent, x: gps ? 'vehicle_gps_position/0/longitude_deg' : 'vehicle_local_position_setpoint/0/x', y: gps ? 'vehicle_gps_position/0/latitude_deg' : 'vehicle_local_position_setpoint/0/y', z: '', cmode: 'solid', src: gps ? 'default' : 'default', open: true, adv: false }); break; }
+    }
+    renderBuilder(); drawB();
+  });
+  el.addEventListener('change', e => { const card = e.target.closest('.card'); if (!card) return; const t = B.traces[+card.dataset.ti]; const act = e.target.dataset.act; if (act === 'srcTrace') t.srcTrace = +e.target.value; if (act === 'lo' || act === 'hi'){ const n = parseFloat(e.target.value); if (isFinite(n)) t[act] = n; } renderBuilder(); drawB(); });
+  const st = document.getElementById('bStage');
+  st.addEventListener('click', e => { if (B.picking == null || !B._M) return; const r = st.getBoundingClientRect(); const t = B.traces[B.picking]; t.start = { ...toLL(B._M.iE(e.clientX - r.left), B._M.iN(e.clientY - r.top)), label: 'Picked on map' }; t.src = 'map'; B.picking = null; renderBuilder(); drawB(); });
+  st.addEventListener('mousemove', e => { if (B.picking == null) return; const r = st.getBoundingClientRect(); B._hov = [e.clientX - r.left, e.clientY - r.top]; drawB(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && (B.picking != null || B.pick)){ B.picking = null; B.pick = null; renderBuilder(); drawB(); } });
+})();
+function pin(g, X, Y, color, label){ g.save(); g.translate(X, Y); g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(-7, -9, -8, -14, -8, -17); g.arc(0, -17, 8, Math.PI, 0); g.bezierCurveTo(8, -14, 7, -9, 0, 0); g.fillStyle = color; g.strokeStyle = '#000'; g.lineWidth = 1.5; g.fill(); g.stroke(); g.beginPath(); g.arc(0, -17, 3, 0, 7); g.fillStyle = '#000'; g.fill(); if (label){ g.font = '500 11px Inter, sans-serif'; const w = g.measureText(label).width + 10; g.fillStyle = '#0c1210ee'; g.fillRect(12, -30, w, 18); g.fillStyle = C.fg; g.fillText(label, 17, -17); } g.restore(); }
+function drawB(){
+  const cv = document.getElementById('bCanvas'); if (!cv.offsetParent) return;
+  const { g, w, h } = fitCanvas(cv); const save = { ...mp }; Object.assign(mp, { mode: '2d', follow: false, center: [20, 60], zoom: .85, bm: 'street', hidden: new Set() });
+  const M = mapProj(w, h); B._M = M; drawBase2D(g, w, h, M); Object.assign(mp, save);
+  const sel = B.traces.findIndex(t => t.open);
+  B.traces.forEach((t, ti) => {
+    const f = traceEN(t); if (!f) return; g.globalAlpha = sel < 0 || sel === ti ? 1 : .45; g.lineWidth = sel === ti ? 3 : 2; g.lineJoin = 'round';
+    const pts = P.map(p => { const v = f(p); return v ? [M.X(v[0]), M.Y(v[1])] : null; });
+    for (let i = 1; i < P.length; i++){ const a = pts[i - 1], b = pts[i]; if (!a || !b) continue; const u = (valOf(t, P[i]) - t.lo) / (t.hi - t.lo); g.strokeStyle = t.cmode === 'solid' || (t.cmode === 'field' && !t.cfield) ? t.color : rampColor(u); g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
+    g.globalAlpha = 1;
+  });
+  const st = sel >= 0 && B.traces[sel].unit === 'local' ? B.traces[sel] : null;
+  if (st && traceEN(st)){ const [e, n] = toEN(startOf(st)); pin(g, M.X(e), M.Y(n), C.l3, st.place === 'first' ? 'Start · first sample' : 'Start · local (0, 0)'); }
+  if (B.picking != null && B._hov){ const [X, Y] = B._hov; g.strokeStyle = C.fg; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(X, 0); g.lineTo(X, h); g.moveTo(0, Y); g.lineTo(w, Y); g.stroke(); g.setLineDash([]); const ll = toLL(M.iE(X), M.iN(Y)); g.font = '10.5px "JetBrains Mono", monospace'; g.fillStyle = '#0c1210ee'; g.fillRect(X + 8, Y + 8, 150, 18); g.fillStyle = C.fg; g.fillText(llTxt(ll), X + 13, Y + 21); }
+}
+(function(){
+  const tray = document.getElementById('bTray'), body = document.getElementById('bBody');
+  const groups = {}; FIELDS.forEach(f => { const p = f.split('/'); (groups[p[0]] = groups[p[0]] || []).push([f, p[2]]); });
+  tray.innerHTML = '<div class="tray-h">Fields</div>' + Object.entries(groups).map(([tp, fs]) => `<div class="tray-g">${tp}</div>` + fs.map(([f, leaf]) => `<div class="tray-f" draggable="true" data-f="${f}">${leaf}</div>`).join('')).join('');
+  tray.addEventListener('dragstart', e => { const f = e.target.dataset && e.target.dataset.f; if (!f) return; e.dataTransfer.setData('text/plain', f); e.dataTransfer.effectAllowed = 'copy'; body.classList.add('dragging'); });
+  const bst = document.getElementById('bStage');
+  bst.addEventListener('dragover', e => { e.preventDefault(); bst.classList.add('dropping'); });
+  bst.addEventListener('dragleave', e => { if (!bst.contains(e.relatedTarget)) bst.classList.remove('dropping'); });
+  bst.addEventListener('drop', e => { e.preventDefault(); bst.classList.remove('dropping'); body.classList.remove('dragging'); const f = e.dataTransfer.getData('text/plain'); if (f){ newTrace(f); renderBuilder(); drawB(); } });
+  tray.addEventListener('dragend', () => { body.classList.remove('dragging'); bst.classList.remove('dropping'); body.querySelectorAll('.over').forEach(x => x.classList.remove('over')); });
+  const target = e => e.target.closest && e.target.closest('.slot, .addtrace');
+  body.addEventListener('dragover', e => { const s = target(e); if (!s) return; e.preventDefault(); body.querySelectorAll('.over').forEach(x => x !== s && x.classList.remove('over')); s.classList.add('over'); });
+  body.addEventListener('dragleave', e => { const s = target(e); if (s && !s.contains(e.relatedTarget)) s.classList.remove('over'); });
+  body.addEventListener('drop', e => { const s = target(e); if (!s) return; e.preventDefault(); const f = e.dataTransfer.getData('text/plain'); if (!f) return; body.classList.remove('dragging');
+    if (s.classList.contains('addtrace')) newTrace(f);
+    else { const tt = B.traces[+s.dataset.ti]; tt[s.dataset.k] = f; if (s.dataset.k === 'cfield') Object.assign(tt, rangeOf(tt)); }
+    renderBuilder(); drawB(); });
+})();
+renderBuilder();
+function drawBuilderMap(id){
+  const cv = document.getElementById(id); if (!cv.offsetParent) return;
+  const { g, w, h } = fitCanvas(cv); const save = { ...mp }; Object.assign(mp, { mode: '2d', follow: false, center: [0, 60], zoom: .95, bm: 'street', hidden: new Set() });
+  const M = mapProj(w, h); drawBase2D(g, w, h, M); Object.assign(mp, save);
+  const tr = MAP_TRACES[0]; g.lineWidth = 2.6; g.lineJoin = 'round';
+  for (let i = 1; i < P.length; i++){ g.strokeStyle = rampColor(P[i].spd / SPD_MAX); g.beginPath(); g.moveTo(M.X(tr.fx(P[i-1])), M.Y(tr.fy(P[i-1]))); g.lineTo(M.X(tr.fx(P[i])), M.Y(tr.fy(P[i]))); g.stroke(); }
+}
+
+function redrawAll(){ drawXY(); drawXYCur(); drawMap(); drawMapCur(); drawB(); drawBuilderMap('bCurCanvas'); }
+addEventListener('resize', redrawAll);
+document.fonts && document.fonts.ready.then(redrawAll);
+redrawAll();
+})();
+</script>

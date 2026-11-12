@@ -6,34 +6,67 @@ fields, plus a standalone terrain demo.
 
 ## Map a flight in the normal workspace
 
-Select **Map** to open the same coordinate-pair builder used by 2D plots.
-No GPS source is discovered or chosen automatically. Bind longitude/latitude
-fields and select degrees, degrees multiplied by 10^7, or radians explicitly.
-An optional GPS fix-type field can be supplied. Each pair is a separate trace;
-drag it onto an existing map to add it or onto another plot to create a map.
-Each map has its own camera and can be docked, duplicated and saved normally.
+Select **Map** to open the trace setup panel on the right. Each trace is a
+collapsible card; its summary line (for example `lon/lat · degrees · Z alt AMSL`)
+lets you check it without opening it. Slots take fields by drag and drop only.
+No GPS source is discovered or chosen automatically, but dropping **one** field
+of a GPS or position topic fills its partners from the same message/instance:
+longitude, latitude and altitude (`lon`/`lat`/`alt`, `longitude_deg`/`latitude_deg`/
+`altitude_msl_m`, …), or local `x`/`y`/`z`. Local NED `y` goes to East (X), `x` to
+North (Y), and `z` binds as down-positive altitude starting on the ground. When no
+altitude partner exists only X/Y are filled. The status bar names what was filled.
+Dropping such a field straight onto an existing map adds that topic's trace there.
 
-**Local metres** accepts east in X and north in Y. Give the trace a starting
-longitude/latitude in the builder, or drop it onto a map and choose **Set start**
-in its legend to click a location. The default places the first valid X/Y
-sample at that point; **Anchor: local zero** instead places local (0,0) there.
-Each trace retains its own anchor. Local metre displacements use the ground
-scale at the anchor, providing a flat local frame rather than a globe model.
+**Position** units are Degrees, deg×10⁷, Radians or Local m. A badge reports the
+unit that matches the data (values beyond ±360 suggest deg×10⁷); when the chosen
+unit disagrees, the badge offers the detected unit in one click.
 
-Provider selection, 2D/3D mode, offline mode, attribution links, and fit/reset
-controls live in the coordinate builder on the right. Open **Map** with an
-existing map selected, or use **Edit coordinates**, to change that plot live.
+**Local m** traces accept east in X and north in Y and show **Start location**:
+**Default** (the saved default start), **From GPS** (first valid fix of a GPS trace
+on the map being edited, so local and GPS tracks line up), **Click map** (choose a
+point on the map), or a pasted `lat, lon`. **Put here** places either the first
+valid sample or local (0, 0) at the start. **Save as default** stores the current
+start for new local traces (saved in Enlumi's config folder as `default-map-start`).
+Local metre displacements use the ground scale at the start, a flat local frame.
+
+**Altitude** takes an optional Z field. **AMSL** uses absolute elevation in the
+terrain dataset's vertical reference; **Above terrain** adds Z to the terrain height
+at the trace start (sampled once, fixed as the trace moves); **Start on ground**
+also removes the starting Z. Units are m, mm or ft, and **Down + (NED)** handles
+down-positive Z. With no Z binding the trace uses Z=0. Invalid or unavailable
+altitude samples break segments rather than extrapolating.
+
+**Color field** below the cards binds one field for the whole map; binding it
+switches the map's traces to field coloring. Each trace's color mode (Solid, Speed,
+Height, Field) is also in its legend popover (swatch icon), with **Fit to trace**
+and **Edit trace…**. Gradient limits apply on Enter or when the field loses focus;
+**Auto** fits them to the trace's data.
+
+Drag a finished card's bar onto a map to add the trace, or onto another plot to
+create a map. Each map has its own camera and can be docked, duplicated and saved.
+Open **Map** with a map selected, or use **Edit coordinates**, to change it live.
 Settings persist with plot/workspace recipes.
 
-Choose **3D map** to orbit the terrain. Each coordinate pair has a **Z / altitude**
-slot: drag any sample field there, or enter its source ID and choose **Bind Z**.
-Metres, millimetres, and feet are supported. Select **Z increases down** for
-down-positive local coordinates such as NED; the default is up-positive. **Local Z** fixes its origin to
-terrain elevation at that trace's first valid X/Y position. This height is sampled
-once and remains fixed as the trace moves; Z=0 does not follow terrain.
-**Global elevation** uses absolute elevations in the terrain dataset's vertical
-reference. With no Z binding the trace uses Z=0. Invalid or unavailable altitude
-samples break segments rather than extrapolating.
+On the map, **2D/3D** and the **Layers** popover sit at top left. Layers holds the
+basemap provider, offline tiles, tile retry and status, 3D options (**Ground path**,
+**Terrain height ×2**) and trace options: **Arrows**, **Flight mode changes**
+(labelled markers in 2D and colored markers in 3D where the plot's first
+state band changes value),
+**Altitude profile (2D)** and **Show path** (whole flight, flown so far, or last
+30 s before the timeline marker, the rest faded). Navigation sits at bottom
+right: zoom in/out, compass (north-up, 3D), **Fit**, **Follow** and **Measure (M)**.
+Measure takes two clicks; clicks snap to trace samples. It reports horizontal
+distance and bearing, 3D distance with its horizontal and vertical parts when both
+ends are 3D samples, and Δt, distance flown and average speed when both ends lie on
+one trace. M toggles it while the map has focus; Esc finishes.
+
+The **altitude profile** strip under 2D maps plots bound Z against distance flown
+for the first visible trace, follows the timeline marker, and pins the timeline on
+click. It appears only when a trace has a Z field.
+
+**Links → Highlight time range** (on by default) dims the path outside the visible
+X range of the time plot you zoomed or panned last, in 2D, 3D and the profile.
+Provider attribution is shown at the map's bottom right.
 
 3D traces use depth testing, trace colors/visibility, start/end crosses, and the
 shared timeline marker; clicking a projected segment pins timeline time.
@@ -54,12 +87,14 @@ time is preserved. Drag, zoom, hiding a trace and leaving the map clear hover.
 traces and timeline marker, in SVG/PNG exports and clipboard captures. Both plot
 and dock screenshots retain attribution and legend. Captures make no tile requests.
 
-**Fit traces** (also double-click in 2D) fits visible traces. Drag to pan, wheel to
+**Fit** (also double-click in 2D) fits visible traces. Drag to pan, wheel to
 zoom, and Shift-drag to box zoom. Saved camera state allows zoom 28. Both 2D and 3D interactions reach zoom 22;
 raster requests stop at zoom 19, with closer views enlarging existing imagery.
 Green/red markers identify the first/last valid positions. The gold markers
 follow the shared timeline; clicking near a visible path segment pins its
-interpolated time. **Link timeline** controls marker linking and path picking.
+interpolated time. In 3D the gold marker also shows a white heading chevron.
+**Links → Link timeline** in the map header controls marker linking and path
+picking. **Arrows** draws direction chevrons along traces in 2D and 3D.
 
 Map tracks retain f64 geographic coordinates and recording times, unwrap the
 dateline for projection and preserve invalid fixes and time gaps. A horizontal

@@ -40,27 +40,22 @@ impl Workbench {
     }
 }
 
+/// Opened from the plot actions menu; edits only this plot unless applied to all.
 #[component]
-pub fn PlotAppearance(workbench: Workbench, pane: Pane) -> impl IntoView {
-    // Install the picker rules with the plot, before opening a popup can trigger
+pub fn PlotBackgroundDialog(
+    workbench: Workbench,
+    pane: Pane,
+    open: RwSignal<bool, LocalStorage>,
+) -> impl IntoView {
+    // Install the picker rules with the plot, before opening the dialog can trigger
     // stylesheet parsing and a restyle of the entire populated workspace.
     install_stylesheet("plot-series-controls", plot::zgui_series::stylesheet());
     install_stylesheet("zui-slider", zgui_ui::slider::SliderStyle::CSS);
     install_stylesheet("zui-input", zgui_ui::input::InputStyle::CSS);
     let color = effective_background(pane.background);
-    let bounds = pane.dock.node.observe_border_box();
-    let compact = Signal::derive_local(move || {
-        bounds
-            .get()
-            .is_none_or(|bounds| bounds.size.width.0 / pane.dock.node.scale() < 700.)
-    });
-    view! {Popover {
-        PopoverTrigger(class="plot-background-trigger",class:plot-background-compact=move ||compact.get(),size=ButtonSize::Xs,variant=ButtonVariant::Ghost,a11y:label="Plot background") {
-            box(class="plot-background-swatch",style:background=move ||Some(css(color.get())))
-            if move ||!compact.get() {text {"Background"}}
-        }
-        PopoverContent(class="plot-background-menu") {
-            text(class="heading") {"Plot background"}
+    view! {Dialog(open=open) {
+        DialogContent(class="plot-background-menu plot-settings-surface",dismiss_control=false) {
+            DialogTitle(class="heading") {"Plot background"}
             text(class="muted") {{move ||if pane.background.get().is_none(){"Following app theme"}else{"Custom color for this plot"}}}
             ColorPicker(color=Signal::derive_local(move || {let [r,g,b]=color.get();[r,g,b,255]}),on_change=UnsyncCallback::new(move |[r,g,b,_]:[u8;4]|pane.background.set(Some([r,g,b]))))
             row(class="plot-background-actions") {

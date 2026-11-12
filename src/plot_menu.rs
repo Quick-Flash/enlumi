@@ -1,8 +1,7 @@
+use crate::plot_appearance::PlotBackgroundDialogProps;
 use crate::state_tint_options::StateTintOptionsProps;
 use crate::{
     mapping::color_settings::ColorSettingsProps,
-    mapping::settings::MapBackendProps,
-    mapping::view_options::MapViewOptionsProps,
     preset_capture::CaptureKind,
     state::{Pane, Workbench},
 };
@@ -13,13 +12,22 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn PlotPresetMenu(workbench: Workbench, pane: Pane) -> impl IntoView {
     let settings = RwSignal::new_local(false);
+    let background = RwSignal::new_local(false);
     view! {
     PlotMenuEditor(workbench=workbench,pane=pane,open=settings)
+    PlotBackgroundDialog(workbench=workbench,pane=pane,open=background)
     DropdownMenu {
         DropdownMenuTrigger(class="app-action plot-preset-menu",size=ButtonSize::IconXs,variant=ButtonVariant::Ghost,a11y:label="Plot actions") {
             vector(class="plot-more-icon",prop:viewBox="0 0 16 16",prop:d="M3 7 H4 V8 H3 Z M7.5 7 H8.5 V8 H7.5 Z M12 7 H13 V8 H12 Z",a11y:hidden=true)
         }
-        DropdownMenuContent {PlotMenuEntries(workbench=workbench,pane=pane,settings=settings)}
+        DropdownMenuContent {
+            PlotMenuEntries(workbench=workbench,pane=pane,settings=settings)
+            MenuSeparator {}
+            MenuItem(class="plot-background-item",on_select=UnsyncCallback::new(move |()|background.set(true))) {"Background…"}
+            if move ||pane.trajectory.with(Option::is_none) {
+                MenuItem(class="plot-separate-units",disabled=Signal::derive_local(move ||workbench.plot_units(pane).len()<2),on_select=UnsyncCallback::new(move |()|workbench.separate_plot_units(pane))) {"Separate by unit"}
+            }
+        }
     }}
 }
 #[component]
@@ -207,7 +215,7 @@ pub fn PlotMenuEditor(
         column(class="plot-settings-content",class:trace-gradient-active=move ||crate::trace_color::current(pane,crate::trace_color::selected(pane)).mode!=crate::trace_color::Mode::Solid) {
             DialogTitle(class="settings-title") {{format!("Plot {} line settings",pane.id)}}
             column(class="plot-settings-body") {
-            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {MapBackend(workbench=workbench,pane=pane) MapViewOptions(workbench=workbench,pane=pane) ColorSettings(workbench=workbench,pane=pane)}
+            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {ColorSettings(workbench=workbench,pane=pane)}
             if move ||pane.analysis.with(Option::is_none) {StateTintOptions(workbench=workbench,pane=pane)}
             {move ||if spatial.get() {AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),fixed_connection=plot::line_draw::Connection::Linear,on_extra=UnsyncCallback::new(move |()|open.set(false)))})}else{AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),on_extra=UnsyncCallback::new(move |()|open.set(false)))})}}
             }

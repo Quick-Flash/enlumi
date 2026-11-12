@@ -507,10 +507,8 @@ fn replay_attitude_drag() {
 #[ignore = "real offscreen GPU preview; writes target/xy-builder-preview.ppm"]
 fn render_xy_builder_preview() {
     use crate::{
-        state::Line,
-        theme::AppThemeProps,
-        trajectory_axes::{TrajectorySetupProps, assign},
-        workspace::PlotWorkspaceProps,
+        state::Line, theme::AppThemeProps, trajectory_axes::assign,
+        trajectory_cards::TrajectorySetupProps, workspace::PlotWorkspaceProps,
     };
     let graphics = zgui_render_wgpu::SharedGraphics::new();
     let captured = Rc::new(RefCell::new(None));

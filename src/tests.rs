@@ -300,7 +300,12 @@ fn app_starts_with_one_full_workspace_and_adds_plots_with_keyboard() {
             .any(|node| window.dom.tree().text_content(*node) == "Fit all")
     );
     assert!(class(&window, "plot-actions-trigger").is_empty());
-    let add = button(&window, "Duplicate");
+    let more = class(&window, "plot-preset-menu")[0];
+    window
+        .dispatcher()
+        .key(more, zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter));
+    window.frame();
+    let add = class(&window, "preset-duplicate-plot")[0];
     window
         .dispatcher()
         .key(add, zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter));

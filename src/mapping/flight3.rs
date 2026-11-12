@@ -24,6 +24,10 @@ pub struct Path3 {
     pub radius: f32,
     pub marker: plot::plot_data::MarkerShape,
     pub local: bool,
+    /// Direction chevrons along the trace; restyle only, set from the plot spec.
+    pub arrows: bool,
+    /// Flight-mode changes (time, color) marked along the trace; restyle only.
+    pub modes: Arc<[(f64, [u8; 3])]>,
 }
 pub type Pick = zgui::reactive::UnsyncCallback<
     (
@@ -311,6 +315,26 @@ fn vertices_layer(
                     vertices.extend([marker, marker]);
                 }
             }
+            if path.arrows && path.drawing.pattern != plot::line_draw::LinePattern::None {
+                let width = path.width.max(1.5);
+                for (index, segment) in arrow_segments(&path.points, scale, scale / camera.scale())
+                {
+                    let color = scene.colors.color(path.id, index, path.color);
+                    for point in segment {
+                        let mut v = vertex(point, color);
+                        v[7] = width;
+                        vertices.push(v);
+                    }
+                }
+            }
+            for &(time, [r, g, b]) in path.modes.iter() {
+                if let Some(point) = path.at(time) {
+                    let mut marker = vertex(point, [r, g, b, 255]);
+                    marker[7] = 10.;
+                    marker[8] = 6.;
+                    vertices.extend([marker, marker]);
+                }
+            }
             let first = path
                 .points
                 .iter()
@@ -361,10 +385,127 @@ fn vertices_layer(
             marker[7] = 13.;
             marker[8] = 6.;
             vertices.extend([marker, marker]);
+            if let Some(time) = scene.time
+                && let Some(chevron) =
+                    heading_chevron(path, time, point, scale, scale / camera.scale())
+            {
+                for point in chevron {
+                    let mut v = vertex(point, [255, 255, 255, 235]);
+                    v[7] = 3.;
+                    vertices.push(v);
+                }
+            }
         }
     }
     vertices
 }
+const ARROW_SPACING: f64 = 90.;
+const ARROW_LENGTH: f64 = 7.;
+const ARROW_HALF_WIDTH: f64 = 5.;
+
+/// Chevron wings (two line segments) for a tip moving along `direction`.
+/// `direction` is in true metres; `ground` converts mercator units to metres.
+fn chevron(
+    tip: [f64; 3],
+    direction: [f64; 3],
+    ground: f64,
+    length: f64,
+    half: f64,
+) -> Option<[[f64; 3]; 4]> {
+    let flat = direction[0].hypot(direction[1]);
+    let norm = (flat * flat + direction[2] * direction[2]).sqrt();
+    if flat <= 0. || !norm.is_finite() {
+        return None;
+    }
+    let u = direction.map(|v| v / norm);
+    let back = [
+        tip[0] - u[0] * length / ground,
+        tip[1] - u[1] * length / ground,
+        tip[2] - u[2] * length,
+    ];
+    let side = [
+        -direction[1] / flat * half / ground,
+        direction[0] / flat * half / ground,
+    ];
+    let wing = |sign: f64| [back[0] + side[0] * sign, back[1] + side[1] * sign, back[2]];
+    Some([wing(1.), tip, wing(-1.), tip])
+}
+
+/// Chevrons every ARROW_SPACING screen pixels of path, with the sample index for color.
+/// `pixel` is true metres per CSS pixel at the focus.
+fn arrow_segments(points: &[[f64; 3]], ground: f64, pixel: f64) -> Vec<(usize, [[f64; 3]; 4])> {
+    let spacing = ARROW_SPACING * pixel;
+    let mut out = Vec::new();
+    if spacing.is_nan() || ground.is_nan() || spacing <= 0. || ground <= 0. {
+        return out;
+    }
+    let mut since = spacing / 2.;
+    let mut previous = None::<[f64; 3]>;
+    for (index, &point) in points.iter().enumerate() {
+        if !point.iter().all(|v| v.is_finite()) {
+            previous = None;
+            continue;
+        }
+        if let Some(a) = previous {
+            let d = [
+                (point[0] - a[0]) * ground,
+                (point[1] - a[1]) * ground,
+                point[2] - a[2],
+            ];
+            let length = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            if length > 0. {
+                let mut at = spacing - since;
+                while at <= length && out.len() < 4096 {
+                    let t = at / length;
+                    let tip = std::array::from_fn(|axis| a[axis] + (point[axis] - a[axis]) * t);
+                    if let Some(c) = chevron(
+                        tip,
+                        d,
+                        ground,
+                        ARROW_LENGTH * pixel,
+                        ARROW_HALF_WIDTH * pixel,
+                    ) {
+                        out.push((index, c));
+                    }
+                    at += spacing;
+                }
+                since = length - (at - spacing);
+            }
+        }
+        previous = Some(point);
+    }
+    out
+}
+
+/// Larger chevron ahead of the timeline marker, pointing along horizontal travel.
+fn heading_chevron(
+    path: &Path3,
+    time: f64,
+    point: [f64; 3],
+    ground: f64,
+    pixel: f64,
+) -> Option<[[f64; 3]; 4]> {
+    let (before, after) = (
+        path.at(time - 0.5).unwrap_or(point),
+        path.at(time + 0.5).unwrap_or(point),
+    );
+    let d = [
+        (after[0] - before[0]) * ground,
+        (after[1] - before[1]) * ground,
+        0.,
+    ];
+    let flat = d[0].hypot(d[1]);
+    if flat.is_nan() || flat <= 0. {
+        return None;
+    }
+    let tip = [
+        point[0] + d[0] / flat * 14. * pixel / ground,
+        point[1] + d[1] / flat * 14. * pixel / ground,
+        point[2],
+    ];
+    chevron(tip, d, ground, 8. * pixel, 7. * pixel)
+}
+
 pub fn anchor_tile(origin: [f64; 2]) -> TileId {
     let side = 1_i64 << 14;
     TileId {
@@ -462,6 +603,8 @@ pub fn prepare(
                 .get(&trace.id)
                 .map_or(plot::plot_data::MarkerShape::Circle, |style| style.0.marker),
             local: altitude.local,
+            arrows: false,
+            modes: Arc::from([]),
         });
     }
     Ok(paths.into())
@@ -583,10 +726,36 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
         let order = pane.legend_order.get();
         let emphasized = pane.plot.emphasized.get();
         let hidden = pane.plot.hidden.get();
-        (
-            emphasize(&output.get(), &order, &hidden, emphasized.as_deref()),
-            true,
-        )
+        let arrows = pane
+            .trajectory
+            .with(|spec| spec.as_ref().is_some_and(|spec| spec.arrows));
+        let mut paths = emphasize(
+            &output.get(),
+            &order,
+            &hidden,
+            emphasized.as_deref(),
+            arrows,
+        );
+        let modes = mode_changes(workbench, pane);
+        if !modes.is_empty()
+            && let Some(first) = paths.first().map(|p| p.id)
+        {
+            paths = paths
+                .iter()
+                .cloned()
+                .map(|mut path| {
+                    if path.id == first {
+                        path.modes = modes.clone();
+                    }
+                    path
+                })
+                .collect();
+        }
+        let paths = match super::flight::highlight_window(workbench, pane) {
+            Some(window) => highlight(&paths, window),
+            None => paths,
+        };
+        (paths, true)
     });
     (
         Signal::derive_local(move || styled.get()),
@@ -600,12 +769,17 @@ fn emphasize(
     order: &[u64],
     hidden: &BTreeSet<String>,
     emphasized: Option<&str>,
+    arrows: bool,
 ) -> Arc<[Path3]> {
     let emphasized = emphasized.and_then(|id| id.parse::<u64>().ok());
     let mut paths = paths
         .iter()
         .filter(|path| emphasized == Some(path.id) || !hidden.contains(&path.id.to_string()))
         .cloned()
+        .map(|mut path| {
+            path.arrows = arrows;
+            path
+        })
         .collect::<Vec<_>>();
     paths.sort_by_key(|path| {
         (
@@ -626,6 +800,71 @@ fn emphasize(
         }
     }
     paths.into()
+}
+
+/// Value changes of the plot's first state band, when the map shows flight modes.
+fn mode_changes(workbench: Workbench, pane: Pane) -> Arc<[(f64, [u8; 3])]> {
+    let enabled = pane
+        .trajectory
+        .with(|s| s.as_ref().and_then(|s| s.map).is_some_and(|m| m.modes));
+    if !enabled {
+        return Arc::from([]);
+    }
+    let hidden = pane.hidden_geometry.get();
+    let Some(states) = workbench
+        .ordered_geometry(pane)
+        .into_iter()
+        .filter(|item| !hidden.contains(&item.id))
+        .find_map(|item| item.states.filter(|s| s.error.is_none()))
+    else {
+        return Arc::from([]);
+    };
+    let mut out = Vec::new();
+    let mut previous = None;
+    for interval in states.intervals.iter() {
+        if previous == Some(interval.value) {
+            continue;
+        }
+        previous = Some(interval.value);
+        if let Some(rule) = states.rules.iter().find(|r| r.value == interval.value) {
+            out.push((interval.start, rule.color));
+        }
+        if out.len() == 60 {
+            break;
+        }
+    }
+    out.into()
+}
+
+/// Bit marking the faded full-length copy of a path drawn under its highlight.
+pub(crate) const FADED: u64 = 1 << 63;
+
+/// Each path that leaves `window` becomes a faded full copy (solid, no arrows)
+/// plus the original with samples outside the window hidden, keeping indices
+/// aligned with its colors.
+fn highlight(paths: &[Path3], window: [f64; 2]) -> Arc<[Path3]> {
+    let mut out = Vec::with_capacity(paths.len() * 2);
+    for path in paths {
+        let inside = |t: f64| t >= window[0] && t <= window[1];
+        if path.times.iter().all(|t| inside(*t)) {
+            out.push(path.clone());
+            continue;
+        }
+        let mut faded = path.clone();
+        faded.id |= FADED;
+        faded.arrows = false;
+        faded.color[3] = (f32::from(faded.color[3]) * 0.2).round() as u8;
+        out.push(faded);
+        let mut shown = path.clone();
+        shown.points = path
+            .points
+            .iter()
+            .zip(path.times.iter())
+            .map(|(p, t)| if inside(*t) { *p } else { [f64::NAN; 3] })
+            .collect();
+        out.push(shown);
+    }
+    out.into()
 }
 
 /// Changes that make built geometry wrong: rebuild before drawing.
@@ -1194,6 +1433,36 @@ mod tests {
         }
     }
     #[test]
+    fn highlight_fades_a_full_copy_and_hides_samples_outside_the_window() {
+        let path = Path3 {
+            id: 7,
+            origin: [0., 0.],
+            points: (0..5).map(|i| [f64::from(i), 0., 10.]).collect(),
+            times: (0..5).map(f64::from).collect(),
+            color: [200, 100, 50, 255],
+            width: 2.,
+            drawing: Default::default(),
+            radius: 3.,
+            marker: plot::plot_data::MarkerShape::Circle,
+            local: false,
+            arrows: true,
+            modes: Arc::from([]),
+        };
+        let split = highlight(std::slice::from_ref(&path), [1., 3.]);
+        assert_eq!(split.len(), 2);
+        assert_eq!(split[0].id, 7 | FADED);
+        assert_eq!(split[0].color[3], 51);
+        assert!(!split[0].arrows);
+        assert_eq!(split[1].id, 7);
+        let shown: Vec<bool> = split[1].points.iter().map(|p| p[0].is_finite()).collect();
+        assert_eq!(shown, [false, true, true, true, false]);
+        // A window covering the whole flight leaves the path untouched.
+        let whole = highlight(std::slice::from_ref(&path), [-1., 10.]);
+        assert_eq!(whole.len(), 1);
+        assert_eq!(whole[0].id, 7);
+    }
+
+    #[test]
     fn emphasis_follows_legend_order_and_raises_hovered_trace() {
         let path = |id| Path3 {
             id,
@@ -1206,14 +1475,22 @@ mod tests {
             radius: 3.,
             marker: plot::plot_data::MarkerShape::Circle,
             local: false,
+            arrows: false,
+            modes: Arc::from([]),
         };
         let paths = [path(1), path(2), path(3)];
         let ids = |paths: &[Path3]| paths.iter().map(|p| p.id).collect::<Vec<_>>();
         let none = BTreeSet::new();
-        assert_eq!(ids(&emphasize(&paths, &[3, 1, 2], &none, None)), [3, 1, 2]);
+        assert_eq!(
+            ids(&emphasize(&paths, &[3, 1, 2], &none, None, false)),
+            [3, 1, 2]
+        );
         let hidden = BTreeSet::from(["1".to_string()]);
-        assert_eq!(ids(&emphasize(&paths, &[3, 1, 2], &hidden, None)), [3, 2]);
-        let styled = emphasize(&paths, &[3, 1, 2], &hidden, Some("1"));
+        assert_eq!(
+            ids(&emphasize(&paths, &[3, 1, 2], &hidden, None, false)),
+            [3, 2]
+        );
+        let styled = emphasize(&paths, &[3, 1, 2], &hidden, Some("1"), false);
         assert_eq!(ids(&styled), [3, 2, 1]);
         assert_eq!((styled[2].width, styled[2].color[3]), (3.5, 255));
         assert_eq!((styled[0].width, styled[0].color[3]), (2., 77));
@@ -1237,6 +1514,8 @@ mod tests {
             radius: 3.,
             marker: plot::plot_data::MarkerShape::Circle,
             local: false,
+            arrows: false,
+            modes: Arc::from([]),
         };
         let mut scene = Scene::default();
         scene.paths = Arc::from([path]);

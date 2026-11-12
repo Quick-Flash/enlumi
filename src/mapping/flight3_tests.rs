@@ -29,8 +29,8 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
         workbench.edit_trajectory(pane);
         *saved.borrow_mut()=Some((workbench,pane,service));
         use super::super::flight::FlightMapProps;
-        use super::super::settings::MapSettingsProps;
-        view!{column(class="page workbench"){row(class="body"){column(node_ref=pane.dock.node,style:flex="1",style:min_width="0"){FlightMap(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} column(style:width="300px"){MapSettings(workbench=workbench,pane=workbench.trajectory_builder().pane)}}}}
+        use super::super::settings::MapBackendProps;
+        view!{column(class="page workbench"){row(class="body"){column(node_ref=pane.dock.node,style:flex="1",style:min_width="0"){FlightMap(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} column(style:width="300px"){MapBackend(workbench=workbench,pane=workbench.trajectory_builder().pane)}}}}
     }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -331,7 +331,7 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
     );
     assert!(
         harness.app().windows()[0]
-            .box_with_class("map-sidebar-settings")
+            .box_with_class("map-backend-settings")
             .is_some()
     );
     assert!(

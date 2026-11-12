@@ -51,7 +51,10 @@ Legend entries can move between ordinary and 2D plots. Axis assignments,
 appearance and visibility survive saved plots/views, duplication and compatible
 log changes. **Equal scale** inside the chart keeps one unit the same size on both axes and
 constrains the Shift-zoom box to the viewport aspect. With it off, the zoom box
-is free. **Links**
+is free. **Arrows** (on by default) draws direction chevrons along each trace in
+recording order, about every 90 screen pixels. Green and red dots mark each
+trace's first and last samples, and a readout at bottom right shows time, X, Y and
+speed at the timeline marker. **Links**
 supports bounds and pointers between 2D plots; spatial bounds stay separate from
 time plots. Samples retain recording order, including loops. Alignment does not
 extrapolate or connect paths through invalid values or gaps. Dashed, dotted and
@@ -93,8 +96,7 @@ Drag presets from Profiles to open views or plots. **Save** overwrites the linke
 preset directly; a first save asks for a destination. **Save as...** opens the
 editor to create another preset. A captured view previews its plots directly.
 
-Open **Background** in a plot header to edit that plot's background.
-On narrow plots, this button shows just the color swatch.
+Choose **Background…** from a plot's **⋯** menu to edit that plot's background.
 The picker starts with that plot's current color. **Apply to all** copies it
 to every open plot, including other views and workspaces. Plots follow the app
 theme until you choose a custom color. **Use theme** restores this behavior for
@@ -164,7 +166,7 @@ Reusable group labels live in profiles; source IDs stay unchanged.
 1. Click **Open log** or pass a local log path. File Explorer drag-and-drop is deferred to future work.
 2. Expand plain text topic-instance roots (for example `vehicle_imu.0`; single-instance topics omit suffix) and named field/array groups in scrollable left field tree. Numeric instances and array indices sort naturally. Search keeps matching ancestor paths in tree without opening branches. Matching topic-instance root or field group keeps its whole subtree; leaf matches prune unrelated fields. Expand results manually. Sidebar stays inside visible window; wheel scrolls fields independently.
 3. Drag a field onto any visible plot to add a line. Drag legend labels to move lines between plots or reorder within legend. Drop above/below legend row to insert there; drop onto plot area to append. Appearance and filters follow line. Up/Down on focused legend label reorders it. Ctrl-click toggles individual fields; Shift-click selects visible range; Ctrl+Shift-click adds range. Select several, then drag any selected field to move whole selection into a plot or filter source area. Clicking an unselected field selects it alone; Enter plots focused field. Escape cancels dragging; release outside plots changes nothing.
-4. Each plot's **Duplicate** button copies its lines and appearance into new pane. Tab **+** adds a tab in same pane; tab X closes it.
+4. **Duplicate plot** in each plot's **⋯** menu copies its lines and appearance into new pane. The plot header keeps icon buttons for screenshot, the **⋯** menu, and maximize/restore; hover an icon for its name. Tab **+** adds a tab in same pane; tab X closes it.
 5. Each dock keeps original left/right/top/bottom/center targets: center groups tabs, edges split that pane. Additional four-arrow guides target contiguous multi-pane row/column bands, including nested regions. Hover near a band to reveal its guide; center number counts visible panes. With three rows, top two and bottom two both have guides. Whole-layout preview labels every resulting dock at its future position, including neighbors that shift or resize. Preview and final drop use same layout transaction. Unselected bands keep their positions. Drag splitters to resize: other edges stay fixed until neighboring dock reaches 220 x 160 px minimum, then further dragging pushes its far edge and any adjacent minimum-size docks. Workspace border stops pushing; reversing within drag restores original edges. Perpendicular edges stay fixed; **Maximize**/**Restore** changes workspace view. **Equalize panels** balances columns and rows while keeping tabs and arrangement. Sidebar icon toggles fields; right grip resizes it.
 6. Gear inside legend box opens centered line-settings dialog. Legend and gear appear once plot has lines. Select legend entry in dialog to edit HSV color square, rainbow hue strip, hex RGB, width, sample markers (dots, square, triangle, diamond, cross), marker size, and linear/pre-step/post-step connection. Filters workspace manages derived fields separately from line appearance. Legend X removes its line; clicking label toggles visibility. Hovering hidden legend field previews its line above other lines until pointer leaves, without changing visibility or bounds.
 7. Pan, wheel/box zoom (release Shift to cancel selection), hover samples, toggle legend visibility. Wheel over bottom X band or left Y axis zooms only that axis around pointer; other axis stays fixed. Double-click inside plot fits both axes. Double-click bottom X axis or full-height left Y edge fits only that axis; right-click menu also offers Fit X axis, Fit Y axis, and Fit both axes. Drag upper/lower half of left Y edge to adjust that bound; Escape cancels axis drag. Legend toggles and removals preserve bounds; adding a field or moving a line into another panel fits destination. Automatic line colors prefer colors not already used by other traces in the destination plot, then reuse the least-used palette colors. Each plot header's **Links** dropdown has checkboxes for All, X bounds, Y bounds, pointer, and timeline links. All enables or clears every link; toggling an individual link leaves other selections intact and updates All indicator. Pointer and timeline links are enabled by default; opt into X/Y bounds independently. Linked pointer and coordinates below legend follow snapped sample cross; away from samples they follow free cross position. FPS appears in the top-right toolbar, continuously samples UI frame cadence, and updates every 250 ms. Sampling does not force unchanged plot contents to redraw; performance logs distinguish presented and undamaged frames. See [performance measurements](PERFORMANCE.md) to record frame costs and compare Linux backends.
@@ -273,7 +275,7 @@ No plots, log paths, scripts, or filter drafts are restored across launches.
 **Line**, then drag inside plot. Shapes use data coordinates: pan/zoom changes
 view, while bounds stay anchored. Geometry does not change automatic axis fitting.
 
-Each plot's legend includes its geometry, even when plot contains no signals. Drag fields, geometry, and time bands into any legend position; Up/Down reorders focused entries. Geometry order controls overlapping shapes and band label rows. State bands list their named state colors beneath legend entry. Mixed unit labels and **Separate plots** live under **Units** in plot header.
+Each plot's legend includes its geometry, even when plot contains no signals. Drag fields, geometry, and time bands into any legend position; Up/Down reorders focused entries. Geometry order controls overlapping shapes and band label rows. State bands list their named state colors beneath legend entry. **Separate by unit** in the plot's **⋯** menu splits lines with different unit labels into separate plots.
 Click geometry name to show/hide that plot's copy. Pencil opens live editor;
 **X** removes geometry from that plot while preserving saved definition.
 

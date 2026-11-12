@@ -163,6 +163,15 @@ impl Workbench {
                     );
                 }
             }
+            Destination::TrajectoryColor => {
+                if let Some(source) = sources.first() {
+                    crate::mapping::settings::bind_color(
+                        self,
+                        self.trajectory_builder().pane,
+                        source.clone(),
+                    );
+                }
+            }
             Destination::TrajectoryAxis(index, y) => {
                 if let Err(error) = crate::trajectory_axes::assign(
                     self.trajectory_builder().pane,
@@ -171,6 +180,13 @@ impl Workbench {
                     &sources,
                 ) {
                     self.status.set(error);
+                } else if let [source] = sources.as_slice() {
+                    crate::trajectory_cards::fill_siblings(
+                        self,
+                        self.trajectory_builder().pane,
+                        index,
+                        source,
+                    );
                 }
             }
             Destination::SaveSelection => {

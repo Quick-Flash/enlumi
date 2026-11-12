@@ -37,12 +37,25 @@
 
 .map-sidebar-settings, .map-altitude-options { gap: 6px; padding: 6px; flex: none; }
 .map-backend-settings { gap: 4px; flex: none; }
-.map-toolbar { position: absolute; top: 6px; left: 6px; z-index: 3; gap: 2px; padding: 3px; align-items: center; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-surface); }
+.map-toolbar { position: absolute; top: 6px; left: 6px; z-index: 3; gap: 2px; padding: 3px; align-items: center; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); }
 .map-toolbar .app-action.zui-button[data-size] { height: 24px; min-height: 24px; padding: 0 6px; font-size: 11px; }
+.map-toolbar .app-action.zui-button[data-size="icon-xs"] { width: 24px; min-width: 24px; padding: 0; }
+.map-toolbar-divider { width: 1px; height: 16px; margin: 0 2px; background: var(--app-border); }
+.map-nav { position: absolute; right: 8px; bottom: 26px; z-index: 3; gap: 2px; padding: 3px; align-items: center; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); }
+.map-nav .app-action.zui-button[data-size="icon-xs"] { width: 26px; min-width: 26px; height: 26px; min-height: 26px; padding: 0; border-color: transparent; background: transparent; }
+.map-nav .app-action.zui-button[data-size="icon-xs"]:hover { background: var(--app-hover); border-color: var(--app-border-strong); }
+.map-nav .app-action.zui-button.setting-active[data-size="icon-xs"] { background: var(--app-selected); border-color: var(--app-accent); }
+.map-nav-divider { width: 16px; height: 1px; margin: 1px 0; background: var(--app-border); }
 .map-compass-arrow { width: 14px; height: 14px; color: var(--app-foreground); transform-origin: center; }
 .map-toolbar .setting-active { background: var(--app-selected); color: var(--app-foreground); }
+.map-layers-menu.zui-popover { box-sizing: border-box; width: 376px; max-width: 92vw; overflow: visible; padding: 8px; background: var(--app-surface); color: var(--app-foreground); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); box-shadow: none; }
+.map-layers-columns { gap: 12px; align-items: flex-start; }
+.map-layers-column { gap: 4px; width: 170px; }
+.map-layers-column .app-action.zui-button[data-variant="ghost"] { justify-content: flex-start; height: 24px; min-height: 24px; font-size: 11px; }
+.map-layers-heading { margin-top: 6px; color: var(--app-muted); font-size: var(--app-font-tiny); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.map-layers-column .map-backend-settings > text { color: var(--app-muted); font-size: var(--app-font-tiny); font-weight: 600; text-transform: uppercase; }
 .map-color-settings { gap: 5px; flex: none; }
-.map-color-legend { position: absolute; right: 8px; bottom: 8px; width: 200px; padding: 8px; gap: 5px; background: #151b26eb; color: white; border-radius: 4px; font-size: 11px; pointer-events: none; }
+.map-color-legend { width: 200px; padding: 8px; gap: 5px; background: var(--app-overlay); color: var(--app-foreground); border: 1px solid var(--app-border); border-radius: var(--app-radius); font-size: 11px; pointer-events: none; }
 .map-color-label { overflow: hidden; white-space: nowrap; }
 .map-color-ramp { height: 10px; gap: 0; }
 .map-color-ramp > box { flex: 1; min-width: 0; height: 10px; }
@@ -57,3 +70,34 @@
 
 .map-hover-pin { position: absolute; width: 14px; height: 14px; border: 2px solid #ffffff; border-radius: 50%; background: #ffbe3c88; transform: translate(-50%, -50%); pointer-events: none; }
 .map-hover-tooltip { position: absolute; width: 246px; padding: 8px; border: 1px solid #697580; border-radius: 4px; background: #12181ef2; color: #ffffff; font-size: 12px; white-space: pre; pointer-events: none; }
+.map-attribution-overlay { position: absolute; right: 6px; bottom: 3px; z-index: 3; gap: 6px; }
+.map-attribution-overlay .app-action.zui-button[data-variant="ghost"] { height: 16px; min-height: 16px; padding: 0 4px; border-color: transparent; background: var(--app-overlay); color: var(--app-muted); font-size: var(--app-font-tiny); }
+.map-attribution-overlay .app-action.zui-button[data-variant="ghost"]:hover { color: var(--app-foreground); border-color: transparent; }
+.flight-map.with-profile .map-nav { bottom: 154px; }
+.flight-map.with-profile .map-attribution-overlay { bottom: 131px; }
+.map-measure { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.map-measure-line { position: absolute; inset: 0; width: 100%; height: 100%; color: transparent; --zgui-stroke: #ffffff; --zgui-stroke-width: 1.5px; }
+.map-measure-end { position: absolute; width: 8px; height: 8px; margin: -5px 0 0 -5px; border: 1px solid #000000; border-radius: 50%; background: #ffffff; }
+.map-measure-readout { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); gap: 2px; padding: 6px 10px; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); background: var(--app-overlay); color: var(--app-foreground); font-size: var(--app-font-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.map-measure-hint { color: var(--app-muted); font-size: var(--app-font-tiny); }
+.map-mode-marker { position: absolute; gap: 4px; align-items: center; pointer-events: none; z-index: 1; }
+.map-mode-dot { width: 9px; height: 9px; margin: -5px 0 0 -5px; border: 1.5px solid #000000; border-radius: 50%; flex: none; }
+.map-mode-label { margin-left: 2px; padding: 1px 5px; border-left: 2px solid transparent; border-radius: var(--app-radius-sm); background: var(--app-overlay); color: var(--app-foreground); font-size: var(--app-font-tiny); font-weight: 600; white-space: nowrap; }
+.map-profile { position: relative; flex: none; height: 120px; min-width: 0; border-top: 1px solid var(--app-border); background: var(--app-plot-background); overflow: hidden; cursor: crosshair; }
+.map-profile-title { position: absolute; left: 46px; top: 2px; color: var(--app-muted); font-size: var(--app-font-tiny); }
+.map-profile-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.map-profile-axis { position: absolute; left: 4px; width: 38px; text-align: right; color: var(--app-dim); font-size: var(--app-font-tiny); font-variant-numeric: tabular-nums; }
+.map-profile-high { top: 12px; }
+.map-profile-low { bottom: 10px; }
+.map-profile-distance { left: auto; right: 10px; bottom: 1px; width: auto; }
+.map-profile-line { position: absolute; inset: 0; width: 100%; height: 100%; color: transparent; --zgui-stroke: var(--app-accent-text); --zgui-stroke-width: 1.75px; pointer-events: none; }
+.map-profile-cursor, .map-profile-hover { position: absolute; top: 18px; bottom: 16px; width: 1px; pointer-events: none; }
+.map-profile-cursor { background: var(--app-foreground); }
+.map-profile-hover { background: var(--app-dim); }
+.map-profile-dot { position: absolute; width: 9px; height: 9px; margin: -5px 0 0 -5px; border: 2px solid #ffffff; border-radius: 50%; background: #ffbe3c; pointer-events: none; }
+.map-profile-readout { position: absolute; right: 10px; top: 2px; color: var(--app-foreground); font-size: var(--app-font-tiny); font-variant-numeric: tabular-nums; }
+.trace-quick-menu.zui-popover { box-sizing: border-box; width: 300px; max-width: 92vw; gap: 6px; padding: 8px; background: var(--app-surface); color: var(--app-foreground); border: 1px solid var(--app-border-strong); border-radius: var(--app-radius); box-shadow: none; }
+.trace-quick-modes, .trace-quick-actions { gap: 4px; flex-wrap: wrap; }
+.trace-quick-menu .app-action.zui-button[data-variant="ghost"] { height: 24px; min-height: 24px; font-size: 11px; }
+.trajectory-legend-row .trace-quick.app-action.zui-button[data-size="icon-xs"] { width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 0; }
+.map-profile-line.map-profile-faded { --zgui-stroke: var(--app-dim); }

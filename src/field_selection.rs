@@ -107,7 +107,14 @@ impl Workbench {
     }
     pub fn field_drag_move(self, x: f32, y: f32) {
         self.update_trajectory_drop(x, y);
-        if self.builder_altitude_slot_at(x, y).is_some() || self.builder_slot_at(x, y).is_some() {
+        let color = self.builder_color_slot_at(x, y);
+        if self.trajectory_builder().color_hover.get_untracked() != color {
+            self.trajectory_builder().color_hover.set(color);
+        }
+        if color
+            || self.builder_altitude_slot_at(x, y).is_some()
+            || self.builder_slot_at(x, y).is_some()
+        {
             self.drop_target.set(None);
             self.analysis().hover.set(false);
             return;
@@ -188,6 +195,7 @@ impl Workbench {
     }
     pub fn finish_field_drag(self) {
         self.trajectory_builder().pane.trajectory_drop.set(None);
+        self.trajectory_builder().color_hover.set(false);
         for pane in self.panes().get_untracked() {
             pane.trajectory_drop.set(None);
         }
@@ -206,6 +214,15 @@ impl Workbench {
             if let Some(target) = self.hit_any_plot(x, y) {
                 self.drop_trajectory_pair(index, target);
             }
+            self.finish_field_drag();
+            return;
+        }
+        if self.builder_color_slot_at(x, y) {
+            self.queue_field_sources(
+                self.drag_fields(source),
+                crate::profile_state::Destination::TrajectoryColor,
+                None,
+            );
             self.finish_field_drag();
             return;
         }

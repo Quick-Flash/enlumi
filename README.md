@@ -92,8 +92,9 @@ independent map. Maps use the normal legend, line controls, screenshots and
 clipboard; PNG/SVG exports include loaded tiles and attribution. The position
 markers follow the timeline, and clicking a trace selects its time.
 
-Normal map panes now support **2D map** and **3D map** from the right coordinate
-builder. Provider selection, offline mode, and attribution links live there too.
+Normal map panes switch between **2D** and **3D** from the map toolbar, with
+direction arrows along traces. Provider selection, offline mode, and attribution
+links live in the right coordinate builder.
 Bind any Z field per trace and select metres, millimetres, or feet. **Local Z**
 uses a fixed terrain elevation at trace start; **Global elevation** uses absolute
 elevation. 3D traces render with terrain depth, start/end markers, and timeline

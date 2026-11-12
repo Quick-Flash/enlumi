@@ -7,6 +7,8 @@ pub enum Mode {
     Solid,
     Speed,
     Height,
+    /// The map's color field (`Spec::color_source`), aligned to each sample.
+    Field,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -33,6 +35,8 @@ pub struct TraceColor {
     pub mode: Mode,
     pub speed: Gradient,
     pub height: Gradient,
+    /// Empty range (`[0, 0]`) means the field's own data range.
+    pub field: Gradient,
 }
 impl Default for TraceColor {
     fn default() -> Self {
@@ -46,6 +50,10 @@ impl Default for TraceColor {
                 range: [0., 100.],
                 colors: [[50, 180, 100], [245, 210, 60]],
             },
+            field: Gradient {
+                range: [0., 0.],
+                colors: [[60, 90, 200], [245, 200, 60]],
+            },
         }
     }
 }
@@ -55,6 +63,7 @@ impl TraceColor {
             Mode::Solid => None,
             Mode::Speed => Some(self.speed),
             Mode::Height => Some(self.height),
+            Mode::Field => Some(self.field),
         }
     }
     pub fn gradient_mut(&mut self) -> Option<&mut Gradient> {
@@ -62,10 +71,13 @@ impl TraceColor {
             Mode::Solid => None,
             Mode::Speed => Some(&mut self.speed),
             Mode::Height => Some(&mut self.height),
+            Mode::Field => Some(&mut self.field),
         }
     }
     pub fn valid(self) -> bool {
-        self.speed.valid() && self.height.valid()
+        self.speed.valid()
+            && self.height.valid()
+            && (self.field.valid() || self.field.range == [0., 0.])
     }
 }
 pub fn selected(pane: crate::state::Pane) -> Option<u64> {

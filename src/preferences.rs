@@ -164,3 +164,35 @@ mod tests {
         assert_eq!(preferences.load(), Palette::Slate);
     }
 }
+
+/// Start location used for new local-metre map traces, saved only on request.
+#[derive(Clone, Default)]
+pub struct DefaultMapStart(Option<PathBuf>);
+impl DefaultMapStart {
+    pub fn user() -> Self {
+        if cfg!(test) {
+            return Self(None);
+        }
+        Self(config_directory().map(|path| path.join("default-map-start")))
+    }
+    /// Longitude and latitude in degrees.
+    pub fn load(&self) -> Option<[f64; 2]> {
+        let text = std::fs::read_to_string(self.0.as_ref()?).ok()?;
+        let mut parts = text.split_whitespace().map(str::parse::<f64>);
+        let lon = parts.next()?.ok()?;
+        let lat = parts.next()?.ok()?;
+        (lon.is_finite() && lat.is_finite() && lon.abs() <= 180. && lat.abs() <= 90.)
+            .then_some([lon, lat])
+    }
+    pub fn save(&self, [lon, lat]: [f64; 2]) -> io::Result<()> {
+        let Some(path) = &self.0 else {
+            return Ok(());
+        };
+        let parent = path.parent().unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent)?;
+        let mut file = tempfile::NamedTempFile::new_in(parent)?;
+        writeln!(file, "{lon} {lat}")?;
+        file.persist(path).map_err(|error| error.error)?;
+        Ok(())
+    }
+}

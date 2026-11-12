@@ -745,7 +745,8 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     harness.settle(64);
     let scene = zgui::canvas::resolve(observed.0.borrow().as_ref().unwrap().canvas.scene().token())
         .unwrap();
-    assert_eq!(scene.lock().unwrap().series().len(), 2);
+    // Two visible traces, each a path plus its direction arrows.
+    assert_eq!(scene.lock().unwrap().series().len(), 4);
     pane.plot.hidden.set(Default::default());
     harness.settle(64);
     let selected = pane.trajectory_data.get_untracked().unwrap();

@@ -1,6 +1,7 @@
 use crate::mapping::flight::FlightMapProps;
 use crate::{
     action_button::ActionButtonProps,
+    mapping::trace_quick::TraceQuickSettingsProps,
     plot_appearance::PlotBackgroundProps,
     plot_menu::PlotMenuEditorProps,
     state::{Pane, Workbench},
@@ -303,6 +304,36 @@ pub fn TrajectoryPlot(
         }
     });
     let press = StoredValue::new_local(None::<(f32, f32)>);
+    // Values at the shared timeline marker for the first visible trace.
+    let readout = move || -> Option<Vec<String>> {
+        if !pane.timeline_link.get() {
+            return None;
+        }
+        let time = workbench.timeline.time.get()?;
+        let hidden = pane.plot.hidden.get();
+        pane.trajectory_data.with(|data| {
+            let trace = data
+                .as_ref()?
+                .traces
+                .iter()
+                .find(|t| !hidden.contains(&t.id.to_string()))?;
+            let point = trace.track.at(time)?;
+            let speed = trace
+                .track
+                .at(time + 0.05)
+                .zip(trace.track.at(time - 0.05))
+                .map(|(a, b)| (a.x - b.x).hypot(a.y - b.y) / 0.1);
+            let mut lines = vec![
+                format!("t {time:.2} s"),
+                format!("x {}", plot::format_number(point.x)),
+                format!("y {}", plot::format_number(point.y)),
+            ];
+            if let Some(speed) = speed.filter(|v| v.is_finite()) {
+                lines.push(format!("|v| {}/s", plot::format_number(speed)));
+            }
+            Some(lines)
+        })
+    };
     view! {column(class="trajectory-pane") {
         column(class="trajectory-chart",class:flight-map-chart=move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),node_ref=area,on:pointer_down:capture=move |event| {if event.button==Some(zgui::vocab::PointerButton::Primary){press.set_value(Some((event.position.x.0,event.position.y.0)));}},on:pointer_up:capture=move |event| {
             if pane.timeline_link.get_untracked() && let Some((x,y))=press.get_value() && (event.position.x.0-x).hypot(event.position.y.0-y)<4. && let Some(time)=hovered_time(pane) {let _=workbench.timeline.pin(time);}press.set_value(None);
@@ -315,9 +346,15 @@ pub fn TrajectoryPlot(
             column(class="trajectory-plot-controls"){
                 TrajectoryLegend(workbench=workbench,pane=pane)
                 row(class="trajectory-plot-tools"){
+                    ActionButton(class="trajectory-arrows",class:setting-active=move ||pane.trajectory.with(|spec|spec.as_ref().is_some_and(|spec|spec.arrows)),a11y:label="Direction arrows",on:pointer_down=move |event|{press.set_value(None);event.stop_propagation();},on:click=move |_|pane.trajectory.update(|spec|if let Some(spec)=spec{spec.arrows= !spec.arrows;})){"Arrows"}
                     ActionButton(class="trajectory-equal-scale",class:setting-active=move ||pane.trajectory.with(|spec|spec.as_ref().is_some_and(|spec|spec.equal)),on:pointer_down=move |event|{press.set_value(None);event.stop_propagation();},on:click=move |_|pane.trajectory.update(|spec|if let Some(spec)=spec{spec.equal= !spec.equal;})){"Equal scale"}
                 }
             }
+            }
+            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_none())) && readout().is_some() {
+                column(class="trajectory-readout",a11y:role=Role::Status) {
+                    for line in move ||readout().unwrap_or_default(),key=|line|line.clone() {text {{line}}}
+                }
             }
             if move ||busy.get() || !message.get().is_empty() {
                 text(class="trajectory-status muted",a11y:role=Role::Status) {{move ||if busy.get(){"Preparing 2D traces...".into()}else{message.get()}}}
@@ -429,6 +466,9 @@ fn TrajectoryLegendRow(
     view! {row(class="trajectory-legend-row"){
         LegendEntry(host=workbench.legend_host(),pane=pane.display(),line=line)
         SwapAxes(workbench=workbench,pane=pane,index=index)
+        if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {
+            TraceQuickSettings(workbench=workbench,pane=pane,id=id)
+        }
         if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some()&&s.pairs().get(index.get()).is_some_and(|p|p.local.is_some()))) {
             ActionButton(class="map-place-start",on:click=move |_|{if let Some(source)=pane.trajectory.get_untracked().and_then(|s|s.pairs().get(index.get_untracked()).map(|p|p.y.clone())) {pane.map_origin_target.set(Some(source));}}) {"Set start"}
         }
@@ -522,6 +562,8 @@ pub(crate) fn TrajectoryOverlay(
             plot::zgui_renderer::show_ranges(&viewport, g, pane.plot.ranges.get());
         }
     });
+    // Map highlight: linked time-plot X range, narrowed by the trail setting.
+    let window = Memo::new(move |_| crate::mapping::flight::highlight_window(workbench, pane));
     let drawing = handle.clone();
     plot::zgui_renderer::redraw_on_change(move || {
         drawing.draw(|scene| {
@@ -565,6 +607,11 @@ pub(crate) fn TrajectoryOverlay(
                     } else {
                         0.
                     };
+                let window = window.get().filter(|[a, b]| {
+                    let times = &trace.track.times;
+                    times.first().is_some_and(|first| *a > *first)
+                        || times.last().is_some_and(|last| *b < *last)
+                });
                 patterns.with(|patterns| {
                     crate::trajectory_render::paint(
                         scene,
@@ -573,9 +620,21 @@ pub(crate) fn TrajectoryOverlay(
                         plot::plot_data::SeriesStyle { width, ..style },
                         patterns,
                         &colors.get(),
-                        alpha,
+                        if window.is_some() { alpha * 0.2 } else { alpha },
                     )
                 });
+                if let Some(window) = window
+                    && draw.pattern != plot::line_draw::LinePattern::None
+                {
+                    crate::trajectory_render::paint_window(
+                        scene,
+                        trace,
+                        window,
+                        plot::plot_data::SeriesStyle { width, ..style },
+                        &colors.get(),
+                        alpha,
+                    );
+                }
             }
         })
     });
@@ -587,7 +646,7 @@ pub(crate) fn TrajectoryOverlay(
     plot::zgui_renderer::redraw_on_change(move || {
         marker_drawing.draw(|scene| {
             scene.clear();
-            if !visible.get() || !pane.timeline_link.get() {
+            if !visible.get() {
                 return;
             }
             let Some(g) = geometry.get() else {
@@ -604,9 +663,7 @@ pub(crate) fn TrajectoryOverlay(
                 if hidden.contains(&key) && emphasized.as_deref() != Some(&key) {
                     continue;
                 }
-                if pane
-                    .trajectory
-                    .with(|spec| spec.as_ref().is_some_and(|s| s.map.is_some()))
+                // Start and end of each trace, in maps and X/Y plots alike.
                 {
                     for (point, color) in [
                         (trace.track.endpoints.0, Color::srgb_u8(40, 230, 110, 255)),
@@ -631,12 +688,7 @@ pub(crate) fn TrajectoryOverlay(
                     .timeline
                     .time
                     .get()
-                    .filter(|_| {
-                        pane.timeline_link.get()
-                            || !pane
-                                .trajectory
-                                .with(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
-                    })
+                    .filter(|_| pane.timeline_link.get())
                     .and_then(|time| trace.track.at(time))
                     && ranges.x.contains(point.x)
                     && ranges.y.contains(point.y)

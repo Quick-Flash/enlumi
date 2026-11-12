@@ -424,7 +424,6 @@
 .view-picker .view-menu.app-action { width: var(--app-control-height); height: var(--app-control-height); min-height: var(--app-control-height); }
 .view-choice { position: relative; }
 .view-current-icon { flex: none; box-sizing: border-box; width: 22px; height: 22px; padding: 4px; color: transparent; --zgui-stroke: var(--app-accent); --zgui-stroke-width: 1.8px; pointer-events: none; }
-.maximize-button.app-action.zui-button { flex: none; width: auto; min-width: 0; padding: 0 6px; }
 .view-select-mark, .view-remove-icon, .view-menu-icon { flex: none; width: 13px; height: 13px; color: transparent; --zgui-stroke: var(--app-foreground); --zgui-stroke-width: 1.7px; pointer-events: none; }
 .zui-tooltip.zui-surface { --zui-color-tooltip: var(--app-surface); --zui-color-tooltip-foreground: var(--app-foreground); --zui-color-tooltip-border: var(--app-border-strong); --zui-surface-fill: var(--app-surface); --zui-surface-ink: var(--app-foreground); --zui-surface-border: 1px solid var(--app-border-strong); --zui-surface-shadow: 0 4px 14px rgba(0,0,0,.32); background: var(--app-surface); color: var(--app-foreground); border-color: var(--app-border-strong); }
 .view-list.zui-surface, .view-menu-content.zui-surface, .profile-menu-content.zui-surface { box-shadow: none; }

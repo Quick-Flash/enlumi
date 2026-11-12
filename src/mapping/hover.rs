@@ -131,7 +131,7 @@ impl Spatial {
                     continue;
                 }
                 let hit = Hit {
-                    id: path.id,
+                    id: path.id & !super::flight3::FADED,
                     time,
                     point: [point[0], point[1]],
                     screen,
@@ -304,6 +304,8 @@ mod tests {
             radius: 3.,
             marker: plot::plot_data::MarkerShape::Circle,
             local: false,
+            arrows: false,
+            modes: std::sync::Arc::from([]),
         }]);
         let projection = Projection::new(&scene, camera, orbit, size);
         let (screen, _) = projection.point([100., 0., 20.], 0.).unwrap();

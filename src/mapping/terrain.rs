@@ -934,6 +934,8 @@ mod retention_tests {
             radius: 3.,
             marker: plot::plot_data::MarkerShape::Circle,
             local: true,
+            arrows: false,
+            modes: std::sync::Arc::from([]),
         };
         let mut scene = Scene {
             paths: Arc::from([path.clone()]),

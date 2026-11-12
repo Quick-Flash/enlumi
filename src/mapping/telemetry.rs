@@ -253,6 +253,7 @@ pub fn prepare_styled(
     };
     let mut speed = None;
     let mut height = None;
+    let mut field = None;
     for trace in &data.traces {
         if hidden.contains(&trace.id.to_string()) {
             continue;
@@ -270,18 +271,53 @@ pub fn prepare_styled(
                 spec.map.as_mut().unwrap().coloring = ColorBy::Altitude;
                 prepare(data, lines, &spec, hidden)
             })),
+            crate::trace_color::Mode::Field if !spec.color_source.is_empty() => {
+                Some(field.get_or_insert_with(|| {
+                    let mut spec = spec.clone();
+                    spec.map.as_mut().unwrap().coloring = ColorBy::Channel;
+                    prepare(data, lines, &spec, hidden)
+                }))
+            }
+            crate::trace_color::Mode::Field => None,
         };
-        if let Some(gradient) = style.gradient().filter(|gradient| gradient.valid()) {
+        let data_range = values
+            .as_ref()
+            .and_then(|colors| colors.samples.get(&trace.id))
+            .and_then(|values| {
+                let range = values
+                    .iter()
+                    .filter(|v| v.is_finite())
+                    .fold([f64::INFINITY, f64::NEG_INFINITY], |[lo, hi], &v| {
+                        [lo.min(v), hi.max(v)]
+                    });
+                range.iter().all(|v| v.is_finite()).then_some(range)
+            });
+        // A field gradient without limits follows the field's own data range.
+        let gradient = style.gradient().and_then(|gradient| {
+            if gradient.valid() {
+                Some(gradient)
+            } else if style.mode == crate::trace_color::Mode::Field {
+                data_range
+                    .filter(|[lo, hi]| hi > lo)
+                    .map(|range| crate::trace_color::Gradient { range, ..gradient })
+            } else {
+                None
+            }
+        });
+        if let Some(gradient) = gradient {
             let label = format!(
                 "{} · {}",
                 lines
                     .iter()
                     .find(|line| line.id == trace.id)
                     .map_or("Trace", |line| line.name.as_str()),
-                if style.mode == crate::trace_color::Mode::Speed {
-                    "speed (m/s)"
-                } else {
-                    "height (m)"
+                match style.mode {
+                    crate::trace_color::Mode::Speed => "speed (m/s)".to_owned(),
+                    crate::trace_color::Mode::Field => lines
+                        .iter()
+                        .find(|line| line.source == spec.color_source)
+                        .map_or_else(|| "field".to_owned(), |line| line.name.clone()),
+                    _ => "height (m)".to_owned(),
                 }
             );
             output.scales.insert(
@@ -290,18 +326,7 @@ pub fn prepare_styled(
                     gradient,
                     label: label.clone(),
                     mode: style.mode,
-                    data_range: values
-                        .as_ref()
-                        .and_then(|colors| colors.samples.get(&trace.id))
-                        .and_then(|values| {
-                            let range = values
-                                .iter()
-                                .filter(|v| v.is_finite())
-                                .fold([f64::INFINITY, f64::NEG_INFINITY], |[lo, hi], &v| {
-                                    [lo.min(v), hi.max(v)]
-                                });
-                            range.iter().all(|v| v.is_finite()).then_some(range)
-                        }),
+                    data_range,
                 },
             );
             if output.range.is_none() {

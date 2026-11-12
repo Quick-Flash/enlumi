@@ -19,6 +19,7 @@ use zgui::prelude::*;
 pub enum Destination {
     TrajectoryAxis(usize, bool),
     TrajectoryAltitude(usize),
+    TrajectoryColor,
     Plot(Option<u64>),
     Filter,
     Bands,

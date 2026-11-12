@@ -33,8 +33,8 @@ fn timeline_updates_keep_static_geometry_key_and_small_marker_layer() {
     );
     assert_eq!(
         before.len(),
-        2,
-        "Marker-only update must not include flight or ground paths"
+        6,
+        "Marker-only update holds the marker and heading chevron, not flight or ground paths"
     );
     scene.time = Some(1.5);
     assert_eq!(key, geometry_key(&scene, camera, orbit, size));

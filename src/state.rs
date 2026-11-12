@@ -42,6 +42,8 @@ pub struct Pane {
     pub trajectory: RwSignal<Option<crate::trajectory::Spec>, LocalStorage>,
     pub trajectory_setup: RwSignal<bool, LocalStorage>,
     pub map_origin_target: RwSignal<Option<String>, LocalStorage>,
+    /// Next map fit frames only this trace, then clears.
+    pub fit_trace: RwSignal<Option<u64>, LocalStorage>,
     pub trajectory_data: RwSignal<Option<Arc<crate::trajectory::Tracks>>, LocalStorage>,
     pub timeline_link: RwSignal<bool, LocalStorage>,
     pub altitude_slots: StoredValue<BTreeMap<usize, NodeRef>, LocalStorage>,
@@ -109,6 +111,7 @@ impl Pane {
             trajectory,
             trajectory_setup: RwSignal::new_local(false),
             map_origin_target: RwSignal::new_local(None),
+            fit_trace: RwSignal::new_local(None),
             trajectory_data: RwSignal::new_local(None),
             timeline_link: RwSignal::new_local(true),
             altitude_slots: StoredValue::new_local(BTreeMap::new()),
@@ -527,8 +530,17 @@ impl Workbench {
                         .any(|p| p.x == source || p.y == source || p.fix == source)
             })
         }) {
-            self.status
-                .set("Bind longitude and latitude using Edit coordinates in the map pane".into());
+            // One field from a GPS or position topic adds that topic's trace.
+            if let Some(sources) = crate::trajectory_cards::add_map_trace(self, pane, &source) {
+                for source in sources {
+                    self.add_view_field(source);
+                }
+                return;
+            }
+            self.status.set(
+                "Drop a latitude, longitude, altitude or local x/y/z field, or use Edit coordinates"
+                    .into(),
+            );
             return;
         }
         pane.trajectory.update(|spec| {

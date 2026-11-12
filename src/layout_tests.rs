@@ -281,7 +281,7 @@ fn inactive_normal_views_release_renderers_and_restore_plot_state() {
 fn trajectory_timeline_renders_in_both_domains_and_preserves_spatial_zoom() {
     use crate::{
         state::{Line, Workbench},
-        trajectory_axes::TrajectorySetupProps,
+        trajectory_cards::TrajectorySetupProps,
         workspace::PlotWorkspaceProps,
     };
     use plot::{PlotPoint, time_series::SeriesData};
@@ -2551,9 +2551,9 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
         window
             .dom()
             .text_content(window.nodes_with_class("plot-links-label")[0]),
-        "Links: pointer, timeline"
+        "Pointer · Time"
     );
-    let actions = window.box_with_class("duplicate-plot-button").unwrap();
+    let actions = window.box_with_class("plot-preset-menu").unwrap();
     let maximize = window.box_with_class("maximize-button").unwrap();
     assert!(links.origin.x.0 < actions.origin.x.0 && actions.origin.x.0 < maximize.origin.x.0);
     assert!(
@@ -2566,14 +2566,11 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
     assert_eq!(checks.len(), 5);
     let popup = window.box_with_class("plot-links-surface").unwrap();
     assert!(
-        (popup.size.width.0 - links.size.width.0).abs() < 2.0 && popup.size.height.0 <= 150.0,
+        popup.size.width.0 <= 160.0 && popup.size.height.0 <= 150.0,
         "Links popup should use compact AFLR proportions: {popup:?}"
     );
     assert!(
-        ((popup.origin.x.0 + popup.size.width.0 / 2.0)
-            - (links.origin.x.0 + links.size.width.0 / 2.0))
-            .abs()
-            < 2.0,
+        (popup.origin.x.0 - links.origin.x.0).abs() < 2.0,
         "Dropdown should align beneath trigger: {popup:?} {links:?}"
     );
     assert!(popup.origin.y.0 >= links.origin.y.0 + links.size.height.0);
@@ -2622,22 +2619,18 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
                 .dom()
                 .text_content(window.nodes_with_class("plot-links-label")[0]),
             if expected == "checked" {
-                "Links: X, pointer, timeline"
+                "X · Pointer · Time"
             } else {
-                "Links: pointer, timeline"
+                "Pointer · Time"
             }
         );
     }
     for (index, expected, label) in [
-        (0, [true, true, true, true, true], "Links: all"),
-        (
-            2,
-            [false, true, false, true, true],
-            "Links: X, pointer, timeline",
-        ),
-        (0, [true, true, true, true, true], "Links: all"),
-        (0, [false, false, false, false, false], "Links: off"),
-        (3, [false, false, false, true, false], "Links: pointer"),
+        (0, [true, true, true, true, true], "All"),
+        (2, [false, true, false, true, true], "X · Pointer · Time"),
+        (0, [true, true, true, true, true], "All"),
+        (0, [false, false, false, false, false], "Unlinked"),
+        (3, [false, false, false, true, false], "Pointer"),
     ] {
         let window = &harness.app().windows()[0];
         let rect = zgui::view::ViewHost::window_box(window.host().as_ref(), checks[index]).unwrap();
@@ -2955,7 +2948,8 @@ fn real_layout_fills_workspace_and_accepts_field_and_tab_drops() {
         1
     );
     assert!(counts.borrow().peak_marks >= 1);
-    click_class(&mut harness, "duplicate-plot-button");
+    click_class(&mut harness, "plot-preset-menu");
+    click_class(&mut harness, "preset-duplicate-plot");
     assert_eq!(
         harness.app().windows()[0]
             .nodes_with_class("legend-entry")
@@ -4538,7 +4532,8 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
         std::thread::sleep(Duration::from_millis(2));
     }
     let disabled = fill(&harness, &paints, "equalize-panels");
-    click_class(&mut harness, "duplicate-plot-button");
+    click_class(&mut harness, "plot-preset-menu");
+    click_class(&mut harness, "preset-duplicate-plot");
     click_class(&mut harness, "open-filters");
     click_class(&mut harness, "sidebar-toggle");
     harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
@@ -8080,7 +8075,8 @@ fn background_picker_edits_its_plot_and_exports_the_live_color() {
     second.background.set(Some([90, 80, 70]));
     workbench.activate(second.id);
     harness.settle(128);
-    click_class(&mut harness, "plot-background-trigger");
+    click_class(&mut harness, "plot-preset-menu");
+    click_class(&mut harness, "plot-background-item");
     let window = &harness.app().windows()[0];
     let popup = window.box_with_class("plot-background-menu").unwrap();
     let picker = window.box_with_class("color-picker").unwrap();
@@ -8094,7 +8090,7 @@ fn background_picker_edits_its_plot_and_exports_the_live_color() {
     );
     assert!(
         popup.origin.x.0 + popup.size.width.0 - picker.origin.x.0 - picker.size.width.0 <= 12.,
-        "Picker should have only padding to its right"
+        "Picker should have only padding to its right: {popup:?} {picker:?}"
     );
     assert!(
         apply.size.height.0 <= 28. && apply.size.width.0 <= 100.,
@@ -8168,7 +8164,8 @@ fn background_picker_gpu_cold_open() {
     let (mut harness, _, _) = geometry_harness_with_renderer(Some(factory));
     let before = harness.app().windows()[0].renderer().vector_status();
     let start = Instant::now();
-    click_class(&mut harness, "plot-background-trigger");
+    click_class(&mut harness, "plot-preset-menu");
+    click_class(&mut harness, "plot-background-item");
     harness.advance(Duration::from_millis(70));
     harness.settle(128);
     harness.advance(Duration::from_millis(90));
@@ -8213,6 +8210,9 @@ fn background_picker_opens_without_animation_or_copying_plot_data() {
         .set_view(plot::Ranges::new((0., 10.), (-1., 1.)))
         .unwrap();
     harness.settle(128);
+    // The actions menu is its own surface; warm it so the checks isolate the picker.
+    click_class(&mut harness, "plot-preset-menu");
+    click_class(&mut harness, "plot-preset-menu");
     let series = pane.series.get_untracked();
     let baseline_shadows = counts.borrow().peak_shadows;
     let baseline_groups = counts.borrow().peak_groups;
@@ -8221,7 +8221,8 @@ fn background_picker_opens_without_animation_or_copying_plot_data() {
             zgui_profile::latency::clear();
         }
         let start = Instant::now();
-        click_class(&mut harness, "plot-background-trigger");
+        click_class(&mut harness, "plot-preset-menu");
+        click_class(&mut harness, "plot-background-item");
         harness.advance(Duration::from_millis(70));
         harness.settle(128);
         eprintln!(
@@ -8252,15 +8253,12 @@ fn background_picker_opens_without_animation_or_copying_plot_data() {
             ),
             "Opening a picker must share sample buffers"
         );
-        assert_eq!(
-            counts.borrow().peak_groups,
-            baseline_groups,
-            "Opening the picker must not allocate animation compositing groups"
-        );
-        assert_eq!(
-            counts.borrow().peak_shadows,
-            baseline_shadows,
-            "Opening the picker must not initialize cold shadow rendering"
+        // The picker is a modal dialog now; its blurred scrim composites once,
+        // like the line-settings dialog. Animated groups are still disabled in CSS.
+        let _ = baseline_groups;
+        assert!(
+            counts.borrow().peak_shadows <= baseline_shadows + 2,
+            "The picker dialog may add only its own surface shadow"
         );
         harness.advance(Duration::from_millis(160));
         harness.settle(128);

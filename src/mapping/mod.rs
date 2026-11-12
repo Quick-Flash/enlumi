@@ -16,7 +16,10 @@ mod gradient_stop;
 mod ground_mesh;
 mod ground_path;
 mod hover;
+mod measure;
+mod modes;
 pub mod preview;
+mod profile;
 mod scale;
 pub(crate) mod settings;
 pub(crate) mod telemetry;
@@ -27,7 +30,7 @@ mod throttle;
 mod tiles;
 mod toolbar;
 mod trace_detail;
-pub(crate) mod view_options;
+pub(crate) mod trace_quick;
 
 #[cfg(test)]
 mod performance_replay;

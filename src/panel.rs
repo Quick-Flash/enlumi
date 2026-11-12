@@ -40,6 +40,22 @@ pub fn Panel(
         groups.time
     };
     provide_local_context(PlotLinks::with_options(pane.id, group, pane.links));
+    // Time plots publish their visible X range so linked maps can highlight it.
+    let publish_window = zgui::reactive::RenderEffect::new(move |_| {
+        let x = pane.plot.ranges.get().x;
+        if pane.trajectory.with(Option::is_some)
+            || pane.analysis.with(Option::is_some)
+            || pane.lines.with(Vec::is_empty)
+            || !pane.timeline_link.get()
+        {
+            return;
+        }
+        let next = Some([x.min, x.max]);
+        if workbench.timeline.window.get_untracked() != next {
+            workbench.timeline.window.set(next);
+        }
+    });
+    on_cleanup_local(move || drop(publish_window));
     let visible = Signal::derive_local(move || {
         workbench.views.active.get() == workbench.view().id
             && plot_visible(
@@ -62,7 +78,7 @@ pub fn Panel(
                     on_close = UnsyncCallback::new(move |id| workbench.close_plot(id)),
                     on_add = UnsyncCallback::new(move |id| { workbench.add_plot(id, false, true); }))
                 }
-                if move ||!pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {PlotLinksMenu(pane=pane)}
+                PlotLinksMenu(pane=pane)
                 PlotActions(workbench = workbench, pane = pane)
                 if move || pane.loading.with(Option::is_some) {
                     text(class="plot-loading",a11y:role=Role::Status) {{move ||pane.loading.get().unwrap_or_default()}}

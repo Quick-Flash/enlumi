@@ -21,6 +21,8 @@ pub struct Prepared {
     source: Arc<[[f32; 2]]>,
     vertices: Arc<[[f32; 2]]>,
     markers: Arc<[[f32; 2]]>,
+    /// Open chevrons along the path, NaN-separated, in origin-relative data units.
+    arrows: Arc<[[f32; 2]]>,
     colors: Arc<crate::mapping::telemetry::Coloring>,
     colored: crate::mapping::color_paths::Colored,
 }
@@ -30,6 +32,7 @@ struct Key {
     data: Arc<Tracks>,
     styles: Vec<StyleKey>,
     colors: Arc<crate::mapping::telemetry::Coloring>,
+    arrows: bool,
 }
 type StyleKey = (u64, LinePattern, u64, u64, bool, [u8; 4]);
 impl PartialEq for Key {
@@ -37,6 +40,7 @@ impl PartialEq for Key {
         Arc::ptr_eq(&self.data, &other.data)
             && self.styles == other.styles
             && Arc::ptr_eq(&self.colors, &other.colors)
+            && self.arrows == other.arrows
     }
 }
 #[derive(Clone)]
@@ -96,6 +100,9 @@ pub fn patterns(
         let ranges = pane.plot.ranges.get();
         let geometry = geometry.get();
         let drawing = pane.drawing.get();
+        let arrows = pane
+            .trajectory
+            .with(|spec| spec.as_ref().is_some_and(|spec| spec.arrows));
         let _ = pane.plot.styles.get();
         let Some(data) = data else {
             pending.set_value(None);
@@ -141,6 +148,7 @@ pub fn patterns(
                 data: data.clone(),
                 styles,
                 colors: colors.get(),
+                arrows,
             },
             ranges,
             pixels: (g.width, g.height),
@@ -202,6 +210,18 @@ pub fn patterns(
                                         f64::from_bits(*width),
                                     )
                                     .into(),
+                                    arrows: if job.frame.key.arrows && *pattern != LinePattern::None
+                                    {
+                                        arrow_vertices(
+                                            &trace.track.points,
+                                            trace.track.origin,
+                                            job.frame.ranges,
+                                            job.frame.pixels,
+                                        )
+                                        .into()
+                                    } else {
+                                        Arc::from([])
+                                    },
                                     markers: if *markers {
                                         marker_vertices(
                                             &trace.track.points,
@@ -267,6 +287,69 @@ fn pattern_vertices(
             }
         })
         .collect()
+}
+
+const ARROW_SPACING: f64 = 90.;
+const ARROW_LENGTH: f64 = 6.;
+const ARROW_HALF_WIDTH: f64 = 4.5;
+
+// Chevrons every ARROW_SPACING screen pixels of travelled path, pointing along
+// recording order. Built per frame scale so they keep a fixed on-screen size.
+fn arrow_vertices(
+    points: &[PlotPoint],
+    origin: PlotPoint,
+    ranges: Ranges,
+    pixels: (f64, f64),
+) -> Vec<[f32; 2]> {
+    let scale = (pixels.0 / ranges.x.span(), pixels.1 / ranges.y.span());
+    let inside = |p: PlotPoint| {
+        p.x >= ranges.x.min - ranges.x.span() * 0.75
+            && p.x <= ranges.x.max + ranges.x.span() * 0.75
+            && p.y >= ranges.y.min - ranges.y.span() * 0.75
+            && p.y <= ranges.y.max + ranges.y.span() * 0.75
+    };
+    let vertex = |x: f64, y: f64| [(x - origin.x) as f32, (y - origin.y) as f32];
+    let mut out = Vec::new();
+    let mut since = ARROW_SPACING / 2.;
+    let mut previous = None::<PlotPoint>;
+    for &point in &clip_runs(points, ranges) {
+        if !point.x.is_finite() || !point.y.is_finite() {
+            previous = None;
+            continue;
+        }
+        if let Some(start) = previous {
+            let (dx, dy) = ((point.x - start.x) * scale.0, (point.y - start.y) * scale.1);
+            let length = dx.hypot(dy);
+            if length > 0. {
+                let (ux, uy) = (dx / length, dy / length);
+                let mut at = ARROW_SPACING - since;
+                while at <= length {
+                    let tip = PlotPoint {
+                        x: start.x + ux * at / scale.0,
+                        y: start.y + uy * at / scale.1,
+                    };
+                    if inside(tip) {
+                        let back = (
+                            tip.x - ux * ARROW_LENGTH / scale.0,
+                            tip.y - uy * ARROW_LENGTH / scale.1,
+                        );
+                        let side = (
+                            -uy * ARROW_HALF_WIDTH / scale.0,
+                            ux * ARROW_HALF_WIDTH / scale.1,
+                        );
+                        out.push(vertex(back.0 + side.0, back.1 + side.1));
+                        out.push(vertex(tip.x, tip.y));
+                        out.push(vertex(back.0 - side.0, back.1 - side.1));
+                        out.push([f32::NAN, f32::NAN]);
+                    }
+                    at += ARROW_SPACING;
+                }
+                since = length - (at - ARROW_SPACING);
+            }
+        }
+        previous = Some(point);
+    }
+    out
 }
 
 // Keep crossing segments, and a pan margin matching Frame::covers. Never join separated runs.
@@ -446,6 +529,19 @@ pub fn paint(
         }
     }
 
+    if let Some(prepared) = prepared
+        && !prepared.arrows.is_empty()
+    {
+        plot::zgui_renderer::push_line_transformed(
+            scene,
+            prepared.arrows.clone(),
+            color,
+            width.max(1.5),
+            zgui::canvas::Lod::Exact,
+            transform,
+        );
+    }
+
     if draw.markers {
         let radius = style.radius;
         let marker = match style.marker {
@@ -481,6 +577,58 @@ pub fn paint(
                 transform,
             );
         }
+    }
+}
+
+/// Redraw only samples whose time lies in `window`, at full strength, over a
+/// faded full path. Colors follow the same gradient and state tints as `paint`.
+pub fn paint_window(
+    scene: &mut CanvasScene,
+    trace: &PreparedTrace,
+    window: [f64; 2],
+    style: SeriesStyle,
+    colors: &Arc<crate::mapping::telemetry::Coloring>,
+    alpha: f64,
+) {
+    let times = &trace.track.times;
+    let points = &trace.track.points;
+    let start = times.partition_point(|t| *t < window[0]).saturating_sub(1);
+    let end = times.partition_point(|t| *t <= window[1]).min(points.len());
+    if end <= start + 1 {
+        return;
+    }
+    let origin = trace.track.origin;
+    let vertex = |p: PlotPoint| [(p.x - origin.x) as f32, (p.y - origin.y) as f32];
+    let fallback = style.color;
+    let values = colors.samples.get(&trace.id);
+    let mut runs = BTreeMap::<[u8; 4], Vec<[f32; 2]>>::new();
+    for index in start + 1..end {
+        let (a, b) = (points[index - 1], points[index]);
+        if ![a.x, a.y, b.x, b.y].iter().all(|v| v.is_finite()) {
+            continue;
+        }
+        let color = match values {
+            Some(values) => colors.shade(
+                trace.id,
+                values.get(index).copied().unwrap_or(f64::NAN),
+                times[index],
+                fallback,
+            ),
+            None => fallback,
+        };
+        let run = runs.entry(color).or_default();
+        run.extend([vertex(a), vertex(b), [f32::NAN, f32::NAN]]);
+    }
+    let transform = kurbo::Affine::translate((origin.x, origin.y));
+    for ([r, g, b, a], vertices) in runs {
+        plot::zgui_renderer::push_line_transformed(
+            scene,
+            vertices.into(),
+            Color::srgb_u8(r, g, b, (f64::from(a) * alpha) as u8),
+            style.width,
+            zgui::canvas::Lod::Exact,
+            transform,
+        );
     }
 }
 
@@ -583,12 +731,30 @@ mod tests {
     }
 
     #[test]
+    fn arrows_are_spaced_in_screen_pixels_and_point_along_travel() {
+        let points = [PlotPoint { x: 0., y: 0. }, PlotPoint { x: 10., y: 0. }];
+        let ranges = Ranges::new((0., 10.), (-5., 5.));
+        let arrows = arrow_vertices(&points, PlotPoint { x: 0., y: 0. }, ranges, (1000., 1000.));
+        let tips: Vec<f32> = arrows.chunks(4).map(|c| c[1][0]).collect();
+        // Every ARROW_SPACING px of travel, starting half a spacing in.
+        assert_eq!(tips.len(), 11, "{tips:?}");
+        assert!(
+            (tips[0] - 0.45).abs() < 1e-4 && (tips[1] - 1.35).abs() < 1e-4,
+            "{tips:?}"
+        );
+        // Wings trail the tip.
+        assert!(arrows[0][0] < arrows[1][0] && arrows[2][0] < arrows[1][0]);
+        assert!(arrows[3][0].is_nan());
+    }
+
+    #[test]
     fn nearby_pans_reuse_the_pattern_scale_but_zoom_and_style_changes_rebuild() {
         let data = Arc::new(Tracks::default());
         let original = Frame {
             key: Key {
                 data,
                 styles: vec![(1, LinePattern::Dashed, 2_f64.to_bits(), 0, false, [255; 4])],
+                arrows: true,
                 colors: Arc::new(crate::mapping::telemetry::Coloring::default()),
             },
             ranges: Ranges::new((0., 10.), (0., 10.)),
