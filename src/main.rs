@@ -196,6 +196,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(error) = desktop_icon::register() {
         eprintln!("Could not register Enlumi desktop icon: {error}");
     }
+    match run_app(path) {
+        Err(zgui::runtime::AppError::GpuUnavailable(error)) => {
+            startup::retry_with_software_vulkan();
+            Err(error.into())
+        }
+        result => Ok(result?),
+    }
+}
+
+fn run_app(path: Option<std::path::PathBuf>) -> Result<(), zgui::runtime::AppError> {
     let native_wayland = startup::native_wayland();
     app()
         .with_probe(crate::fps::probe())
@@ -219,8 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .run_on(
             startup::desktop_driver(),
             move || view! { WorkbenchApp(initial_path = path.clone(), client_frame = native_wayland, preferences = crate::preferences::ThemePreference::user(), log_directory = crate::preferences::LastLogDirectory::user()) },
-        )?;
-    Ok(())
+        )
 }
 
 #[cfg(test)]
