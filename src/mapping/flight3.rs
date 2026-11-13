@@ -26,7 +26,8 @@ pub struct Path3 {
     pub local: bool,
     /// Direction chevrons along the trace; restyle only, set from the plot spec.
     pub arrows: bool,
-    /// Flight-mode changes (time, color) marked along the trace; restyle only.
+    pub arrow_color: [u8; 4],
+    /// State changes (time, color) marked along the trace; restyle only.
     pub modes: Arc<[(f64, [u8; 3])]>,
 }
 pub type Pick = zgui::reactive::UnsyncCallback<
@@ -317,9 +318,8 @@ fn vertices_layer(
             }
             if path.arrows && path.drawing.pattern != plot::line_draw::LinePattern::None {
                 let width = path.width.max(1.5);
-                for (index, segment) in arrow_segments(&path.points, scale, scale / camera.scale())
-                {
-                    let color = scene.colors.color(path.id, index, path.color);
+                for (_, segment) in arrow_segments(&path.points, scale, scale / camera.scale()) {
+                    let color = path.arrow_color;
                     for point in segment {
                         let mut v = vertex(point, color);
                         v[7] = width;
@@ -414,7 +414,7 @@ fn chevron(
 ) -> Option<[[f64; 3]; 4]> {
     let flat = direction[0].hypot(direction[1]);
     let norm = (flat * flat + direction[2] * direction[2]).sqrt();
-    if flat <= 0. || !norm.is_finite() {
+    if norm <= 0. || !norm.is_finite() || ground <= 0. || !ground.is_finite() {
         return None;
     }
     let u = direction.map(|v| v / norm);
@@ -423,10 +423,14 @@ fn chevron(
         tip[1] - u[1] * length / ground,
         tip[2] - u[2] * length,
     ];
-    let side = [
-        -direction[1] / flat * half / ground,
-        direction[0] / flat * half / ground,
-    ];
+    let side = if flat == 0. {
+        [half / ground, 0.]
+    } else {
+        [
+            -direction[1] / flat * half / ground,
+            direction[0] / flat * half / ground,
+        ]
+    };
     let wing = |sign: f64| [back[0] + side[0] * sign, back[1] + side[1] * sign, back[2]];
     Some([wing(1.), tip, wing(-1.), tip])
 }
@@ -477,7 +481,7 @@ fn arrow_segments(points: &[[f64; 3]], ground: f64, pixel: f64) -> Vec<(usize, [
     out
 }
 
-/// Larger chevron ahead of the timeline marker, pointing along horizontal travel.
+/// Larger chevron ahead of the timeline marker, following climb and descent.
 fn heading_chevron(
     path: &Path3,
     time: f64,
@@ -492,16 +496,16 @@ fn heading_chevron(
     let d = [
         (after[0] - before[0]) * ground,
         (after[1] - before[1]) * ground,
-        0.,
+        after[2] - before[2],
     ];
-    let flat = d[0].hypot(d[1]);
-    if flat.is_nan() || flat <= 0. {
+    let norm = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    if !norm.is_finite() || norm <= 0. {
         return None;
     }
     let tip = [
-        point[0] + d[0] / flat * 14. * pixel / ground,
-        point[1] + d[1] / flat * 14. * pixel / ground,
-        point[2],
+        point[0] + d[0] / norm * 14. * pixel / ground,
+        point[1] + d[1] / norm * 14. * pixel / ground,
+        point[2] + d[2] / norm * 14. * pixel,
     ];
     chevron(tip, d, ground, 8. * pixel, 7. * pixel)
 }
@@ -604,6 +608,7 @@ pub fn prepare(
                 .map_or(plot::plot_data::MarkerShape::Circle, |style| style.0.marker),
             local: altitude.local,
             arrows: false,
+            arrow_color: crate::trajectory::arrow_color(),
             modes: Arc::from([]),
         });
     }
@@ -736,21 +741,7 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
             emphasized.as_deref(),
             arrows,
         );
-        let modes = mode_changes(workbench, pane);
-        if !modes.is_empty()
-            && let Some(first) = paths.first().map(|p| p.id)
-        {
-            paths = paths
-                .iter()
-                .cloned()
-                .map(|mut path| {
-                    if path.id == first {
-                        path.modes = modes.clone();
-                    }
-                    path
-                })
-                .collect();
-        }
+        decorate(workbench, pane, &mut paths);
         let paths = match super::flight::highlight_window(workbench, pane) {
             Some(window) => highlight(&paths, window),
             None => paths,
@@ -761,6 +752,25 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
         Signal::derive_local(move || styled.get()),
         Signal::derive_local(move || prepared.get().is_some_and(|key| key == request.get())),
     )
+}
+/// Apply per-line marker appearance without re-aligning samples.
+fn decorate(workbench: Workbench, pane: Pane, paths: &mut Arc<[Path3]>) {
+    let fallback = pane.trajectory.with(|s| {
+        s.as_ref()
+            .map_or_else(crate::trajectory::arrow_color, |s| s.arrow_color)
+    });
+    let modes = mode_changes(workbench, pane);
+    for path in Arc::make_mut(paths) {
+        let style = crate::trace_color::current(pane, Some(path.id));
+        let color = style.arrow_color.unwrap_or(fallback);
+        path.arrow_color = color;
+        path.arrow_color[3] = (u16::from(color[3]) * u16::from(path.color[3]) / 255) as u8;
+        path.modes = if style.state_markers {
+            modes.clone()
+        } else {
+            Arc::from([])
+        };
+    }
 }
 /// Paint in legend order with the emphasized trace last, wider, and others dimmed,
 /// matching 2D plots. Hidden traces show only while emphasized.
@@ -802,7 +812,7 @@ fn emphasize(
     paths.into()
 }
 
-/// Value changes of the plot's first state band, when the map shows flight modes.
+/// Value changes of the plot's first state band, when state markers are enabled.
 fn mode_changes(workbench: Workbench, pane: Pane) -> Arc<[(f64, [u8; 3])]> {
     let enabled = pane
         .trajectory
@@ -1446,6 +1456,7 @@ mod tests {
             marker: plot::plot_data::MarkerShape::Circle,
             local: false,
             arrows: true,
+            arrow_color: crate::trajectory::arrow_color(),
             modes: Arc::from([]),
         };
         let split = highlight(std::slice::from_ref(&path), [1., 3.]);
@@ -1476,6 +1487,7 @@ mod tests {
             marker: plot::plot_data::MarkerShape::Circle,
             local: false,
             arrows: false,
+            arrow_color: crate::trajectory::arrow_color(),
             modes: Arc::from([]),
         };
         let paths = [path(1), path(2), path(3)];
@@ -1515,6 +1527,7 @@ mod tests {
             marker: plot::plot_data::MarkerShape::Circle,
             local: false,
             arrows: false,
+            arrow_color: crate::trajectory::arrow_color(),
             modes: Arc::from([]),
         };
         let mut scene = Scene::default();

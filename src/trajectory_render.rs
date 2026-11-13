@@ -23,8 +23,18 @@ pub struct Prepared {
     markers: Arc<[[f32; 2]]>,
     /// Open chevrons along the path, NaN-separated, in origin-relative data units.
     arrows: Arc<[[f32; 2]]>,
+    arrow_color: [u8; 4],
     colors: Arc<crate::mapping::telemetry::Coloring>,
     colored: crate::mapping::color_paths::Colored,
+}
+#[cfg(test)]
+impl Prepared {
+    pub(crate) fn arrow_color(&self) -> [u8; 4] {
+        self.arrow_color
+    }
+    pub(crate) fn arrow_count(&self) -> usize {
+        self.arrows.len()
+    }
 }
 pub type Paths = BTreeMap<u64, Prepared>;
 #[derive(Clone)]
@@ -33,6 +43,7 @@ struct Key {
     styles: Vec<StyleKey>,
     colors: Arc<crate::mapping::telemetry::Coloring>,
     arrows: bool,
+    arrow_colors: BTreeMap<u64, [u8; 4]>,
 }
 type StyleKey = (u64, LinePattern, u64, u64, bool, [u8; 4]);
 impl PartialEq for Key {
@@ -41,6 +52,7 @@ impl PartialEq for Key {
             && self.styles == other.styles
             && Arc::ptr_eq(&self.colors, &other.colors)
             && self.arrows == other.arrows
+            && self.arrow_colors == other.arrow_colors
     }
 }
 #[derive(Clone)]
@@ -149,6 +161,25 @@ pub fn patterns(
                 styles,
                 colors: colors.get(),
                 arrows,
+                arrow_colors: data
+                    .traces
+                    .iter()
+                    .map(|trace| {
+                        (
+                            trace.id,
+                            crate::trace_color::current(pane, Some(trace.id))
+                                .arrow_color
+                                .unwrap_or_else(|| {
+                                    pane.trajectory.with(|s| {
+                                        s.as_ref()
+                                            .map_or_else(crate::trajectory::arrow_color, |s| {
+                                                s.arrow_color
+                                            })
+                                    })
+                                }),
+                        )
+                    })
+                    .collect(),
             },
             ranges,
             pixels: (g.width, g.height),
@@ -210,6 +241,7 @@ pub fn patterns(
                                         f64::from_bits(*width),
                                     )
                                     .into(),
+                                    arrow_color: job.frame.key.arrow_colors[id],
                                     arrows: if job.frame.key.arrows && *pattern != LinePattern::None
                                     {
                                         arrow_vertices(
@@ -535,7 +567,10 @@ pub fn paint(
         plot::zgui_renderer::push_line_transformed(
             scene,
             prepared.arrows.clone(),
-            color,
+            {
+                let [r, g, b, a] = prepared.arrow_color;
+                Color::srgb_u8(r, g, b, (f64::from(a) * alpha) as u8)
+            },
             width.max(1.5),
             zgui::canvas::Lod::Exact,
             transform,
@@ -755,6 +790,7 @@ mod tests {
                 data,
                 styles: vec![(1, LinePattern::Dashed, 2_f64.to_bits(), 0, false, [255; 4])],
                 arrows: true,
+                arrow_colors: BTreeMap::new(),
                 colors: Arc::new(crate::mapping::telemetry::Coloring::default()),
             },
             ranges: Ranges::new((0., 10.), (0., 10.)),

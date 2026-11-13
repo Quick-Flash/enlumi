@@ -21,7 +21,9 @@ Dropping such a field straight onto an existing map adds that topic's trace ther
 unit that matches the data (values beyond ±360 suggest deg×10⁷); when the chosen
 unit disagrees, the badge offers the detected unit in one click.
 
-**Local m** traces accept east in X and north in Y and show **Start location**:
+**Local m** traces store east/north coordinates and show **NED · x north** or
+**ENU · x east** slot order. Switching order preserves the bound coordinate
+fields and flight geometry. They also show **Start location**:
 **Default** (the saved default start), **From GPS** (first valid fix of a GPS trace
 on the map being edited, so local and GPS tracks line up), **Click map** (choose a
 point on the map), or a pasted `lat, lon`. **Put here** places either the first
@@ -36,10 +38,16 @@ also removes the starting Z. Units are m, mm or ft, and **Down + (NED)** handles
 down-positive Z. With no Z binding the trace uses Z=0. Invalid or unavailable
 altitude samples break segments rather than extrapolating.
 
-**Color field** below the cards binds one field for the whole map; binding it
-switches the map's traces to field coloring. Each trace's color mode (Solid, Speed,
-Height, Field) is also in its legend popover (swatch icon), with **Fit to trace**
-and **Edit trace…**. Gradient limits apply on Enter or when the field loses focus;
+Each card has **Color** controls (Solid, Speed, Altitude, Field). Field mode shows
+a **By** drop slot; the bound field is shared by the map. Click a map legend row
+for inline color controls, **Fit to trace** and **Edit trace…**. Its eye toggles
+trace visibility; the gradient scale sits directly below that trace's row.
+Legend header collapses the list; Options stays available while collapsed and
+opens the full editor for line colors, widths, patterns and sample markers.
+Direction arrows can be toggled in Options or Layers. Options also provides an
+per-line Arrow color picker and State markers toggle; these persist with each line.
+Use the X on a legend row to remove that trace. New maps default to Esri World Imagery.
+Gradient limits apply on Enter or when the field loses focus;
 **Auto** fits them to the trace's data.
 
 Drag a finished card's bar onto a map to add the trace, or onto another plot to
@@ -49,22 +57,23 @@ Settings persist with plot/workspace recipes.
 
 On the map, **2D/3D** and the **Layers** popover sit at top left. Layers holds the
 basemap provider, offline tiles, tile retry and status, 3D options (**Ground path**,
-**Terrain height ×2**) and trace options: **Arrows**, **Flight mode changes**
-(labelled markers in 2D and colored markers in 3D where the plot's first
-state band changes value),
+**Terrain height ×2**) and trace options: **Direction arrows**, **State markers**
+(labelled markers in 2D and 3D where the plot's first
+state band changes value; the control names its state-band source),
 **Altitude profile (2D)** and **Show path** (whole flight, flown so far, or last
 30 s before the timeline marker, the rest faded). Navigation sits at bottom
 right: zoom in/out, compass (north-up, 3D), **Fit**, **Follow** and **Measure (M)**.
 Measure takes two clicks; clicks snap to trace samples. It reports horizontal
 distance and bearing, 3D distance with its horizontal and vertical parts when both
 ends are 3D samples, and Δt, distance flown and average speed when both ends lie on
-one trace. M toggles it while the map has focus; Esc finishes.
+one trace. Lines and endpoints follow the active camera in both 2D and 3D.
+M toggles it while the map has focus; Esc finishes.
 
 The **altitude profile** strip under 2D maps plots bound Z against distance flown
 for the first visible trace, follows the timeline marker, and pins the timeline on
 click. It appears only when a trace has a Z field.
 
-**Links → Highlight time range** (on by default) dims the path outside the visible
+**Links → Time range** (on by default) dims the path outside the visible
 X range of the time plot you zoomed or panned last, in 2D, 3D and the profile.
 Provider attribution is shown at the map's bottom right.
 
@@ -72,8 +81,10 @@ Provider attribution is shown at the map's bottom right.
 shared timeline marker; clicking a projected segment pins timeline time.
 3D traces currently render solid lines.
 
-2D maps use the existing plot legend, visibility, ordering, colors, widths,
-patterns and markers. 2D screenshot/context-menu/clipboard actions use the normal
+Map legends retain eye visibility, color swatches, collapse and Options for
+colors, widths, patterns and markers. Panels and controls follow theme corner
+tokens, including when switching themes. The 3D timeline heading follows ascent
+and descent. 2D screenshot/context-menu/clipboard actions use the normal
 zgui-plot snapshot API: SVG retains vector paths and embeds currently loaded
 raster tiles; PNG uses the same SVG rasterizer. Exports include the legend,
 distance scale and selected-provider attribution; exports perform no tile requests.

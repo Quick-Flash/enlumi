@@ -269,6 +269,36 @@ pub fn TrajectoryPlot(
         });
     });
     on_cleanup_local(move || drop(migrate));
+    // Apply setup colors after asynchronously loaded coordinate fields acquire IDs.
+    let draft_colors = zgui::reactive::RenderEffect::new(move |_| {
+        let drafts = pane.draft_trace_colors.get();
+        if drafts.is_empty() {
+            return;
+        }
+        let ready = pane.lines.with(|lines| {
+            lines
+                .iter()
+                .filter_map(|line| {
+                    drafts
+                        .get(&line.source)
+                        .map(|color| (line.id, line.source.clone(), *color))
+                })
+                .collect::<Vec<_>>()
+        });
+        if !ready.is_empty() {
+            pane.trace_colors.update(|colors| {
+                for (id, _, color) in &ready {
+                    colors.insert(*id, *color);
+                }
+            });
+            pane.draft_trace_colors.update(|drafts| {
+                for (_, source, _) in &ready {
+                    drafts.remove(source);
+                }
+            });
+        }
+    });
+    on_cleanup_local(move || drop(draft_colors));
     let hover = zgui::reactive::RenderEffect::new(move |_| {
         if !visible.get() || !pane.timeline_link.get() {
             return;

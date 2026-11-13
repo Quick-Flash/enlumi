@@ -100,6 +100,7 @@ pub(crate) fn set_provider(workbench: Workbench, pane: Pane, provider: Provider)
     let edit = |spec: &mut Spec| {
         if let Some(map) = spec.map.as_mut() {
             map.provider = provider;
+            map.basemap = true;
         }
     };
     update(workbench, pane, edit);
@@ -112,10 +113,23 @@ pub fn MapBackend(workbench: Workbench, pane: Pane) -> impl IntoView {
             .trajectory
             .with(|s| s.as_ref().and_then(|s| s.map).unwrap_or_default().provider)
     });
+    let actual = target(workbench, pane);
+    let shown = Memo::new(move |_| {
+        actual
+            .trajectory
+            .with(|s| s.as_ref().and_then(|s| s.map).is_none_or(|map| map.basemap))
+    });
     view! {column(class="map-backend-settings") {
-        text {"Map backend"}
+        text(class="map-layers-heading") {"Basemap"}
+        RadioGroup(label="Basemap",value=Binding::controlled(Signal::derive_local(move ||if shown.get(){provider.get().key().to_owned()}else{"none".into()}),move |key:String|{
+            update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.basemap=key!="none";if let Some(provider)=Provider::parse(&key){map.provider=provider;}});
+        })) {
+            for choice in move ||[("osm","OpenStreetMap"),("esri-imagery","Esri World Imagery"),("none","None (grid)")],key=|(key,_)|*key {
+                {{let control=NodeRef::new();view! {row(class="map-layer-option") {RadioGroupItem(value=choice.0,node_ref=control,label=choice.1) Label(control=control,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.basemap=choice.0!="none";if let Some(provider)=Provider::parse(choice.0){map.provider=provider;}})){{choice.1}}}}}}
+            }
+        }
         Select(value=Binding::controlled(Signal::derive_local(move ||provider.get().key().to_owned()),move |key:String|if let Some(provider)=Provider::parse(&key){set_provider(workbench,pane,provider);})) {
-            SelectTrigger(class="map-backend-trigger",label="Map backend"){{move ||provider.get().label()}}
+            SelectTrigger(class="map-backend-trigger",label="More basemaps"){"More basemaps…"}
             SelectContent {for provider in move ||Provider::ALL,key=|p|p.key(){SelectItem(value=provider.key()){{provider.label()}}}}
         }
     }}
@@ -133,7 +147,9 @@ pub fn AltitudeOptions(
     });
     on_cleanup_local(move || {
         pane.altitude_slots.update_value(|slots| {
-            slots.remove(&index);
+            if slots.get(&index) == Some(&node) {
+                slots.remove(&index);
+            }
         })
     });
     let altitude = Memo::new(move |_| {
@@ -159,6 +175,7 @@ pub fn AltitudeOptions(
     view! {if move ||force||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some_and(|m|m.terrain||m.coloring==super::telemetry::ColorBy::Altitude))) {
         column(class="map-altitude-options trace-card-group") {
             row(class="trace-card-group-title") {text {"Altitude"}}
+            row(class="trace-map-slot") {text(class="trace-map-axis") {"Z"}
             column(class="trajectory-axis-slot altitude-slot",class:axis-slot-filled=move ||!altitude.get().source.is_empty(),node_ref=node) {
                 if move ||altitude.get().source.is_empty() {text(class="trajectory-drop-label") {"Drop Z field (optional)"}}
                 if move ||!altitude.get().source.is_empty() {
@@ -169,6 +186,7 @@ pub fn AltitudeOptions(
                         }
                     }
                 }
+            }
             }
             row(class="trace-card-segment",a11y:role=Role::Group,a11y:label="Altitude reference") {
                 ActionButton(class="altitude-amsl",class:setting-active=move ||!reference.get().0,a11y:label="Z is absolute elevation above sea level",on:click=move |_|update_altitude(|a|{a.local=false;a.at_first=false;})) {"AMSL"}
@@ -274,10 +292,10 @@ mod tests {
                 .unwrap()
                 .provider
         };
-        click(&mut harness, "map-backend-trigger", "OpenStreetMap");
+        click(&mut harness, "map-backend-trigger", "More basemaps");
         click(&mut harness, "zui-select__item", "Google Satellite");
         assert_eq!(provider(first), Provider::GoogleSatellite);
-        assert_eq!(provider(second), Provider::OpenStreetMap);
+        assert_eq!(provider(second), Provider::EsriImagery);
         assert_eq!(
             provider(workbench.trajectory_builder().pane),
             Provider::GoogleSatellite
@@ -287,7 +305,7 @@ mod tests {
         harness.advance(std::time::Duration::from_secs(1));
         second_open.set(true);
         harness.settle(128);
-        click(&mut harness, "map-backend-trigger", "OpenStreetMap");
+        click(&mut harness, "map-backend-trigger", "More basemaps");
         click(&mut harness, "zui-select__item", "Esri World Imagery");
         assert_eq!(provider(first), Provider::GoogleSatellite);
         assert_eq!(provider(second), Provider::EsriImagery);
@@ -306,10 +324,7 @@ mod tests {
             window
                 .nodes_with_class("map-backend-trigger")
                 .into_iter()
-                .any(|node| window
-                    .dom()
-                    .text_content(node)
-                    .contains("Esri World Imagery"))
+                .any(|node| window.dom().text_content(node).contains("More basemaps"))
         );
     }
     #[test]

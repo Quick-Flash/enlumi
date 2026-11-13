@@ -33,6 +33,8 @@ impl Gradient {
 #[serde(default, deny_unknown_fields)]
 pub struct TraceColor {
     pub mode: Mode,
+    pub arrow_color: Option<[u8; 4]>,
+    pub state_markers: bool,
     pub speed: Gradient,
     pub height: Gradient,
     /// Empty range (`[0, 0]`) means the field's own data range.
@@ -42,6 +44,8 @@ impl Default for TraceColor {
     fn default() -> Self {
         Self {
             mode: Mode::Solid,
+            arrow_color: None,
+            state_markers: true,
             speed: Gradient {
                 range: [0., 30.],
                 colors: [[45, 110, 230], [240, 80, 60]],
@@ -126,6 +130,27 @@ pub fn change(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn per_line_markers_roundtrip_and_old_styles_keep_markers_enabled() {
+        let style = TraceColor {
+            arrow_color: Some([18, 171, 205, 255]),
+            state_markers: false,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&style).unwrap();
+        assert_eq!(serde_json::from_str::<TraceColor>(&json).unwrap(), style);
+        assert!(
+            serde_json::from_str::<TraceColor>("{}")
+                .unwrap()
+                .state_markers
+        );
+        assert_eq!(
+            serde_json::from_str::<TraceColor>("{}")
+                .unwrap()
+                .arrow_color,
+            None
+        );
+    }
     #[test]
     fn chosen_colors_clamp_and_ranges_require_finite_increasing_limits() {
         let mut color = TraceColor::default();

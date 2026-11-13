@@ -21,7 +21,7 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
     })).into_handler(move ||{
         let workbench=Workbench::new();workbench.timeline.time.set(None);let pane=workbench.pane();
         let columns=[("lon",7.65,0.001),("lat",45.97,0.001),("alt",1000.,0.)].into_iter().enumerate().map(|(index,(source,start,step))|crate::state::Line{id:index as u64+1,source:source.into(),name:source.into(),revision:0,data:plot::time_series::SeriesData::new((0..9).map(|i|plot::PlotPoint{x:i as f64,y:start+step*if source=="lat" && i>4 {(8-i) as f64}else{i as f64}}).collect::<Vec<_>>()).unwrap()}).collect::<Vec<_>>();
-        let spec=Spec{x:"lon".into(),y:"lat".into(),gps_scale:Some(1.),map:Some(super::super::flight::Config{terrain:true,..Default::default()}),altitudes:BTreeMap::from([(0,Altitude{source:"alt".into(),..Default::default()})]),..Default::default()};
+        let spec=Spec{x:"lon".into(),y:"lat".into(),gps_scale:Some(1.),map:Some(super::super::flight::Config{terrain:true,provider:super::super::tiles::Provider::OpenStreetMap,..Default::default()}),altitudes:BTreeMap::from([(0,Altitude{source:"alt".into(),..Default::default()})]),..Default::default()};
         let data=Arc::new(Tracks::prepare(&columns,&spec).unwrap());
         pane.lines.set(columns);pane.trajectory.set(Some(spec));pane.trajectory_data.set(Some(data));
         let mut style=pane.plot.style("2");style.color=[250,40,180,255];style.width=2.;pane.plot.styles.update(|styles|{styles.insert("2".into(),style);});
@@ -295,9 +295,7 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
         assert_eq!(nodes.len(), 1, "3D hover must show snapped sample");
         let label = window.dom().text_content(nodes[0]);
         assert!(
-            label.contains("t: 4.000 s")
-                && label.contains("Z: 1000.00 m (relative)")
-                && label.contains("Elevation:"),
+            label.contains("t 4.0 s") && label.contains("alt ") && label.contains("m AMSL"),
             "{label}"
         );
         assert_eq!(
@@ -339,6 +337,32 @@ fn normal_3d_map_renders_bound_altitude_and_switches_modes() {
             .box_with_class("flight-map-footer")
             .is_none()
     );
+    let grid_camera = pane
+        .trajectory
+        .get_untracked()
+        .unwrap()
+        .map
+        .unwrap()
+        .camera
+        .unwrap();
+    let grid = Scene::grid(
+        service,
+        &[anchor_tile(grid_camera.center)],
+        &Scene::default(),
+        grid_camera,
+        super::super::tiles::Provider::OpenStreetMap,
+    );
+    assert!(
+        !grid.tiles.is_empty(),
+        "Grid mode must retain downloaded terrain without requiring imagery"
+    );
+    assert!(grid.tiles.iter().all(|tile| {
+        tile.elevation.is_some()
+            && tile
+                .raster
+                .as_ref()
+                .is_some_and(|raster| raster.version() == u64::MAX)
+    }));
     let loads = service.loads();
     let svg = workbench.capture_screenshot(Some(pane)).unwrap();
     assert!(svg.contains("data:image/png;base64,"));

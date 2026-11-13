@@ -1,6 +1,8 @@
 .link-controls { gap: 0; }
 .plot-links-trigger.zui-button { align-self: center; align-items: center; flex: none; width: auto; min-width: 0; height: 20px; min-height: 20px; padding: 0 7px 0 5px; margin: 0; border-radius: var(--app-radius); font-size: 11px; line-height: 16px; justify-content: flex-start; gap: 4px; }
 .plot-links-label { min-width: 0; white-space: nowrap; }
+.plot-links-dot { width: 4px; height: 4px; flex: none; border-radius: 50%; background: var(--app-muted); }
+.plot-links-trigger.links-active .plot-links-dot { background: var(--app-accent); }
 .plot-links-icon { flex: none; width: 13px; height: 13px; color: transparent; --zgui-stroke: var(--app-muted); --zgui-stroke-width: 1.5px; pointer-events: none; }
 .plot-links-trigger.links-active .plot-links-icon { --zgui-stroke: var(--app-accent-text); }
 .zui-surface.plot-links-surface { width: 156px; min-width: 0; max-width: 90vw; min-height: 0; max-height: 55vh; overflow-y: auto; overflow-x: hidden; padding: 3px; border-radius: var(--app-radius); font-size: 11px; animation: none; transform: none; }

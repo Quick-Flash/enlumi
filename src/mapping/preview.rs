@@ -167,6 +167,7 @@ pub(crate) fn MapView(
     camera: RwSignal<Camera, LocalStorage>,
     gpu: bool,
     maps: RwSignal<bool, LocalStorage>,
+    #[prop(into, default=Signal::stored_local(true))] basemap: Signal<bool, LocalStorage>,
     service: Service,
     #[prop(optional)] provider: Option<RwSignal<Provider, LocalStorage>>,
     #[prop(optional)] offline: Option<RwSignal<bool, LocalStorage>>,
@@ -174,7 +175,7 @@ pub(crate) fn MapView(
     #[prop(optional)] on_reset: Option<UnsyncCallback<(), ()>>,
     #[prop(default = false)] transparent_background: bool,
 ) -> impl IntoView {
-    let provider = provider.unwrap_or_else(|| RwSignal::new_local(Provider::OpenStreetMap));
+    let provider = provider.unwrap_or_else(|| RwSignal::new_local(Provider::default()));
     let offline = offline.unwrap_or_else(|| RwSignal::new_local(false));
     if maps.get_untracked() && !gpu {
         camera.update(|camera| {
@@ -215,7 +216,7 @@ pub(crate) fn MapView(
         let viewport = size.get();
         let selected = provider.get();
         let online = !offline.get();
-        let visible_tiles = if maps.get() && !gpu {
+        let visible_tiles = if maps.get() && basemap.get() && !gpu {
             selected.expand_tiles(camera.map_tiles(viewport))
         } else {
             Vec::new()
@@ -328,7 +329,7 @@ pub(crate) fn MapView(
         on_cleanup_local(move || drop(bytes));
         AnyView::new(view! {
             box(class="map-tiles") {
-                for tile in move ||if maps.get(){provider.get().expand_tiles(camera.get().map_fallback_tiles(size.get()))}else{Vec::new()},key=|tile|*tile {
+                for tile in move ||if maps.get()&&basemap.get(){provider.get().expand_tiles(camera.get().map_fallback_tiles(size.get()))}else{Vec::new()},key=|tile|*tile {
                     box(class="map-tile",style:transform=move ||{
                         let [x,y,scale]=camera.get().place(tile,size.get());
                         let dpi=f64::from(host.scale());
@@ -339,7 +340,7 @@ pub(crate) fn MapView(
                         {zgui::elements::image().class("map-tile-image").src(Signal::derive_local(move ||service.url(tile,provider.get()))).alt(Some("Coarse fallback map tile".to_string())).into_view()}
                     }
                 }
-                for tile in move ||if maps.get(){provider.get().expand_tiles(camera.get().map_tiles(size.get()))}else{camera.get().tiles(size.get())},key=|tile|*tile {
+                for tile in move ||if maps.get(){if basemap.get(){provider.get().expand_tiles(camera.get().map_tiles(size.get()))}else{Vec::new()}}else{camera.get().tiles(size.get())},key=|tile|*tile {
                     box(class="map-tile",style:transform=move ||{
                         let [x,y,scale]=camera.get().place(tile,size.get());
                         // Adjacent tiles share rounded device-pixel edges. In

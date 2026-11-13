@@ -127,8 +127,19 @@ pub(crate) fn install(
         let mut description = plot::PlotDescription::new(w, h, &background);
         crate::trajectory_plot::describe_legend(workbench, pane, &mut description);
         let selected_provider = provider.get_untracked();
-        let images = tile_images(camera, [w, h], service, pane.id, selected_provider)?;
-        let attribution = selected_provider.attribution();
+        let basemap = pane
+            .trajectory
+            .with_untracked(|s| s.as_ref().and_then(|s| s.map).is_none_or(|map| map.basemap));
+        let images = if basemap {
+            tile_images(camera, [w, h], service, pane.id, selected_provider)?
+        } else {
+            String::new()
+        };
+        let attribution = if basemap {
+            selected_provider.attribution()
+        } else {
+            ""
+        };
         let render = |scenes: &[&zgui::canvas::CanvasScene]| -> Result<String, String> {
             let mut svg = plot::zgui_svg::scenes_to_svg(scenes, &description)?;
             let background_tag = format!(

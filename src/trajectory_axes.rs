@@ -14,7 +14,7 @@ pub struct Builder {
     pub target: RwSignal<Option<u64>, LocalStorage>,
     pub area: NodeRef,
     /// Map-wide color field drop target and its hover state.
-    pub color_slot: NodeRef,
+    pub color_slots: StoredValue<std::collections::BTreeMap<usize, NodeRef>, LocalStorage>,
     pub color_hover: RwSignal<bool, LocalStorage>,
 }
 impl Builder {
@@ -27,7 +27,7 @@ impl Builder {
             pane,
             target: RwSignal::new_local(None),
             area: NodeRef::new(),
-            color_slot: NodeRef::new(),
+            color_slots: StoredValue::new_local(Default::default()),
             color_hover: RwSignal::new_local(false),
         }
     }
@@ -54,7 +54,9 @@ impl Workbench {
                 .pane
                 .trajectory
                 .with_untracked(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
-            && Self::inside(builder.color_slot, x, y)
+            && builder
+                .color_slots
+                .with_value(|slots| slots.values().any(|node| Self::inside(*node, x, y)))
     }
     pub fn builder_slot_at(self, x: f32, y: f32) -> Option<(usize, bool)> {
         let builder = self.trajectory_builder();
@@ -85,6 +87,23 @@ impl Workbench {
         if pair.x.is_empty() || pair.y.is_empty() {
             return;
         }
+        let color_pane =
+            reactive_graph::graph::untrack(|| crate::mapping::settings::target(self, builder.pane));
+        let incoming_color = color_pane
+            .draft_trace_colors
+            .with_untracked(|colors| colors.get(&pair.y).copied())
+            .or_else(|| {
+                color_pane.lines.with_untracked(|lines| {
+                    lines
+                        .iter()
+                        .find(|line| line.source == pair.y)
+                        .and_then(|line| {
+                            color_pane
+                                .trace_colors
+                                .with_untracked(|colors| colors.get(&line.id).copied())
+                        })
+                })
+            });
         let Some(workbench) = self.for_plot(target) else {
             return;
         };
@@ -250,6 +269,22 @@ impl Workbench {
                 style.color = crate::line_colors::next_color(&occupied);
                 pane.plot.styles.update(|styles| {
                     styles.insert(id.to_string(), style);
+                });
+            }
+        }
+        if let Some(color) = incoming_color {
+            if let Some(id) = pane.lines.with_untracked(|lines| {
+                lines
+                    .iter()
+                    .find(|line| line.source == incoming_y)
+                    .map(|line| line.id)
+            }) {
+                pane.trace_colors.update(|colors| {
+                    colors.insert(id, color);
+                });
+            } else {
+                pane.draft_trace_colors.update(|colors| {
+                    colors.insert(incoming_y, color);
                 });
             }
         }
@@ -475,7 +510,9 @@ pub(crate) fn AxisSlot(workbench: Workbench, pane: Pane, index: usize, y: bool) 
     });
     on_cleanup_local(move || {
         pane.trajectory_slots.update_value(|slots| {
-            slots.remove(&(index, y));
+            if slots.get(&(index, y)) == Some(&node) {
+                slots.remove(&(index, y));
+            }
         })
     });
     let source = Signal::derive_local(move || {
@@ -527,14 +564,19 @@ pub fn TrajectoryWorkspace(workbench: Workbench) -> impl IntoView {
     }}
 }
 #[component]
-pub(crate) fn PairDrag(workbench: Workbench, pane: Pane, index: usize) -> impl IntoView {
+pub(crate) fn PairDrag(
+    workbench: Workbench,
+    pane: Pane,
+    index: usize,
+    #[prop(default = false)] compact: bool,
+) -> impl IntoView {
     let actions = SeriesSourceActions {
         on_move: UnsyncCallback::new(move |(x, y)| workbench.field_drag_move(x, y)),
         on_drop: UnsyncCallback::new(move |(source, x, y)| workbench.drop_fields(source, x, y)),
         on_cancel: UnsyncCallback::new(move |()| workbench.finish_field_drag()),
         on_finish: UnsyncCallback::new(move |()| workbench.finish_field_drag()),
     };
-    view! {column(class="trajectory-pair-drag",class:pair-dragging=move ||workbench.drag.state.get().is_some_and(|drag|drag.0==format!("@trajectory/pair/{index}")),a11y:label="Drag X/Y pair onto a plot"){
+    view! {column(class=if compact{"trajectory-pair-handle"}else{"trajectory-pair-drag"},class:pair-drag-handle=compact,class:pair-dragging=move ||workbench.drag.state.get().is_some_and(|drag|drag.0==format!("@trajectory/pair/{index}")),a11y:label="Drag X/Y pair onto a plot",on:click=move |e|e.stop_propagation()){
         SeriesSource(id=Signal::derive_local(move ||pane.trajectory.with(|spec|spec.as_ref()?.pairs().get(index).filter(|pair|!pair.x.is_empty() && !pair.y.is_empty()).map(|_|format!("@trajectory/pair/{index}")))),label=Signal::stored_local("Drag X/Y pair onto a plot".to_owned()),count=Signal::stored_local(String::new()),selected=Signal::stored_local(false),drag=workbench.drag,actions=actions)
         vector(class="trajectory-grip-icon",prop:viewBox="0 0 16 20",prop:d="M5 4 L5 6 M11 4 L11 6 M5 9 L5 11 M11 9 L11 11 M5 14 L5 16 M11 14 L11 16",a11y:hidden=true)
         text(class="trajectory-pair-drag-label",a11y:hidden=true) {{move ||if workbench.drag.state.get().is_some_and(|drag|drag.0==format!("@trajectory/pair/{index}")){"Drop on a plot"}else{"Drag pair to a plot"}}}

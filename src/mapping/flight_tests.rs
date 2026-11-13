@@ -63,7 +63,10 @@ fn spec() -> Spec {
         x: "lon".into(),
         y: "lat".into(),
         gps_scale: Some(1.),
-        map: Some(Config::default()),
+        map: Some(Config {
+            provider: Provider::OpenStreetMap,
+            ..Default::default()
+        }),
         ..Default::default()
     }
 }
@@ -479,7 +482,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     ));
     assert!(
         harness.app().windows()[0]
-            .box_with_class("workbench-legend")
+            .box_with_class("map-legend")
             .is_some()
     );
     let svg = workbench.capture_screenshot(Some(pane)).unwrap();
@@ -548,7 +551,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     assert_eq!(tooltip.len(), 1, "2D hover must show sample location");
     let label = window.dom().text_content(tooltip[0]);
     assert!(
-        label.contains("t: 7.000 s") && label.contains("Lat:") && label.contains("Lon:"),
+        label.contains("t 7.0 s") && label.contains(", ") && label.contains("speed"),
         "{label}"
     );
     assert!(window.box_with_class("map-hover-pin").is_some());
@@ -662,7 +665,10 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
     workbench.new_flight_map();
     let builder = workbench.trajectory_builder();
     builder.pane.trajectory.set(Some(Spec {
-        map: Some(Config::default()),
+        map: Some(Config {
+            provider: Provider::OpenStreetMap,
+            ..Default::default()
+        }),
         gps_scale: Some(1.),
         ..Default::default()
     }));
@@ -818,7 +824,10 @@ fn bind(workbench: Workbench, pane: Pane, index: usize, receiver: usize) {
     workbench.new_flight_map();
     let builder = workbench.trajectory_builder();
     builder.pane.trajectory.set(Some(Spec {
-        map: Some(Config::default()),
+        map: Some(Config {
+            provider: Provider::OpenStreetMap,
+            ..Default::default()
+        }),
         gps_scale: Some(1.),
         ..Default::default()
     }));
@@ -909,6 +918,7 @@ fn local_metre_frames_anchor_first_sample_or_zero_and_round_trip_with_geographic
     setup.local = Some(LocalFrame {
         origin: Some(origin),
         at_first: true,
+        north_first: false,
     });
     let data = Tracks::prepare(&columns, &setup).unwrap();
     let track = &data.traces[0].track;
@@ -926,13 +936,15 @@ fn local_metre_frames_anchor_first_sample_or_zero_and_round_trip_with_geographic
     LocalFrame {
         origin: Some([0., 0.]),
         at_first: true,
+        north_first: false,
     }
     .validate()
     .unwrap();
     assert!(
         LocalFrame {
             origin: Some([0., 95.]),
-            at_first: true
+            at_first: true,
+            north_first: false
         }
         .validate()
         .is_err()
@@ -985,4 +997,25 @@ fn sidebar_z_binding_loads_arbitrary_field_without_creating_an_xy_pair() {
     let spec = pane.trajectory.get_untracked().unwrap();
     assert_eq!(spec.pairs().len(), 1);
     assert_eq!(spec.altitudes[&0].source, source);
+}
+
+#[test]
+fn new_maps_default_to_esri_without_overriding_saved_providers() {
+    assert_eq!(Config::default().provider, Provider::EsriImagery);
+    let mut value = serde_json::to_value(Config {
+        provider: Provider::OpenStreetMap,
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(
+        serde_json::from_value::<Config>(value.clone())
+            .unwrap()
+            .provider,
+        Provider::OpenStreetMap
+    );
+    value.as_object_mut().unwrap().remove("provider");
+    assert_eq!(
+        serde_json::from_value::<Config>(value).unwrap().provider,
+        Provider::EsriImagery
+    );
 }

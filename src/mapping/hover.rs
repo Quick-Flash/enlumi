@@ -170,17 +170,12 @@ impl Spatial {
 pub fn label(hit: Hit, name: &str) -> String {
     let [lon, lat] = super::camera::geographic(hit.point);
     let lon = (lon + 180.).rem_euclid(360.) - 180.;
-    let mut label = format!(
-        "{name}\nt: {:.3} s\nLat: {lat:.7}\u{b0}\nLon: {lon:.7}\u{b0}",
-        hit.time
-    );
+    let mut label = format!("{name}  t {:.1} s\n{lat:.6}, {lon:.6}", hit.time);
     if let Some((z, elevation, local)) = hit.altitude {
-        label.push_str(&format!(
-            "\nZ: {z:.2} m ({})",
-            if local { "relative" } else { "absolute" }
-        ));
-        if local {
-            label.push_str(&format!("\nElevation: {elevation:.2} m"));
+        if elevation.is_finite() {
+            label.push_str(&format!("\nalt {elevation:.1} m AMSL"));
+        } else if local {
+            label.push_str(&format!("\nheight {z:.1} m relative"));
         }
     }
     label
@@ -189,34 +184,129 @@ pub fn label(hit: Hit, name: &str) -> String {
 use zgui::prelude::*;
 #[component]
 pub fn HoverView(
+    workbench: crate::state::Workbench,
     pane: crate::state::Pane,
     hit: RwSignal<Option<Hit>, LocalStorage>,
     size: Signal<[f64; 2], LocalStorage>,
 ) -> impl IntoView {
+    let info = Memo::new(move |_| {
+        hit.get().map(|mut hit| {
+            let lines = pane.lines.get();
+            let name = lines
+                .iter()
+                .find(|line| line.id == hit.id)
+                .map(|line| super::legend::trace_name(&line.name))
+                .unwrap_or_default();
+            if hit.altitude.is_none()
+                && let Some(spec) = pane.trajectory.get()
+                && let Some(line) = lines.iter().find(|line| line.id == hit.id)
+                && let Some(index) = spec.pairs().iter().position(|pair| pair.y == line.source)
+                && let Some(altitude) = spec.altitudes.get(&index)
+                && let Some(source) = lines.iter().find(|line| line.source == altitude.source)
+            {
+                let samples = source.data.samples();
+                let right = samples.partition_point(|point| point.x <= hit.time);
+                let value = right.checked_sub(1).and_then(|index| {
+                    let a = samples[index];
+                    if a.x == hit.time {
+                        return a.y.is_finite().then_some(a.y);
+                    }
+                    let b = *samples.get(right)?;
+                    (a.y.is_finite() && b.y.is_finite() && b.x > a.x)
+                        .then(|| a.y + (b.y - a.y) * (hit.time - a.x) / (b.x - a.x))
+                });
+                if let Some(value) = value {
+                    let z = value * altitude.scale;
+                    hit.altitude =
+                        Some((z, if altitude.local { f64::NAN } else { z }, altitude.local));
+                }
+            }
+            let mut text = label(hit, &name);
+            let hidden = pane.hidden_geometry.get();
+            if let Some(states) = workbench
+                .ordered_geometry(pane)
+                .into_iter()
+                .filter(|item| !hidden.contains(&item.id))
+                .find_map(|item| item.states.filter(|states| states.error.is_none()))
+                && let Some(interval) = states
+                    .intervals
+                    .iter()
+                    .find(|interval| interval.start <= hit.time && hit.time < interval.end)
+                && let Some(rule) = states
+                    .rules
+                    .iter()
+                    .find(|rule| rule.value == interval.value)
+                && let Some(end) = text.find('\n')
+            {
+                text.insert_str(end, &format!(" · {}", rule.name));
+            }
+            pane.trajectory_data.with(|data| {
+                if let Some(trace) = data
+                    .as_ref()
+                    .and_then(|data| data.traces.iter().find(|trace| trace.id == hit.id))
+                {
+                    let right = trace.track.times.partition_point(|time| *time <= hit.time);
+                    let index = right
+                        .saturating_sub(1)
+                        .min(trace.track.times.len().saturating_sub(2));
+                    if let (Some(a), Some(b), Some(&start), Some(&end)) = (
+                        trace.track.points.get(index),
+                        trace.track.points.get(index + 1),
+                        trace.track.times.get(index),
+                        trace.track.times.get(index + 1),
+                    ) && end > start
+                        && [a.x, a.y, b.x, b.y].iter().all(|value| value.is_finite())
+                    {
+                        let scale = super::terrain::ground_scale(Camera {
+                            center: hit.point,
+                            zoom: 0.,
+                        });
+                        text.push_str(&format!(
+                            "{}speed {:.1} m/s",
+                            if hit.altitude.is_some() { " · " } else { "\n" },
+                            (b.x - a.x).hypot(b.y - a.y) * scale / (end - start)
+                        ));
+                    }
+                }
+            });
+            text
+        })
+    });
+    let tooltip = NodeRef::new();
+    let bounds = tooltip.observe_border_box();
     let pin_left = move || Some(format!("{}px", hit.get().map_or(0., |h| h.screen[0])));
     let pin_top = move || Some(format!("{}px", hit.get().map_or(0., |h| h.screen[1])));
     let left = move || {
         Some(format!(
             "{}px",
-            hit.get().map_or(0., |h| (h.screen[0] + 16.)
-                .min((size.get()[0] - 258.).max(4.)))
+            hit.get().map_or(0., |h| (h.screen[0] + 12.).clamp(
+                4.,
+                (size.get()[0]
+                    - bounds
+                        .get()
+                        .map_or(0., |b| f64::from(b.size.width.0 / tooltip.scale()))
+                    - 4.)
+                    .max(4.)
+            ))
         ))
     };
     let top = move || {
         Some(format!(
             "{}px",
-            hit.get().map_or(0., |h| (h.screen[1] + 16.)
-                .min((size.get()[1] - 170.).max(4.)))
+            hit.get().map_or(0., |h| {
+                let height = bounds
+                    .get()
+                    .map_or(0., |b| f64::from(b.size.height.0 / tooltip.scale()));
+                (h.screen[1] - height / 2.).clamp(4., (size.get()[1] - height - 4.).max(4.))
+            })
         ))
     };
     view! {
         if move ||hit.get().is_some() {
             box(class="map-hover-pin", style:left=pin_left, style:top=pin_top) {}
-            text(class="map-hover-tooltip", style:left=left, style:top=top) {
-                {move ||hit.get().map_or_else(String::new,|hit| {
-                    let name=pane.lines.with(|lines|lines.iter().find(|l|l.id==hit.id).map(|l|l.name.clone()).unwrap_or_default());
-                    label(hit,&name)
-                })}
+            column(class="map-hover-tooltip",node_ref=tooltip,style:left=left,style:top=top) {
+                text(class="map-hover-title") {{move ||info.with(|text|text.as_deref().unwrap_or_default().lines().next().unwrap_or_default().to_owned())}}
+                text {{move ||info.with(|text|text.as_deref().unwrap_or_default().lines().skip(1).collect::<Vec<_>>().join("\n"))}}
             }
         }
     }
@@ -268,7 +358,7 @@ mod tests {
         let hit = flat(&data, camera, size, [404., 302.], &BTreeSet::new()).unwrap();
         assert_eq!(hit.time, 1.);
         assert!((hit.screen[0] - 400.).abs() < 0.001 && (hit.screen[1] - 300.).abs() < 0.001);
-        assert!(label(hit, "GPS").contains("Lon: -179.9900000\u{b0}"));
+        assert!(label(hit, "GPS").contains("-179.990000"));
         assert!(
             flat(
                 &data,
@@ -305,6 +395,7 @@ mod tests {
             marker: plot::plot_data::MarkerShape::Circle,
             local: false,
             arrows: false,
+            arrow_color: crate::trajectory::arrow_color(),
             modes: std::sync::Arc::from([]),
         }]);
         let projection = Projection::new(&scene, camera, orbit, size);
@@ -323,6 +414,6 @@ mod tests {
             ..hit
         };
         let text = label(local, "local");
-        assert!(text.contains("Z: 20.00 m (relative)") && text.contains("Elevation: 1220.00 m"));
+        assert!(text.contains("alt 1220.0 m AMSL"));
     }
 }

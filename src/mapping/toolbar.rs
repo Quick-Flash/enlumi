@@ -1,7 +1,9 @@
 //! On-map controls: mode and layers at top left, navigation at bottom right.
 use super::{
     camera::{Camera, MAX_ZOOM},
+    display_options::MapDisplayOptionsProps,
     flight::Trail,
+    layer_option::LayerOptionProps,
     settings::{MapBackendProps, update},
     terrain::Orbit,
 };
@@ -48,7 +50,7 @@ pub fn MapToolbar(
     };
     view! {
         row(class="map-toolbar",a11y:role=Role::Toolbar,a11y:label="Map mode and layers") {
-            ActionButton(class="map-mode-2d",class:setting-active=move ||!map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.set_terrain(false);})){"2D"}
+            ActionButton(class="map-mode-2d",class:setting-active=move ||!map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.set_terrain(false);})){"Map"}
             ActionButton(class="map-mode-3d",class:setting-active=move ||map.get().terrain,on:click=move |_|update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.set_terrain(true);})){"3D"}
             box(class="map-toolbar-divider") {}
             MapLayers(workbench=workbench,pane=pane)
@@ -57,14 +59,12 @@ pub fn MapToolbar(
             IconAction(class="map-zoom-in",label=label("Zoom in"),path=icon(ZOOM_IN),on_click=UnsyncCallback::new(move |()|zoom(1.)))
             IconAction(class="map-zoom-out",label=label("Zoom out"),path=icon(ZOOM_OUT),on_click=UnsyncCallback::new(move |()|zoom(-1.)))
             box(class="map-nav-divider") {}
-            if move ||map.get().terrain {
                 ActionButton(icon=true,class="map-compass icon-action",a11y:label="Compass: restore north-up bearing",on:click=move |_|orbit.update(|orbit|orbit.bearing=0.)) {
-                    vector(class="map-compass-arrow",prop:viewBox="0 0 20 20",prop:d="M10 1 L16 17 L10 13 L4 17 Z",style:transform=move ||Some(format!("rotate({}deg)",-orbit.get().bearing)))
+                    vector(class="map-compass-arrow",prop:svg=r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1.5l3 7H5z" fill="#e07a5f"/><path d="M8 14.5l-3-6h6z" fill="none" stroke="currentColor"/></svg>"##,style:transform=move ||Some(format!("rotate({}deg)",if map.get().terrain{-orbit.get().bearing}else{0.})))
                 }
-            }
+            IconAction(class="map-measure-tool",label=label("Measure (M)"),path=icon(MEASURE),active=Signal::derive_local(move ||measuring.get()),on_click=UnsyncCallback::new(move |()|{workbench.measurement.clear();measuring.update(|on|*on= !*on);}))
             IconAction(class="map-fit",label=label("Fit traces"),path=icon(FIT),on_click=UnsyncCallback::new(move |()|pane.fit_axes(plot::interaction::Axes::BOTH)))
             IconAction(class="map-follow",label=label("Follow timeline marker"),path=icon(FOLLOW),active=Signal::derive_local(move ||map.get().follow),on_click=UnsyncCallback::new(move |()|{pane.timeline_link.set(true);update(workbench,pane,|s|if let Some(map)=s.map.as_mut(){map.follow= !map.follow;});}))
-            IconAction(class="map-measure-tool",label=label("Measure (M)"),path=icon(MEASURE),active=Signal::derive_local(move ||measuring.get()),on_click=UnsyncCallback::new(move |()|measuring.update(|on|*on= !*on)))
         }
     }
 }
@@ -76,10 +76,6 @@ fn MapLayers(workbench: Workbench, pane: Pane) -> impl IntoView {
         pane.trajectory
             .with(|s| s.as_ref().and_then(|s| s.map))
             .unwrap_or_default()
-    });
-    let arrows = Memo::new(move |_| {
-        pane.trajectory
-            .with(|s| s.as_ref().is_some_and(|s| s.arrows))
     });
     let service = workbench.shared_map_tiles();
     let edit = move |change: fn(&mut super::flight::Config)| {
@@ -104,22 +100,22 @@ fn MapLayers(workbench: Workbench, pane: Pane) -> impl IntoView {
             row(class="map-layers-columns") {
                 column(class="map-layers-column") {
                     MapBackend(workbench=workbench,pane=pane)
-                    ActionButton(class="map-offline",class:setting-active=move ||map.get().offline,on:click=move |_|edit(|m|m.offline= !m.offline)){"Offline tiles only"}
-                    ActionButton(class="map-retry",on:click=move |_|service.retry()){"Retry tiles"}
-                    text(class="muted",a11y:role=Role::Status){{move ||service.status()}}
+                    LayerOption(class="map-offline map-layer-option",label="Offline tiles only",checked=Signal::derive_local(move ||map.get().offline),on_change=UnsyncCallback::new(move |_|edit(|m|m.offline= !m.offline)))
                     text(class="map-layers-heading"){"3D"}
-                    ActionButton(class="map-ground-projection",class:setting-active=move ||map.get().ground_projection,on:click=move |_|edit(|m|m.ground_projection= !m.ground_projection)){"Ground path"}
-                    ActionButton(class="map-exaggeration",class:setting-active=move ||map.get().orbit.exaggeration>1.,on:click=move |_|edit(|m|m.orbit.exaggeration=if m.orbit.exaggeration>1.{1.}else{2.})){"Terrain height ×2"}
+                    LayerOption(class="map-ground-projection map-layer-option",label="Ground path",checked=Signal::derive_local(move ||map.get().ground_projection),on_change=UnsyncCallback::new(move |_|edit(|m|m.ground_projection= !m.ground_projection)))
+                    LayerOption(class="map-exaggeration map-layer-option",label="Terrain height ×2",checked=Signal::derive_local(move ||map.get().orbit.exaggeration>1.),on_change=UnsyncCallback::new(move |_|edit(|m|m.orbit.exaggeration=if m.orbit.exaggeration>1.{1.}else{2.})))
+                    text(class="map-tile-status",a11y:role=Role::Status){{move ||service.summary()}}
+                    ActionButton(class="map-retry",on:click=move |_|service.retry()){"Retry tiles"}
                 }
                 column(class="map-layers-column") {
                     text(class="map-layers-heading"){"Trace"}
-                    ActionButton(class="map-arrows",class:setting-active=move ||arrows.get(),a11y:label="Direction arrows",on:click=move |_|update(workbench,pane,|s|s.arrows= !s.arrows)){"Arrows"}
-                    ActionButton(class="map-modes",class:setting-active=move ||map.get().modes,on:click=move |_|edit(|m|m.modes= !m.modes)){"Flight mode changes"}
-                    ActionButton(class="map-profile",class:setting-active=move ||map.get().profile,on:click=move |_|edit(|m|m.profile= !m.profile)){"Altitude profile (2D)"}
+                    MapDisplayOptions(workbench=workbench,pane=pane)
                     text(class="map-layers-heading"){"Show path"}
-                    ActionButton(class="map-trail-full",class:setting-active=move ||map.get().trail==Trail::Full,on:click=move |_|trail(Trail::Full)){"Whole flight"}
-                    ActionButton(class="map-trail-flown",class:setting-active=move ||map.get().trail==Trail::Flown,on:click=move |_|trail(Trail::Flown)){"Flown so far"}
-                    ActionButton(class="map-trail-recent",class:setting-active=move ||map.get().trail==Trail::Recent,on:click=move |_|trail(Trail::Recent)){"Last 30 s"}
+                    RadioGroup(class="map-trail-options",label="Show path",value=Binding::controlled(Signal::derive_local(move ||match map.get().trail{Trail::Full=>"full",Trail::Flown=>"flown",Trail::Recent=>"recent"}.to_owned()),move |value:String|trail(match value.as_str(){"flown"=>Trail::Flown,"recent"=>Trail::Recent,_=>Trail::Full}))) {
+                        for choice in move ||[("full","Whole flight"),("flown","Flown so far"),("recent","Last 30 s")],key=|(value,_)|*value {
+                            {{let control=NodeRef::new();view! {row(class="map-layer-option") {RadioGroupItem(node_ref=control,value=choice.0,label=choice.1) Label(control=control,on:click=move |_|trail(match choice.0 {"flown"=>Trail::Flown,"recent"=>Trail::Recent,_=>Trail::Full})){{choice.1}}}}}}
+                        }
+                    }
                 }
             }
         }

@@ -30,8 +30,13 @@ pub struct Spec {
     /// Direction chevrons along each trace, spaced in screen pixels.
     #[serde(default = "enabled")]
     pub arrows: bool,
+    #[serde(default = "arrow_color")]
+    pub arrow_color: [u8; 4],
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra: Vec<Pair>,
+}
+pub(crate) fn arrow_color() -> [u8; 4] {
+    [255, 225, 150, 255]
 }
 fn enabled() -> bool {
     true
@@ -81,6 +86,7 @@ impl Default for Spec {
             equal: true,
             points: false,
             arrows: true,
+            arrow_color: arrow_color(),
             extra: Vec::new(),
         }
     }

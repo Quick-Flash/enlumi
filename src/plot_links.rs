@@ -16,8 +16,9 @@ pub fn PlotLinksMenu(pane: Pane) -> impl IntoView {
     });
     let range = Memo::new(move |_| range_link(pane));
     view! {DropdownMenu(open=open) {
-        DropdownMenuTrigger(size=ButtonSize::Xs,variant=ButtonVariant::Outline,class="plot-links-trigger",class:links-open=move ||open.get(),class:links-active=move ||{let links=pane.links.get();(!map.get()&&(links.x || links.y || links.pointer)) || pane.timeline_link.get() || range.get()},a11y:label="Linked plots") {
+        DropdownMenuTrigger(size=ButtonSize::Xs,variant=ButtonVariant::Outline,class="plot-links-trigger",class:links-open=move ||open.get(),class:links-active=move ||{let links=pane.links.get();(!map.get()&&(links.x || links.y)) || links.pointer || pane.timeline_link.get() || range.get()},a11y:label="Linked plots") {
             vector(class="plot-links-icon",prop:viewBox="0 0 16 16",prop:d=LINK_ICON,a11y:hidden=true)
+            if move ||map.get() {box(class="plot-links-dot",a11y:hidden=true) {}}
             text(class="plot-links-label") {{move ||links_label(pane, map.get())}}
         }
         DropdownMenuContent(class="plot-links-surface") {column(class="link-controls") {
@@ -36,7 +37,11 @@ fn links_label(pane: Pane, map: bool) -> String {
     let links = pane.links.get();
     let timeline = pane.timeline_link.get();
     let selected = if map {
-        vec![(timeline, "Time"), (range_link(pane), "Range")]
+        vec![
+            (links.pointer, "Pointer"),
+            (timeline, "Time"),
+            (range_link(pane), "Range"),
+        ]
     } else {
         vec![
             (links.x, "X"),
@@ -45,7 +50,7 @@ fn links_label(pane: Pane, map: bool) -> String {
             (timeline, "Time"),
         ]
     };
-    if selected.len() > 1 && selected.iter().all(|(on, _)| *on) {
+    if !map && selected.len() > 1 && selected.iter().all(|(on, _)| *on) {
         return "All".to_owned();
     }
     let on = selected
@@ -61,7 +66,7 @@ fn links_label(pane: Pane, map: bool) -> String {
 
 fn links_items(map: bool) -> Vec<(u8, &'static str)> {
     if map {
-        vec![(4, "Link timeline"), (5, "Highlight time range")]
+        vec![(2, "Pointer"), (4, "Timeline"), (5, "Time range")]
     } else {
         vec![
             (3, "All"),
@@ -77,4 +82,25 @@ fn links_items(map: bool) -> Vec<(u8, &'static str)> {
 fn range_link(pane: Pane) -> bool {
     pane.trajectory
         .with(|s| s.as_ref().and_then(|s| s.map).is_some_and(|m| m.range_link))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn map_links_name_the_enabled_demo_links() {
+        let window = zgui_testkit_view::Window::open();
+        let pane = window.scope.with(|| Pane::new(1));
+        pane.trajectory.set(Some(crate::trajectory::Spec {
+            map: Some(Default::default()),
+            ..Default::default()
+        }));
+        assert_eq!(links_label(pane, true), "Pointer · Time · Range");
+        pane.links.update(|links| links.pointer = false);
+        assert_eq!(links_label(pane, true), "Time · Range");
+        assert_eq!(
+            links_items(true),
+            [(2, "Pointer"), (4, "Timeline"), (5, "Time range")]
+        );
+    }
 }

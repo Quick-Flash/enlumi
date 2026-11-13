@@ -32,7 +32,8 @@ pub(super) fn record_producer(stats: Arc<Stats>) {
 }
 
 fn pump(harness: &mut Harness<zgui::runtime::Runtime>, until: impl Fn() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    // Cold GPU submissions can drain after the final fixture tile is decoded.
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         harness.advance(Duration::from_millis(17));
         harness.settle(64);

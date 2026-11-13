@@ -55,6 +55,14 @@ impl Workbench {
         event: &zgui::vocab::KeyEvent,
         modifiers: zgui::vocab::Modifiers,
     ) -> bool {
+        let pane = self.pane();
+        if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape)
+            && pane.map_measuring.get_untracked()
+            && !zgui::view::focus_is_text_entry()
+        {
+            pane.map_measuring.set(false);
+            return true;
+        }
         // Leave active measurement and its pointer capture alone until release.
         if event.key == zgui::vocab::Key::Named(zgui::vocab::NamedKey::Escape)
             && self.measurement.active.get_untracked()
@@ -73,6 +81,14 @@ impl Workbench {
         {
             self.finish_geometry_editing();
             self.analysis().picking_range.set(false);
+            if pane
+                .trajectory
+                .with_untracked(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+            {
+                self.measurement.clear();
+                pane.map_measuring.update(|active| *active = !*active);
+                return true;
+            }
             self.measurement.active.update(|active| *active = !*active);
             self.measurement.selection.set(None);
             true

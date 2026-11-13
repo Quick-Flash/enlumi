@@ -27,7 +27,6 @@ const MAX_BODY: u64 = 4 * 1024 * 1024;
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
-    #[default]
     OpenStreetMap,
     GoogleRoad,
     GoogleSatellite,
@@ -36,6 +35,7 @@ pub enum Provider {
     BingSatellite,
     BingHybrid,
     EsriStreet,
+    #[default]
     EsriImagery,
     EsriTerrain,
     MapboxStreets,
@@ -774,7 +774,13 @@ impl Service {
         ui.shared.changed.notify_all();
         self.revision.update(|r| *r = r.wrapping_add(1));
     }
+    pub fn summary(self) -> String {
+        self.status_text(true)
+    }
     pub fn status(self) -> String {
+        self.status_text(false)
+    }
+    fn status_text(self, compact: bool) -> String {
         self.revision.get();
         self.demanded.get();
         let ui = self.ui.get_value();
@@ -790,7 +796,13 @@ impl Service {
             .iter()
             .filter_map(|k| cache.entries.get(k)?.value.as_ref().err())
             .collect::<Vec<_>>();
-        if let Some(error) = errors.first() {
+        if compact && !errors.is_empty() {
+            format!(
+                "{ready}/{} tiles ready; {} failed",
+                work.desired.len(),
+                errors.len()
+            )
+        } else if let Some(error) = errors.first() {
             format!(
                 "{ready}/{} tiles ready | {} errors: {error} (Retry tiles)",
                 work.desired.len(),

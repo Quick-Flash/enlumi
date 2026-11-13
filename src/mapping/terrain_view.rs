@@ -22,6 +22,7 @@ pub fn TerrainView(
     camera: RwSignal<Camera, LocalStorage>,
     orbit: RwSignal<Orbit, LocalStorage>,
     service: Service,
+    #[prop(into, default=Signal::stored_local(true))] basemap: Signal<bool, LocalStorage>,
     #[prop(optional)] provider: Option<RwSignal<Provider, LocalStorage>>,
     #[prop(optional)] offline: Option<RwSignal<bool, LocalStorage>>,
     #[prop(optional)] paths: Option<Signal<Arc<[super::flight3::Path3]>, LocalStorage>>,
@@ -30,13 +31,16 @@ pub fn TerrainView(
     #[prop(optional)] time: Option<Signal<Option<f64>, LocalStorage>>,
     #[prop(optional)] on_pick: Option<super::flight3::Pick>,
     #[prop(optional)] on_hover: Option<super::hover::Changed>,
+    /// Share resolved terrain with screen-space annotations.
+    #[prop(optional)]
+    on_scene: Option<zgui::reactive::UnsyncCallback<Arc<Scene>, ()>>,
     /// True while a pointer drag moves the view.
     #[prop(optional)]
     dragging: Option<RwSignal<bool, LocalStorage>>,
     #[prop(default = 2)] demand_owner: u64,
     #[prop(default = true)] show_help: bool,
 ) -> impl IntoView {
-    let provider = provider.unwrap_or_else(|| RwSignal::new_local(Provider::OpenStreetMap));
+    let provider = provider.unwrap_or_else(|| RwSignal::new_local(Provider::default()));
     let offline = offline.unwrap_or_else(|| RwSignal::new_local(false));
     let paths = paths.unwrap_or_else(|| Signal::stored_local(Arc::from([])));
     let time = time.unwrap_or_else(|| Signal::stored_local(None));
@@ -87,6 +91,9 @@ pub fn TerrainView(
         provider.expand_tiles(selected)
     });
     let raster_coverage = Memo::new(move |_| {
+        if !basemap.get() {
+            return Vec::new();
+        }
         let camera = terrain_camera.get();
         let orbit = orbit.get();
         let size = size.get();
@@ -148,6 +155,9 @@ pub fn TerrainView(
         view.screen_first(camera, size.get_untracked(), &mut rasters);
         view.screen_first(camera, size.get_untracked(), &mut elevations);
         rasters.truncate(768);
+        if !basemap.get_untracked() {
+            rasters.clear();
+        }
         let mut anchors = vec![super::flight3::anchor_tile(
             terrain_camera.get_untracked().center,
         )];
@@ -173,6 +183,7 @@ pub fn TerrainView(
         provider.track();
         offline.track();
         paths.track();
+        basemap.track();
         demand_throttle.run(request);
     });
     // Resolve lazily with current coverage before submitting its matching camera.
@@ -181,21 +192,37 @@ pub fn TerrainView(
         service.revision.get();
         let (ids, raster_ids, paths) = (coverage.get(), raster_coverage.get(), paths.get());
         let _profile = crate::frame_profile::section("map.scene");
-        let mut frame = Scene::resolve(
-            service,
-            &ids,
-            &raster_ids,
-            previous.as_deref().unwrap_or(&Scene::default()),
-            terrain_camera.get(),
-            orbit.get(),
-            size.get(),
-            provider.get(),
-        )
+        let empty = Scene::default();
+        let previous = previous.as_deref().unwrap_or(&empty);
+        let mut frame = if basemap.get() {
+            Scene::resolve(
+                service,
+                &ids,
+                &raster_ids,
+                previous,
+                terrain_camera.get(),
+                orbit.get(),
+                size.get(),
+                provider.get(),
+            )
+        } else {
+            Scene::grid(
+                service,
+                &ids,
+                previous,
+                terrain_camera.get(),
+                provider.get(),
+            )
+        }
         .with_paths(service, paths);
         frame.colors = colors.get();
         frame.ground_projection = ground_projection.get();
         (Arc::new(frame), true)
     });
+    if let Some(changed) = on_scene {
+        let annotations = RenderEffect::new(move |_| changed.run(scene.get()));
+        on_cleanup_local(move || drop(annotations));
+    }
     let render = RenderEffect::new(move |_| {
         let frame = scene.get();
         let current = time.get();

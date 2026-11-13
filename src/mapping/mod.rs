@@ -3,6 +3,7 @@ mod camera;
 mod color_legend;
 pub(crate) mod color_paths;
 pub(crate) mod color_settings;
+pub(crate) mod display_options;
 pub(crate) mod export;
 mod fit3;
 pub(crate) mod flight;
@@ -16,6 +17,8 @@ mod gradient_stop;
 mod ground_mesh;
 mod ground_path;
 mod hover;
+mod layer_option;
+pub(crate) mod legend;
 mod measure;
 mod modes;
 pub mod preview;
@@ -29,7 +32,9 @@ mod terrain_view;
 mod throttle;
 mod tiles;
 mod toolbar;
+pub(crate) mod trace_controls;
 mod trace_detail;
+mod trace_markers;
 pub(crate) mod trace_quick;
 
 #[cfg(test)]

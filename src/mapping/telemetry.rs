@@ -348,7 +348,7 @@ pub fn prepare_styled(
     output
 }
 pub fn install(workbench: Workbench, pane: Pane) -> Signal<Arc<Coloring>, LocalStorage> {
-    let output = RwSignal::new_local(Arc::new(Coloring::default()));
+    let output = pane.map_colors;
     let generation = StoredValue::new_local(0_u64);
     let settings = Memo::new(move |_| {
         pane.trajectory.with(|s| {

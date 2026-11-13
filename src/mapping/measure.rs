@@ -1,7 +1,8 @@
 //! Two-click distance, bearing and, between samples, timing along the flight.
 use super::{
     camera::{Camera, geographic},
-    hover::Hit,
+    hover::{Hit, Projection},
+    terrain::{Orbit, Scene},
 };
 use crate::{state::Pane, trajectory::Tracks};
 use zgui::prelude::*;
@@ -93,8 +94,9 @@ pub fn readout(a: Mark, b: Mark, data: Option<&Tracks>) -> Vec<String> {
     lines
 }
 
-/// Line, ends and readout. The line is drawn only in 2D; 3D shows the readout.
+/// Line, ends and readout, projected through the active 2D or 3D camera.
 #[component]
+#[allow(clippy::too_many_arguments)] // Independent component props.
 pub fn MeasureView(
     pane: Pane,
     marks: RwSignal<Vec<Mark>, LocalStorage>,
@@ -102,44 +104,83 @@ pub fn MeasureView(
     camera: RwSignal<Camera, LocalStorage>,
     size: Memo<[f64; 2]>,
     terrain: Memo<bool>,
+    orbit: RwSignal<Orbit, LocalStorage>,
+    scene: RwSignal<Option<std::sync::Arc<Scene>>, LocalStorage>,
+    #[prop(optional)] preview: Option<Signal<Option<Mark>, LocalStorage>>,
 ) -> impl IntoView {
+    let displayed = Memo::new(move |_| {
+        let mut displayed = marks.get();
+        if displayed.len() == 1
+            && let Some(mark) = preview.and_then(|preview| preview.get())
+        {
+            displayed.push(mark);
+        }
+        displayed
+    });
     let screen = move |mark: Mark| {
         let size = size.get();
         let g = Camera::geometry(size)?;
+        if terrain.get() {
+            let scene = scene.get()?;
+            return Projection::new(&scene, camera.get(), orbit.get(), size)
+                .point([mark.point[0], mark.point[1], mark.elevation?], 0.)
+                .map(|(point, _)| point);
+        }
         let ranges = camera.get().ranges(size);
         Some([g.x(mark.point[0], ranges.x), g.y(mark.point[1], ranges.y)])
     };
     let ends = Memo::new(move |_| {
-        if terrain.get() {
+        if !measuring.get() {
             return Vec::new();
         }
-        marks
-            .get()
-            .into_iter()
-            .filter_map(screen)
-            .collect::<Vec<_>>()
+        displayed.get().into_iter().map(screen).collect::<Vec<_>>()
     });
-    let lines = Memo::new(move |_| match marks.get().as_slice() {
+    let lines = Memo::new(move |_| match displayed.get().as_slice() {
         [a, b] => pane
             .trajectory_data
             .with(|data| readout(*a, *b, data.as_deref())),
         [_] => vec!["Click the second point".into()],
         _ => vec!["Click two points · clicks snap to samples".into()],
     });
+    let readout_host = NodeRef::new();
+    let readout_bounds = readout_host.observe_border_box();
+    let readout_position = Memo::new(move |_| {
+        let [w, h] = size.get();
+        let bounds = readout_bounds.get();
+        let [rw, rh] = bounds.map_or([0., 0.], |b| {
+            [
+                f64::from(b.size.width.0 / readout_host.scale()),
+                f64::from(b.size.height.0 / readout_host.scale()),
+            ]
+        });
+        let point = ends.with(|ends| match ends.as_slice() {
+            [Some(a), Some(b)] => [(a[0] + b[0]) / 2. + 10., (a[1] + b[1]) / 2. - 8.],
+            _ => [10., h - rh - 10.],
+        });
+        [
+            point[0].clamp(10., (w - rw - 10.).max(10.)),
+            point[1].clamp(10., (h - rh - 10.).max(10.)),
+        ]
+    });
     view! {if move ||measuring.get() {
         column(class="map-measure",a11y:role=Role::Status) {
-            if move ||ends.with(|ends|ends.len()==2) {
-                vector(class="map-measure-line",prop:viewBox=move ||{let [w,h]=size.get();PropValue::from(format!("0 0 {w} {h}"))},
-                    prop:d=move ||PropValue::from(ends.with(|e|format!("M {} {} L {} {}",e[0][0],e[0][1],e[1][0],e[1][1]))),a11y:hidden=true)
+            text(class="map-measure-banner") {"Click two points · snaps to samples · M or Esc to finish"}
+            if move ||ends.with(|ends|matches!(ends.as_slice(), [Some(_), Some(_)])) {
+                vector(class="map-measure-line",prop:svg=move ||PropValue::from(ends.with(|e|match e.as_slice(){
+                    [Some(a),Some(b)]=>{let [w,h]=size.get();format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}"><path d="M {} {} L {} {}" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="6 4"/></svg>"##,a[0],a[1],b[0],b[1])},
+                    _=>String::new()})),a11y:hidden=true)
             }
             for index in move ||0..ends.with(Vec::len),key=|index|*index {
-                box(class="map-measure-end",style:left=move ||ends.with(|e|e.get(index).map(|p|format!("{}px",p[0]))),style:top=move ||ends.with(|e|e.get(index).map(|p|format!("{}px",p[1])))) {}
+                if move ||ends.with(|e|e.get(index).is_some_and(Option::is_some)) {
+                    box(class="map-measure-end",style:left=move ||ends.with(|e|e.get(index).copied().flatten().map(|p|format!("{}px",p[0]))),style:top=move ||ends.with(|e|e.get(index).copied().flatten().map(|p|format!("{}px",p[1])))) {}
+                }
             }
-            column(class="map-measure-readout") {
+            if move ||displayed.with(|marks|marks.len()==2) {
+            column(class="map-measure-readout",node_ref=readout_host,style:left=move ||Some(format!("{}px",readout_position.get()[0])),style:top=move ||Some(format!("{}px",readout_position.get()[1]))) {
                 for line in move ||lines.get().into_iter().enumerate().collect::<Vec<_>>(),key=|line|line.clone() {
                     text {{line.1}}
                 }
-                text(class="map-measure-hint") {"M or Esc to finish"}
+            }
             }
         }
     }}

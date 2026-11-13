@@ -86,6 +86,7 @@ pub(crate) fn fixture() -> (Vec<Line>, Spec, Arc<Tracks>) {
         local: Some(super::super::flight::LocalFrame {
             origin: Some([0., 0.]),
             at_first: false,
+            north_first: false,
         }),
         map: Some(Default::default()),
         altitudes: BTreeMap::from([(

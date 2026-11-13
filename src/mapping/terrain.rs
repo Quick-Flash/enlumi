@@ -176,6 +176,51 @@ impl Tile {
     }
 }
 impl Scene {
+    /// Terrain with a generated grid texture; needs DEMs but no basemap downloads.
+    pub fn grid(
+        service: Service,
+        ids: &[TileId],
+        previous: &Self,
+        camera: Camera,
+        provider: Provider,
+    ) -> Self {
+        static GRID: std::sync::OnceLock<Arc<Payload>> = std::sync::OnceLock::new();
+        let grid = GRID.get_or_init(|| {
+            Arc::new(Payload::Raster(super::tiles::Raster {
+                version: u64::MAX,
+                encoded: Vec::new(),
+                width: 64,
+                height: 64,
+                rgba: (0..64 * 64)
+                    .flat_map(|index| {
+                        if index % 64 % 8 == 0 || index / 64 % 8 == 0 {
+                            [40, 54, 47, 255]
+                        } else {
+                            [23, 33, 29, 255]
+                        }
+                    })
+                    .collect(),
+            }))
+        });
+        let tiles = ids
+            .iter()
+            .filter_map(|&id| {
+                ancestors(id).rev().find_map(|dem_id| {
+                    service
+                        .payload_untracked(Key::elevation(dem_id))
+                        .map(|elevation| Tile {
+                            id,
+                            dem_id,
+                            raster_id: id,
+                            provider,
+                            raster: Some(grid.clone()),
+                            elevation: Some(elevation),
+                        })
+                })
+            })
+            .collect();
+        Self::assembled(tiles, previous, camera, service.revision.get_untracked())
+    }
     #[allow(clippy::too_many_arguments)] // View and selection inputs.
     pub fn resolve(
         service: Service,
@@ -935,6 +980,7 @@ mod retention_tests {
             marker: plot::plot_data::MarkerShape::Circle,
             local: true,
             arrows: false,
+            arrow_color: crate::trajectory::arrow_color(),
             modes: std::sync::Arc::from([]),
         };
         let mut scene = Scene {

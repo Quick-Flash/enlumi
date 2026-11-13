@@ -1,12 +1,4 @@
-use super::{gradient_legend_row::GradientLegendRowProps, telemetry::Coloring};
-use std::sync::Arc;
-use zgui::prelude::*;
-#[component]
-pub fn ColorLegend(colors: Signal<Arc<Coloring>, LocalStorage>) -> impl IntoView {
-    view! {if move ||colors.with(|colors|!colors.scales.is_empty()) {
-        column(class="map-color-legend") {for id in move ||colors.with(|colors|colors.scales.keys().copied().collect::<Vec<_>>()),key=|id|*id {GradientLegendRow(colors=colors,id=id)}}
-    }}
-}
+use super::telemetry::Coloring;
 pub fn svg(colors: &Coloring, w: f64, h: f64) -> String {
     let escape = |s: &str| {
         s.replace('&', "&amp;")

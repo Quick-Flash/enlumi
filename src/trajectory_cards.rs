@@ -2,6 +2,7 @@
 use crate::{
     action_button::ActionButtonProps,
     mapping::settings::{AltitudeOptionsProps, target, update},
+    mapping::trace_controls::TraceColorControlsProps,
     state::{Pane, Workbench},
     trajectory::Pair,
     trajectory_axes::{
@@ -57,7 +58,15 @@ fn summary(workbench: Workbench, pane: Pane, index: usize) -> (String, String) {
         if source.is_empty() {
             "—".to_owned()
         } else {
-            workbench.field_name(source)
+            target(workbench, pane)
+                .lines
+                .with(|lines| {
+                    lines
+                        .iter()
+                        .find(|line| line.source == source)
+                        .map(|line| line.name.clone())
+                })
+                .unwrap_or_else(|| workbench.field_name(source))
         }
     };
     let title = if pair.y.is_empty() && pair.x.is_empty() {
@@ -100,18 +109,47 @@ fn summary(workbench: Workbench, pane: Pane, index: usize) -> (String, String) {
             }
         ));
     }
-    (title, detail)
+    let actual = target(workbench, pane);
+    let id = actual.lines.with(|lines| {
+        lines
+            .iter()
+            .find(|line| line.source == pair.y)
+            .map(|line| line.id)
+    });
+    detail.push_str(
+        match crate::mapping::trace_controls::appearance(actual, id, Some(&pair.y)).mode {
+            crate::trace_color::Mode::Solid => " · solid",
+            crate::trace_color::Mode::Speed => " · speed",
+            crate::trace_color::Mode::Height => " · altitude",
+            crate::trace_color::Mode::Field => " · field",
+        },
+    );
+    (crate::mapping::legend::trace_name(&title), detail)
 }
 
 #[component]
 pub fn TrajectorySetup(workbench: Workbench, pane: Pane) -> impl IntoView {
+    install_stylesheet("enlumi-trajectory", include_str!("trajectory.css"));
+    install_stylesheet("enlumi-map", include_str!("mapping/preview.css"));
     let builder = workbench.trajectory_builder();
     let is_map = Memo::new(move |_| {
         pane.trajectory
             .with(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
     });
-    let closed = RwSignal::new_local(BTreeSet::<usize>::new());
-    view! {column(class="trajectory-setup-page"){
+    let closed = RwSignal::new_local(pane.trajectory.with_untracked(|spec| {
+        spec.as_ref()
+            .filter(|spec| spec.map.is_some())
+            .map(|spec| {
+                spec.pairs()
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, pair)| pair.local.is_none() && !pair.y.is_empty())
+                    .map(|(index, _)| index)
+                    .collect::<BTreeSet<_>>()
+            })
+            .unwrap_or_default()
+    }));
+    view! {column(class="trajectory-setup-page",class:map-trace-setup=move ||is_map.get()){
         row(class="trajectory-setup-heading"){
             column(class="trajectory-heading-copy"){text(class="heading"){{move ||if is_map.get(){"Map traces"}else{"2D traces"}}}text(class="trajectory-setup-caption"){"Drag a finished trace onto a plot"}}
             ActionButton(icon=true,class="trajectory-close-builder",a11y:label="Close plot setup",on:click=move |_|builder.open.set(false)){
@@ -119,10 +157,10 @@ pub fn TrajectorySetup(workbench: Workbench, pane: Pane) -> impl IntoView {
             }
         }
         scroll(class="trajectory-setup-pairs",node_ref=builder.area){
-            for index in move ||row_indices(pane),key=|index|*index{
+            for index in move ||row_indices(pane).into_iter().filter(|index|!is_map.get()||pair(pane,*index).is_some_and(|pair|!pair.x.is_empty()||!pair.y.is_empty())).collect::<Vec<_>>(),key=|index|*index{
                 TraceCard(workbench=workbench,pane=pane,index=index,closed=closed,map_mode=is_map)
             }
-            if move ||is_map.get() {ColorFieldSlot(workbench=workbench,pane=pane)}
+            if move ||is_map.get() {text(class="map-add-trace") {"Drop a field here or on the map to start a trace. Matching lat/lon/alt or x/y/z fields fill in automatically."}}
         }
         text(class="trajectory-setup-hint"){{move ||if is_map.get(){"Drop one field from a GPS or position topic; its partners fill in. Drop a card on a map to add the trace."}else{"Drop on a 2D plot to add a trace, or a time plot to create one."}}}
     }}
@@ -140,6 +178,23 @@ fn TraceCard(
     let filled =
         Memo::new(move |_| pair(pane, index).is_some_and(|p| !p.x.is_empty() || !p.y.is_empty()));
     let local = Memo::new(move |_| pair(pane, index).is_some_and(|p| p.local.is_some()));
+    let north_first = Memo::new(move |_| {
+        pair(pane, index)
+            .and_then(|pair| pair.local)
+            .is_some_and(|frame| frame.north_first)
+    });
+    let actual = target(workbench, pane);
+    let color_source =
+        Signal::derive_local(move || pair(pane, index).map(|pair| pair.y).unwrap_or_default());
+    let selected = Signal::derive_local(move || {
+        let source = pair(pane, index)?.y;
+        actual.lines.with(|lines| {
+            lines
+                .iter()
+                .find(|line| line.source == source)
+                .map(|line| line.id)
+        })
+    });
     let swatch = Signal::derive_local(move || {
         let source = pair(pane, index)?.y;
         let id = pane
@@ -153,21 +208,36 @@ fn TraceCard(
         let [r, g, b, _] = target(workbench, pane).plot.style(&id.to_string()).color;
         Some(format!("#{r:02x}{g:02x}{b:02x}"))
     });
-    view! {column(class="trace-card",class:trace-card-open=move ||open.get()) {
+    view! {column(class="trace-card",class:trace-card-open=move ||open.get(),class:trace-card-map=move ||map_mode.get()) {
         row(class="trace-card-summary",on:click=move |_|closed.update(|c|{if !c.remove(&index){c.insert(index);}})) {
-            vector(class="trace-card-chevron",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if open.get(){CHEVRON_OPEN}else{CHEVRON_CLOSED}),a11y:hidden=true)
+            PairDrag(workbench=workbench,pane=pane,index=index,compact=true)
             box(class="trace-card-swatch",class:trace-card-swatch-empty=move ||swatch.get().is_none(),style:background=move ||swatch.get()) {}
             column(class="trace-card-name") {
                 text(class="trace-card-title") {{move ||summary(workbench,pane,index).0}}
                 text(class="trace-card-detail") {{move ||summary(workbench,pane,index).1}}
             }
+            vector(class="trace-card-chevron",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if open.get(){CHEVRON_OPEN}else{CHEVRON_CLOSED}),a11y:hidden=true)
         }
         if move ||open.get() {
             column(class="trace-card-body") {
                 row(class="trace-card-group-title") {
                     text {"Position"}
                     if move ||map_mode.get() && !local.get() {UnitBadge(workbench=workbench,pane=pane,index=index)}
+                    if move ||map_mode.get() && local.get() {text(class="trace-card-badge") {"metres detected"}}
                 }
+                if move ||map_mode.get() {
+                    if move ||north_first.get() {
+                        row(class="trace-map-slot") {text(class="trace-map-axis") {"N (x)"} AxisSlot(workbench=workbench,pane=pane,index=index,y=true)}
+                    }else{
+                        row(class="trace-map-slot") {text(class="trace-map-axis") {{move ||if local.get(){"E (x)"}else{"Lon"}}} AxisSlot(workbench=workbench,pane=pane,index=index,y=false)}
+                    }
+                    row(class="trace-map-swap") {ActionButton(class="trace-map-swap-button",on:click=move |_|workbench.swap_trajectory_pair(pane,index)) {"⇅ Swap"}}
+                    if move ||north_first.get() {
+                        row(class="trace-map-slot") {text(class="trace-map-axis") {"E (y)"} AxisSlot(workbench=workbench,pane=pane,index=index,y=false)}
+                    }else{
+                        row(class="trace-map-slot") {text(class="trace-map-axis") {{move ||if local.get(){"N (y)"}else{"Lat"}}} AxisSlot(workbench=workbench,pane=pane,index=index,y=true)}
+                    }
+                }else{
                 row(class="trajectory-axis-headings"){text{{move ||if !map_mode.get(){"X axis"}else if local.get(){"East (X)"}else{"Longitude"}}}text{{move ||if !map_mode.get(){"Y axis"}else if local.get(){"North (Y)"}else{"Latitude"}}}}
                 row(class="trajectory-pair-inputs"){
                     AxisSlot(workbench=workbench,pane=pane,index=index,y=false)
@@ -179,14 +249,25 @@ fn TraceCard(
                         }
                     }
                 }
+                }
                 if move ||map_mode.get() && filled.get() {
                     MapUnits(workbench=workbench,pane=pane,index=index)
+                    if move ||local.get() {row(class="trace-card-segment") {
+                        text(class="trace-card-label") {"Axes"}
+                        ActionButton(class="trace-axes-ned",class:setting-active=move ||north_first.get(),on:click=move |_|edit_local(workbench,pane,index,|frame|frame.north_first=true)) {"NED · x north"}
+                        ActionButton(class="trace-axes-enu",class:setting-active=move ||!north_first.get(),on:click=move |_|edit_local(workbench,pane,index,|frame|frame.north_first=false)) {"ENU · x east"}
+                    }}
                     if move ||local.get() {StartLocation(workbench=workbench,pane=pane,index=index)}
                     AltitudeOptions(workbench=workbench,pane=pane,index=index,force=true)
+                    column(class="trace-card-group") {
+                        row(class="trace-card-group-title") {text {"Color"}}
+                        TraceColorControls(workbench=workbench,pane=actual,selected=selected,source=Some(color_source))
+                        if move ||crate::mapping::trace_controls::appearance(actual,selected.get(),Some(&color_source.get())).mode==crate::trace_color::Mode::Field {ColorFieldSlot(workbench=workbench,pane=pane,index=index)}
+                    }
                 }
             }
         }
-        if move ||pair(pane,index).is_some_and(|p|!p.x.is_empty() && !p.y.is_empty()) {
+        if move ||open.get() && pair(pane,index).is_some_and(|p|!p.x.is_empty() && !p.y.is_empty()) {
             PairDrag(workbench=workbench,pane=pane,index=index)
         }
     }}
@@ -279,17 +360,33 @@ fn edit_local(
 }
 
 /// First valid fix of a geographic trace on the map being edited.
-fn gps_start(workbench: Workbench, pane: Pane) -> Option<[f64; 2]> {
-    target(workbench, pane).trajectory_data.with(|data| {
-        data.as_ref()?.traces.iter().find_map(|trace| {
-            trace
-                .track
-                .geographic
-                .as_ref()?
-                .iter()
-                .find(|p| p.iter().all(|v| v.is_finite()))
-                .copied()
-        })
+fn gps_starts(workbench: Workbench, pane: Pane) -> Vec<(u64, String, [f64; 2])> {
+    let actual = target(workbench, pane);
+    actual.trajectory_data.with(|data| {
+        data.as_ref()
+            .map(|data| {
+                data.traces
+                    .iter()
+                    .filter_map(|trace| {
+                        let origin = trace
+                            .track
+                            .geographic
+                            .as_ref()?
+                            .iter()
+                            .find(|p| p.iter().all(|v| v.is_finite()))
+                            .copied()?;
+                        let name = actual.lines.with(|lines| {
+                            lines
+                                .iter()
+                                .find(|line| line.id == trace.id)
+                                .map(|line| crate::mapping::legend::trace_name(&line.name))
+                                .unwrap_or_else(|| "GPS".into())
+                        });
+                        Some((trace.id, name, origin))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     })
 }
 
@@ -307,9 +404,24 @@ fn parse_lat_lon(text: &str) -> Option<[f64; 2]> {
 fn StartLocation(workbench: Workbench, pane: Pane, index: usize) -> impl IntoView {
     let frame = Memo::new(move |_| pair(pane, index).and_then(|p| p.local).unwrap_or_default());
     let saved = RwSignal::new_local(crate::preferences::DefaultMapStart::user().load());
-    let draft = RwSignal::new_local(String::new());
+    let draft = RwSignal::new_local(
+        frame
+            .get_untracked()
+            .origin
+            .map_or_else(String::new, |[lon, lat]| format!("{lat:.6}, {lon:.6}")),
+    );
+    let method = RwSignal::new_local(
+        if frame.get_untracked().origin.is_some()
+            && frame.get_untracked().origin != saved.get_untracked()
+        {
+            "coords"
+        } else {
+            "default"
+        },
+    );
     let error = RwSignal::new_local(String::new());
-    let gps = Memo::new(move |_| gps_start(workbench, pane));
+    let gps = Memo::new(move |_| gps_starts(workbench, pane));
+    let gps_selected = RwSignal::new_local(None::<u64>);
     let map_target = Signal::derive_local(move || {
         let target = target(workbench, pane);
         (target.id != 0
@@ -322,6 +434,7 @@ fn StartLocation(workbench: Workbench, pane: Pane, index: usize) -> impl IntoVie
         let check = crate::mapping::flight::LocalFrame {
             origin: Some(origin),
             at_first: true,
+            north_first: false,
         }
         .validate();
         match check {
@@ -347,11 +460,18 @@ fn StartLocation(workbench: Workbench, pane: Pane, index: usize) -> impl IntoVie
     view! {column(class="trace-card-group local-start") {
         row(class="trace-card-group-title") {text {"Start location"}}
         row(class="trace-card-segment") {
-            ActionButton(class="start-default",disabled=Signal::derive_local(move ||saved.get().is_none()),on:click=move |_|if let Some(origin)=saved.get_untracked(){set(origin);}) {"Default"}
-            ActionButton(class="start-gps",disabled=Signal::derive_local(move ||gps.get().is_none()),on:click=move |_|if let Some(origin)=gps.get_untracked(){set(origin);}) {"From GPS"}
-            ActionButton(class="start-map",disabled=Signal::derive_local(move ||map_target.with(Option::is_none)),on:click=move |_|if let (Some(target),Some(pair))=(map_target.get_untracked(),pair(pane,index)){target.map_origin_target.set(Some(pair.y));}) {"Click map"}
+            ActionButton(class="start-default",class:setting-active=move ||method.get()=="default",on:click=move |_|{method.set("default");if let Some(origin)=saved.get_untracked(){set(origin);}}) {"Default"}
+            ActionButton(class="start-gps",class:setting-active=move ||method.get()=="gps",disabled=Signal::derive_local(move ||gps.with(Vec::is_empty)),on:click=move |_|{method.set("gps");if let Some((id,_,origin))=gps.get_untracked().first(){gps_selected.set(Some(*id));set(*origin);}}) {"From GPS"}
+            ActionButton(class="start-map",class:setting-active=move ||method.get()=="map",disabled=Signal::derive_local(move ||map_target.with(Option::is_none)),on:click=move |_|{method.set("map");if let (Some(target),Some(pair))=(map_target.get_untracked(),pair(pane,index)){target.map_origin_target.set(Some(pair.y));}}) {"Click map"}
+            ActionButton(class="start-coordinates",class:setting-active=move ||method.get()=="coords",on:click=move |_|{method.set("coords");draft.set(frame.get_untracked().origin.map_or_else(String::new,|[lon,lat]|format!("{lat:.6}, {lon:.6}")));}) {"Lat, lon"}
         }
-        Input(class="start-lat-lon",value=draft,placeholder="Lat, lon — e.g. 47.397742, 8.545594",a11y:label="Start latitude and longitude",on:key_down=move |e|if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter){apply_draft();})
+        if move ||method.get()=="gps" {Select(value=Binding::controlled(Signal::derive_local(move ||gps_selected.get().map(|id|id.to_string()).unwrap_or_default()),move |value:String|{
+            if let Ok(id)=value.parse::<u64>() && let Some((_,_,origin))=gps.get_untracked().into_iter().find(|choice|choice.0==id){gps_selected.set(Some(id));set(origin);}
+        })) {
+            SelectTrigger(class="start-gps-source",label="GPS start trace") {SelectValue()}
+            SelectContent {for choice in move ||gps.get(),key=|choice|choice.0 {SelectItem(value=choice.0.to_string()) {{format!("{} · first valid fix",choice.1)}}}}
+        }}
+        if move ||method.get()=="coords" {Input(class="start-lat-lon",value=draft,placeholder="47.397742, 8.545594",a11y:label="Start latitude and longitude",on:focus_out=move |_|apply_draft(),on:key_down=move |e|if e.key==zgui::vocab::Key::Named(zgui::vocab::NamedKey::Enter){apply_draft();})}
         text(class="trace-card-detail") {{move ||format!("Start: {}",coords(frame.get().origin))}}
         if move ||!error.get().is_empty() {text(class="trace-gradient-error",a11y:role=Role::Alert){{move ||error.get()}}}
         row(class="trace-card-segment") {
@@ -375,8 +495,19 @@ fn StartLocation(workbench: Workbench, pane: Pane, index: usize) -> impl IntoVie
 
 /// Map-wide field that traces in Field color mode are shaded by.
 #[component]
-fn ColorFieldSlot(workbench: Workbench, pane: Pane) -> impl IntoView {
+fn ColorFieldSlot(workbench: Workbench, pane: Pane, index: usize) -> impl IntoView {
     let builder = workbench.trajectory_builder();
+    let node = NodeRef::new();
+    builder.color_slots.update_value(|slots| {
+        slots.insert(index, node);
+    });
+    on_cleanup_local(move || {
+        builder.color_slots.update_value(|slots| {
+            if slots.get(&index) == Some(&node) {
+                slots.remove(&index);
+            }
+        })
+    });
     let source = Memo::new(move |_| {
         pane.trajectory.with(|s| {
             s.as_ref()
@@ -384,9 +515,9 @@ fn ColorFieldSlot(workbench: Workbench, pane: Pane) -> impl IntoView {
                 .unwrap_or_default()
         })
     });
-    view! {column(class="trace-card trace-card-open color-field-card") {
-        row(class="trace-card-group-title") {text {"Color field"} text(class="trace-card-detail") {"whole map"}}
-        column(class="trajectory-axis-slot color-field-slot",class:axis-slot-filled=move ||!source.get().is_empty(),class:axis-drop-active=move ||builder.color_hover.get(),node_ref=builder.color_slot) {
+    view! {row(class="trace-map-slot color-field-card") {
+        text(class="trace-map-axis") {"By"}
+        column(class="trajectory-axis-slot color-field-slot",class:axis-slot-filled=move ||!source.get().is_empty(),class:axis-drop-active=move ||builder.color_hover.get(),node_ref=node) {
             if move ||source.get().is_empty() {
                 text(class="trajectory-drop-label") {"Drop any field to color traces by it"}
             }
@@ -399,7 +530,6 @@ fn ColorFieldSlot(workbench: Workbench, pane: Pane) -> impl IntoView {
                 }
             }
         }
-        text(class="trace-card-detail") {"Traces use it when their legend color is set to the field."}
     }}
 }
 
@@ -565,6 +695,7 @@ pub(crate) fn add_map_trace(workbench: Workbench, pane: Pane, source: &str) -> O
             local: Some(crate::mapping::flight::LocalFrame {
                 origin: crate::preferences::DefaultMapStart::user().load(),
                 at_first: true,
+                north_first: true,
             }),
             x: found.x.clone(),
             y: found.y.clone(),
