@@ -74,6 +74,50 @@ impl Workbench {
         self.analysis().open.set(false);
         self.filters_open.set(false);
     }
+    pub(crate) fn plot_name(self, id: u64) -> String {
+        let map = self.find(id).is_some_and(|pane| {
+            pane.trajectory
+                .with(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+        });
+        self.profiles
+            .titles
+            .with(|titles| {
+                titles
+                    .get(&id)
+                    .filter(|name| !(map && name.as_str() == "Map"))
+                    .cloned()
+            })
+            .unwrap_or_else(|| format!("{} {id}", if map { "Map" } else { "Plot" }))
+    }
+    pub(crate) fn sync_map_traces(self) {
+        let builder = self.trajectory_builder();
+        let Some(target) = builder.target.get_untracked().and_then(|id| self.find(id)) else {
+            return;
+        };
+        if !target
+            .trajectory
+            .with_untracked(|s| s.as_ref().is_some_and(|s| s.map.is_some()))
+        {
+            return;
+        }
+        let Some(spec) = builder.pane.trajectory.get_untracked() else {
+            return;
+        };
+        for (index, pair) in spec
+            .pairs()
+            .into_iter()
+            .enumerate()
+            .filter(|(_, p)| !p.x.is_empty() && !p.y.is_empty())
+        {
+            if target
+                .trajectory
+                .with_untracked(|s| s.as_ref().and_then(|s| s.pairs().get(index).cloned()))
+                != Some(pair)
+            {
+                self.drop_trajectory_pair(index, target.id);
+            }
+        }
+    }
     pub fn drop_trajectory_pair(self, index: usize, target: u64) {
         let builder = self.trajectory_builder();
         let Some(pair) = builder
@@ -121,7 +165,8 @@ impl Workbench {
             && original.trajectory.with_untracked(Option::is_none);
         let pane = if same_mode
             || editing_regular
-            || (original.lines.with_untracked(Vec::is_empty)
+            || (map.is_none()
+                && original.lines.with_untracked(Vec::is_empty)
                 && original.analysis.with_untracked(Option::is_none))
         {
             original
@@ -188,6 +233,14 @@ impl Workbench {
             spec.local = pair.local;
             spec.gps_scale = pair.gps_scale;
         }
+        if let Some(name) = builder
+            .pane
+            .trajectory
+            .with_untracked(|s| s.as_ref()?.trace_names.get(&index).cloned())
+            && let Some(slot) = spec.pairs().iter().position(|pair| pair.y == incoming_y)
+        {
+            spec.trace_names.insert(slot, name);
+        }
         if let Some(altitude) = incoming_altitude
             && let Some(slot) = spec.pairs().iter().position(|pair| pair.y == incoming_y)
         {
@@ -201,15 +254,17 @@ impl Workbench {
         pane.trajectory.set(Some(spec.clone()));
         pane.trajectory_setup.set(false);
         workbench.activate(pane.id);
+        let name = if map.is_some() {
+            format!("Map {}", pane.id)
+        } else {
+            "2D plot".into()
+        };
         workbench.profiles.titles.update(|titles| {
-            titles.entry(pane.id).or_insert_with(|| {
-                if map.is_some() {
-                    "Map".into()
-                } else {
-                    "2D plot".into()
-                }
-            });
+            titles.entry(pane.id).or_insert(name);
         });
+        if map.is_some() && builder.target.get_untracked().is_none() {
+            builder.target.set(Some(pane.id));
+        }
         let available = workbench
             .panes()
             .get_untracked()
@@ -569,15 +624,20 @@ pub(crate) fn PairDrag(
     pane: Pane,
     index: usize,
     #[prop(default = false)] compact: bool,
+    #[prop(optional)] on_click: Option<UnsyncCallback<()>>,
 ) -> impl IntoView {
+    let moved = RwSignal::new_local(false);
     let actions = SeriesSourceActions {
-        on_move: UnsyncCallback::new(move |(x, y)| workbench.field_drag_move(x, y)),
+        on_move: UnsyncCallback::new(move |(x, y)| {
+            moved.set(workbench.drag.state.get_untracked().is_some_and(|s| s.3));
+            workbench.field_drag_move(x, y)
+        }),
         on_drop: UnsyncCallback::new(move |(source, x, y)| workbench.drop_fields(source, x, y)),
         on_cancel: UnsyncCallback::new(move |()| workbench.finish_field_drag()),
         on_finish: UnsyncCallback::new(move |()| workbench.finish_field_drag()),
     };
-    view! {column(class=if compact{"trajectory-pair-handle"}else{"trajectory-pair-drag"},class:pair-drag-handle=compact,class:pair-dragging=move ||workbench.drag.state.get().is_some_and(|drag|drag.0==format!("@trajectory/pair/{index}")),a11y:label="Drag X/Y pair onto a plot",on:click=move |e|e.stop_propagation()){
-        SeriesSource(id=Signal::derive_local(move ||pane.trajectory.with(|spec|spec.as_ref()?.pairs().get(index).filter(|pair|!pair.x.is_empty() && !pair.y.is_empty()).map(|_|format!("@trajectory/pair/{index}")))),label=Signal::stored_local("Drag X/Y pair onto a plot".to_owned()),count=Signal::stored_local(String::new()),selected=Signal::stored_local(false),drag=workbench.drag,actions=actions)
+    view! {column(class=if compact{"trajectory-pair-handle"}else{"trajectory-pair-drag"},class:pair-drag-handle=compact,class:pair-dragging=move ||workbench.drag.state.get().is_some_and(|drag|drag.0==format!("@trajectory/pair/{index}")),a11y:label="Drag trace onto a plot",on:pointer_down:capture=move |_|moved.set(false),on:click=move |e|{e.stop_propagation();if !moved.get_untracked()&&let Some(action)=on_click{action.run(());}}){
+        SeriesSource(id=Signal::derive_local(move ||pane.trajectory.with(|spec|spec.as_ref()?.pairs().get(index).filter(|pair|!pair.x.is_empty() && !pair.y.is_empty()).map(|_|format!("@trajectory/pair/{index}")))),label=Signal::stored_local("Drag trace onto a plot".to_owned()),count=Signal::stored_local(String::new()),selected=Signal::stored_local(false),drag=workbench.drag,actions=actions)
         vector(class="trajectory-grip-icon",prop:viewBox="0 0 16 20",prop:d="M5 4 L5 6 M11 4 L11 6 M5 9 L5 11 M11 9 L11 11 M5 14 L5 16 M11 14 L11 16",a11y:hidden=true)
         text(class="trajectory-pair-drag-label",a11y:hidden=true) {{move ||if workbench.drag.state.get().is_some_and(|drag|drag.0==format!("@trajectory/pair/{index}")){"Drop on a plot"}else{"Drag pair to a plot"}}}
         vector(class="trajectory-pair-arrow",prop:viewBox="0 0 16 16",prop:d="M13 8 H3 M7 4 L3 8 L7 12",a11y:hidden=true)
@@ -633,6 +693,13 @@ pub(crate) fn local_pair(pane: Pane, index: usize) -> Result<(), String> {
     pairs[index].fix.clear();
     pairs[index].local.get_or_insert_with(Default::default);
     store(pane, spec, pairs)
+}
+
+pub(crate) fn trace_field_source(source: &str) -> bool {
+    !source.starts_with("@trajectory/")
+        && !source.starts_with("@analysis/")
+        && crate::profile::identity::Drag::parse(source)
+            .is_none_or(|drag| matches!(drag.item, crate::profile::identity::Item::Field(_)))
 }
 
 #[cfg(test)]

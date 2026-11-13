@@ -173,3 +173,20 @@
 
 .map-trace-markers { flex: none; gap: 4px; }
 .map-legend-row .map-trace-remove.app-action.zui-button { width: 20px; min-width: 20px; padding: 2px; }
+
+.map-line-settings, .map-line-selection { flex: none; gap: 8px; min-width: 0; }
+.map-trace-markers { gap: 8px; }
+.map-setting-help { flex: none; color: var(--app-muted); font-size: var(--app-font-sm); line-height: 18px; white-space: normal; }
+.map-setting-toggle.app-action.zui-button[data-variant="ghost"], .map-arrow-color.zui-button { flex: none; height: auto; min-height: 32px; padding: 6px 10px; line-height: 18px; justify-content: flex-start; }
+.map-layers-column .map-setting-toggle.app-action.zui-button[data-variant="ghost"] { height: auto; min-height: 30px; padding: 5px 6px; line-height: 18px; }
+.map-line-settings > .state-tint-options { padding-top: 8px; border-top: 1px solid var(--app-border); }
+
+.map-trace-markers .map-arrow-color.zui-button[data-size] { height: auto; min-height: 32px; padding: 6px 10px; line-height: 18px; }
+
+.map-legend .legend-collapse.app-action.zui-button[data-variant="ghost"] { border: 0; background: transparent; box-shadow: none; }
+.map-legend-heading:hover { background: var(--app-hover); border-radius: var(--app-radius-sm); }
+.map-legend .legend-collapse.app-action.zui-button[data-variant="ghost"]:hover { background: transparent; }
+.map-legend .map-trace-summary { display: flex; flex: 1; min-width: 0; align-items: center; gap: 7px; min-height: 24px; padding: 3px; cursor: pointer; border: 0; background: transparent; }
+.map-legend-trace.legend-dragging { opacity: 0.45; }
+.map-legend-trace.legend-insert-before { border-top: 2px solid var(--app-accent); }
+.map-legend-trace.legend-insert-after { border-bottom: 2px solid var(--app-accent); }

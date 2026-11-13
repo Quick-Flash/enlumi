@@ -380,7 +380,7 @@ fn normal_map_renders_picks_time_reuses_geometry_and_handles_hide_reload_and_clo
         })).into_handler(move ||{
             provide_local_context(probe.clone());let workbench=Workbench::new();workbench.log.set(Some(log(0.)));
             let service=Service::new(super::super::TileConfig{cache:local.join("cache"),local:Some(local.clone()),network:false});workbench.map_tiles.set_value(Some(service));
-            let original=workbench.pane();let pane=workbench.add_plot(original.id,false,true);bind(workbench,pane,0,0);*saved.borrow_mut()=Some((workbench,pane,original,service));
+            let original=workbench.pane();let pane=workbench.add_plot(original.id,false,true);pane.trajectory.set(Some(Spec{map:Some(Config{provider:Provider::OpenStreetMap,..Default::default()}),..Default::default()}));let pane=bind(workbench,pane,0,0);*saved.borrow_mut()=Some((workbench,pane,original,service));
             view!{column(class="page workbench"){row(class="body"){PlotWorkspace(workbench=workbench)}}}
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
@@ -792,7 +792,7 @@ fn changing_position_source_ignores_pending_old_receiver_fields() {
     let workbench = window.scope.with(Workbench::new);
     workbench.log.set(Some(log(0.)));
     let pane = workbench.pane();
-    bind(workbench, pane, 0, 0);
+    let pane = bind(workbench, pane, 0, 0);
     bind(workbench, pane, 0, 1);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
     while pane.lines.with_untracked(|lines| lines.len() != 3) {
@@ -820,7 +820,7 @@ fn explicit_source(receiver: usize) -> Spec {
         ..Default::default()
     }
 }
-fn bind(workbench: Workbench, pane: Pane, index: usize, receiver: usize) {
+fn bind(workbench: Workbench, pane: Pane, index: usize, receiver: usize) -> Pane {
     workbench.new_flight_map();
     let builder = workbench.trajectory_builder();
     builder.pane.trajectory.set(Some(Spec {
@@ -839,6 +839,7 @@ fn bind(workbench: Workbench, pane: Pane, index: usize, receiver: usize) {
         builder.target.set(Some(pane.id));
     }
     workbench.drop_trajectory_pair(index, pane.id);
+    workbench.pane()
 }
 
 #[test]
@@ -862,11 +863,11 @@ fn map_builder_is_explicit_supports_multiple_traces_and_independent_maps() {
         .unwrap();
     assert!(blank.x.is_empty() && blank.y.is_empty());
     assert!(blank.map.is_some());
-    bind(workbench, first, 0, 0);
+    let first = bind(workbench, first, 0, 0);
     bind(workbench, first, 1, 1);
     assert_eq!(first.trajectory.get_untracked().unwrap().pairs().len(), 2);
     let second = workbench.add_plot(first.id, false, false);
-    bind(workbench, second, 0, 0);
+    let second = bind(workbench, second, 0, 0);
     assert!(second.trajectory.get_untracked().unwrap().map.is_some());
     assert_eq!(first.trajectory.get_untracked().unwrap().pairs().len(), 2);
     assert_eq!(second.trajectory.get_untracked().unwrap().pairs().len(), 1);
@@ -973,7 +974,7 @@ fn sidebar_z_binding_loads_arbitrary_field_without_creating_an_xy_pair() {
     let workbench = window.scope.with(Workbench::new);
     workbench.log.set(Some(log(0.)));
     let pane = workbench.pane();
-    bind(workbench, pane, 0, 0);
+    let pane = bind(workbench, pane, 0, 0);
     workbench.edit_trajectory(pane);
     let source = "sensor_gps/1/fix_type".to_owned();
     super::super::settings::bind_altitude(

@@ -318,8 +318,10 @@ fn vertices_layer(
             }
             if path.arrows && path.drawing.pattern != plot::line_draw::LinePattern::None {
                 let width = path.width.max(1.5);
-                for (_, segment) in arrow_segments(&path.points, scale, scale / camera.scale()) {
-                    let color = path.arrow_color;
+                for (index, segment) in arrow_segments(&path.points, scale, scale / camera.scale())
+                {
+                    let color =
+                        crate::trace_color::darker(scene.colors.color(path.id, index, path.color));
                     for point in segment {
                         let mut v = vertex(point, color);
                         v[7] = width;
@@ -381,20 +383,20 @@ fn vertices_layer(
                 b[7] = 1.;
                 vertices.extend([a, b]);
             }
-            let mut marker = vertex(point, [255, 215, 60, 255]);
-            marker[7] = 13.;
-            marker[8] = 6.;
-            vertices.extend([marker, marker]);
             if let Some(time) = scene.time
                 && let Some(chevron) =
                     heading_chevron(path, time, point, scale, scale / camera.scale())
             {
-                for point in chevron {
+                for point in chevron.into_iter().chain([point, chevron[1]]) {
                     let mut v = vertex(point, [255, 255, 255, 235]);
                     v[7] = 3.;
                     vertices.push(v);
                 }
             }
+            let mut marker = vertex(point, [255, 215, 60, 255]);
+            marker[7] = 13.;
+            marker[8] = 6.;
+            vertices.extend([marker, marker]);
         }
     }
     vertices
@@ -570,8 +572,7 @@ pub fn prepare(
             })
             .collect::<Vec<_>>();
         let mut origin = [trace.track.endpoints.0.x, trace.track.endpoints.0.y];
-        if altitude.local
-            && altitude.at_first
+        if altitude.zero_at_start()
             && let Some(first) = points
                 .iter()
                 .find(|p| p.iter().all(|v| v.is_finite()))
@@ -606,7 +607,7 @@ pub fn prepare(
             marker: colors
                 .get(&trace.id)
                 .map_or(plot::plot_data::MarkerShape::Circle, |style| style.0.marker),
-            local: altitude.local,
+            local: altitude.local && !altitude.local_zero,
             arrows: false,
             arrow_color: crate::trajectory::arrow_color(),
             modes: Arc::from([]),
@@ -731,16 +732,7 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
         let order = pane.legend_order.get();
         let emphasized = pane.plot.emphasized.get();
         let hidden = pane.plot.hidden.get();
-        let arrows = pane
-            .trajectory
-            .with(|spec| spec.as_ref().is_some_and(|spec| spec.arrows));
-        let mut paths = emphasize(
-            &output.get(),
-            &order,
-            &hidden,
-            emphasized.as_deref(),
-            arrows,
-        );
+        let mut paths = emphasize(&output.get(), &order, &hidden, emphasized.as_deref(), true);
         decorate(workbench, pane, &mut paths);
         let paths = match super::flight::highlight_window(workbench, pane) {
             Some(window) => highlight(&paths, window),
@@ -755,16 +747,11 @@ pub fn install(workbench: Workbench, pane: Pane) -> PreparedPaths {
 }
 /// Apply per-line marker appearance without re-aligning samples.
 fn decorate(workbench: Workbench, pane: Pane, paths: &mut Arc<[Path3]>) {
-    let fallback = pane.trajectory.with(|s| {
-        s.as_ref()
-            .map_or_else(crate::trajectory::arrow_color, |s| s.arrow_color)
-    });
     let modes = mode_changes(workbench, pane);
     for path in Arc::make_mut(paths) {
         let style = crate::trace_color::current(pane, Some(path.id));
-        let color = style.arrow_color.unwrap_or(fallback);
-        path.arrow_color = color;
-        path.arrow_color[3] = (u16::from(color[3]) * u16::from(path.color[3]) / 255) as u8;
+        path.arrows = crate::trace_color::arrows(pane, path.id);
+        path.arrow_color = crate::trace_color::darker(path.color);
         path.modes = if style.state_markers {
             modes.clone()
         } else {
@@ -1583,6 +1570,7 @@ mod tests {
                 scale: -0.001,
                 local: true,
                 at_first: true,
+                ..Default::default()
             },
         )]);
         let prepare_paths = |altitudes: &BTreeMap<String, Altitude>| {
@@ -1613,6 +1601,13 @@ mod tests {
         let absolute = prepare_paths(&altitudes);
         assert!(!absolute[0].local);
         assert_eq!(absolute[0].points[1][2], 1200.);
+        altitudes.get_mut("y").unwrap().local_zero = true;
+        let local = prepare_paths(&altitudes);
+        assert!(!local[0].local, "Local zero must not anchor to terrain");
+        assert!(local[0].points[0][2].is_nan());
+        assert_eq!(local[0].points[1][2], 0.);
+        assert_eq!(local[0].points[2][2], 10.);
+        assert_eq!(local[0].points[4][2], 20.);
     }
     #[test]
     fn altitude_aligns_to_xy_times_and_preserves_invalid_segments() {
@@ -1634,6 +1629,7 @@ mod tests {
                 scale: 0.001,
                 local: true,
                 at_first: false,
+                local_zero: false,
             },
         )]);
         let paths = prepare(

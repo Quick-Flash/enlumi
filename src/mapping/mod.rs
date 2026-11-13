@@ -19,6 +19,7 @@ mod ground_path;
 mod hover;
 mod layer_option;
 pub(crate) mod legend;
+pub(crate) mod line_settings;
 mod measure;
 mod modes;
 pub mod preview;
@@ -34,7 +35,7 @@ mod tiles;
 mod toolbar;
 pub(crate) mod trace_controls;
 mod trace_detail;
-mod trace_markers;
+pub(crate) mod trace_markers;
 pub(crate) mod trace_quick;
 
 #[cfg(test)]

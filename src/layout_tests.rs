@@ -4599,7 +4599,12 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
         [0.0; 8],
         "Slate should be sharp"
     );
-    for (theme, radius) in [("ember", 2.0), ("amethyst", 10.0), ("dune", 6.0)] {
+    for (theme, corner, radius) in [
+        ("ember", "subtle", 2.0),
+        ("amethyst", "extra-rounded", 10.0),
+        ("dune", "rounded", 6.0),
+    ] {
+        let previous = radii(&harness, &paints, "open-log");
         click_class(&mut harness, "theme-picker");
         click_class(&mut harness, &format!("theme-{theme}"));
         harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));
@@ -4613,6 +4618,21 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
             fill(&harness, &paints, "open-log"),
             fill(&harness, &paints, "filters-done"),
             "Buttons must stay uniform: {theme}"
+        );
+        assert_eq!(
+            radii(&harness, &paints, "open-log"),
+            previous,
+            "Color must preserve corner rounding"
+        );
+        let paint = fill(&harness, &paints, "open-log");
+        click_class(&mut harness, "corner-picker");
+        click_class(&mut harness, &format!("corners-{corner}"));
+        harness.deliver_to_first(pointer(PointerAction::Moved, 1490., 840.));
+        harness.settle(128);
+        assert_eq!(
+            fill(&harness, &paints, "open-log"),
+            paint,
+            "Corners must preserve colors"
         );
         assert!(
             radii(&harness, &paints, "open-log")
@@ -4636,8 +4656,8 @@ fn app_action_buttons_share_rendered_states_across_toolbar_and_filters() {
     );
     assert_eq!(
         radii(&harness, &paints, "open-log"),
-        [4.0; 8],
-        "Forest must restore its rounding"
+        [6.0; 8],
+        "Changing colors must preserve chosen rounding"
     );
     click_class(&mut harness, "sidebar-toggle");
     harness.deliver_to_first(pointer(PointerAction::Moved, 1490.0, 840.0));

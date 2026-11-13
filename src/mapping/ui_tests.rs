@@ -18,6 +18,14 @@ use zgui::{
 use zgui_platform_headless::Harness;
 
 fn click(harness: &mut Harness<zgui::runtime::Runtime>, class: &str, label: &str) {
+    click_with_modifiers(harness, class, label, Modifiers::NONE);
+}
+fn click_with_modifiers(
+    harness: &mut Harness<zgui::runtime::Runtime>,
+    class: &str,
+    label: &str,
+    modifiers: Modifiers,
+) {
     let window = &harness.app().windows()[0];
     let (scope, class) = class
         .split_once(' ')
@@ -41,6 +49,51 @@ fn click(harness: &mut Harness<zgui::runtime::Runtime>, class: &str, label: &str
         })
         .unwrap_or_else(|| panic!("Missing {class}: {label}"));
     let bounds = zgui::view::ViewHost::window_box(window.host().as_ref(), node).unwrap();
+    let scroll = window
+        .box_with_class("plot-settings-body")
+        .and_then(|body| {
+            let mut parent = window.dom().parent(node);
+            let mut inside = false;
+            while let Some(id) = parent {
+                if window.nodes_with_class("plot-settings-body").contains(&id) {
+                    inside = true;
+                    break;
+                }
+                parent = window.dom().parent(id);
+            }
+            if !inside {
+                return None;
+            }
+            let top = body.origin.y.0;
+            let bottom = top + body.size.height.0;
+            let delta = if bounds.origin.y.0 < top {
+                bounds.origin.y.0 - top - 8.
+            } else if bounds.origin.y.0 + bounds.size.height.0 > bottom {
+                bounds.origin.y.0 + bounds.size.height.0 - bottom + 8.
+            } else {
+                return None;
+            };
+            Some((body, delta))
+        });
+    if let Some((body, delta)) = scroll {
+        harness.deliver_to_first(SurfaceEvent::Wheel {
+            event: zgui::vocab::WheelEvent {
+                delta: zgui::vocab::ScrollDelta::Pixels(Size::new(CssPx(0.), CssPx(delta))),
+                phase: zgui::vocab::ScrollPhase::Moved,
+                position: Point::new(
+                    CssPx(body.origin.x.0 + body.size.width.0 / 2.),
+                    CssPx(body.origin.y.0 + body.size.height.0 / 2.),
+                ),
+                id: zgui::vocab::PointerId::MOUSE,
+                kind: zgui::vocab::PointerKind::Mouse,
+            },
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
+    let window = &harness.app().windows()[0];
+    let bounds = zgui::view::ViewHost::window_box(window.host().as_ref(), node).unwrap();
     for action in [PointerAction::Pressed, PointerAction::Released] {
         let mut event = PointerEvent::mouse(Point::new(
             CssPx(bounds.origin.x.0 + bounds.size.width.0 / 2.),
@@ -50,11 +103,51 @@ fn click(harness: &mut Harness<zgui::runtime::Runtime>, class: &str, label: &str
         harness.deliver_to_first(SurfaceEvent::Pointer {
             action,
             event,
-            modifiers: Modifiers::NONE,
+            modifiers,
             timestamp: Timestamp::ORIGIN,
         });
     }
     harness.settle(128);
+}
+fn drag_legend(harness: &mut Harness<zgui::runtime::Runtime>, source: &str, target: &str) {
+    let bounds = |name: &str| {
+        let window = &harness.app().windows()[0];
+        let node = window
+            .nodes_with_class("map-trace-summary")
+            .into_iter()
+            .find(|node| window.dom().text_content(*node) == name)
+            .unwrap();
+        zgui::view::ViewHost::window_box(window.host().as_ref(), node).unwrap()
+    };
+    let from = bounds(source);
+    let to = bounds(target);
+    for (action, x, y) in [
+        (
+            PointerAction::Pressed,
+            from.origin.x.0 + from.size.width.0 / 2.,
+            from.origin.y.0 + from.size.height.0 / 2.,
+        ),
+        (
+            PointerAction::Moved,
+            to.origin.x.0 + to.size.width.0 / 2.,
+            to.origin.y.0 + 2.,
+        ),
+        (
+            PointerAction::Released,
+            to.origin.x.0 + to.size.width.0 / 2.,
+            to.origin.y.0 + 2.,
+        ),
+    ] {
+        let mut event = PointerEvent::mouse(Point::new(CssPx(x), CssPx(y)));
+        event.button = (action != PointerAction::Moved).then_some(PointerButton::Primary);
+        harness.deliver_to_first(SurfaceEvent::Pointer {
+            action,
+            event,
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
 }
 fn settle_until(
     harness: &mut Harness<zgui::runtime::Runtime>,
@@ -112,6 +205,26 @@ fn map_trace_cards_use_demo_slots_axes_start_and_color_controls() {
     )));
     harness.settle(128);
     let (workbench, pane) = captured.borrow().unwrap();
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-arrows-editor")
+            .is_empty(),
+        "Map traces must not expose direction arrows"
+    );
+    click(&mut harness, "altitude-local-zero", "Local zero");
+    let altitude = pane.trajectory.get_untracked().unwrap().altitudes[&0].clone();
+    assert!(altitude.local_zero && altitude.zero_at_start() && !altitude.local);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("trace-card-detail")
+            .iter()
+            .any(|node| harness.app().windows()[0]
+                .dom()
+                .text_content(*node)
+                .contains("local zero"))
+    );
+    click(&mut harness, "altitude-amsl", "AMSL");
+    assert!(!pane.trajectory.get_untracked().unwrap().altitudes[&0].local_zero);
     let slot_box = |_h: &Harness<zgui::runtime::Runtime>, y| {
         let slot = pane.trajectory_slots.with_value(|slots| slots[&(0, y)]);
         let b = slot.window_bounds().unwrap();
@@ -212,6 +325,7 @@ fn map_trace_cards_use_demo_slots_axes_start_and_color_controls() {
     );
     let destination = workbench.pane();
     workbench.drop_trajectory_pair(0, destination.id);
+    let destination = workbench.pane();
     assert_eq!(
         destination.draft_trace_colors.get_untracked()["y"].mode,
         crate::trace_color::Mode::Speed
@@ -219,6 +333,7 @@ fn map_trace_cards_use_demo_slots_axes_start_and_color_controls() {
     pane.lines.set(columns);
     let destination = workbench.add_plot(destination.id, false, false);
     workbench.drop_trajectory_pair(0, destination.id);
+    let destination = workbench.pane();
     let id = destination
         .lines
         .with_untracked(|lines| lines.iter().find(|line| line.source == "y").unwrap().id);
@@ -495,6 +610,24 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
             < expanded.size.height.0
     );
     click(&mut harness, "plot-settings-trigger", "");
+    let window = &harness.app().windows()[0];
+    let selected = window.box_with_class("map-line-selection").unwrap();
+    let states = window.box_with_class("map-trace-states").unwrap();
+    let arrows = window.box_with_class("map-arrows-editor").unwrap();
+    assert!(selected.origin.y.0 + selected.size.height.0 <= states.origin.y.0);
+    assert!(states.origin.y.0 + states.size.height.0 <= arrows.origin.y.0);
+    assert!(states.size.height.0 >= 32. && arrows.size.height.0 >= 32.);
+    assert!(window.nodes_with_class("zui-checkbox").is_empty());
+    assert!(
+        window
+            .nodes_with_class("map-setting-help")
+            .iter()
+            .any(|node| window
+                .dom()
+                .text_content(*node)
+                .contains("Labeled dots when state band"))
+    );
+
     assert!(
         harness.app().windows()[0]
             .box_with_class("line-width")
@@ -509,46 +642,34 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
     click(&mut harness, "line-width", "");
     assert_ne!(pane.plot.style("2").width, width);
     click(&mut harness, "line-pattern", "Solid");
+    replace(&mut harness, "color-hex", "#123456");
+    assert_eq!(pane.plot.style("2").color, [18, 52, 86, 255]);
     click(&mut harness, "map-arrows-editor", "Direction arrows");
-    assert!(!pane.trajectory.get_untracked().unwrap().arrows);
+    assert!(!crate::trace_color::arrows(pane, 2));
+    assert!(pane.trajectory.get_untracked().unwrap().arrows);
     click(&mut harness, "map-arrows-editor", "Direction arrows");
-    click(&mut harness, "map-arrow-color", "Arrow color");
-    replace(&mut harness, "map-arrow-color-popup color-hex", "#12ABCD");
-    assert_eq!(
-        pane.trace_colors.get_untracked()[&2].arrow_color,
-        Some([18, 171, 205, 255])
-    );
-    key(
-        &mut harness,
-        zgui::vocab::KeyEvent::named(
-            zgui::vocab::NamedKey::Escape,
-            zgui::vocab::PhysicalKey::Unidentified(0),
-        ),
-    );
-    assert!(
-        harness.app().windows()[0]
-            .box_with_class("plot-settings-surface")
-            .is_some()
-    );
     click(&mut harness, "settings-done", "Done");
     click(&mut harness, "legend-collapse", "Legend");
+    click(&mut harness, "map-trace-summary", "y");
+    assert!(pane.plot.hidden.get_untracked().contains("2"));
     assert!(
         harness.app().windows()[0]
-            .nodes_with_class("map-place-start")
+            .nodes_with_class("map-legend-editor")
             .is_empty()
     );
     assert!(
         harness.app().windows()[0]
-            .nodes_with_class("map-trace-summary")
-            .len()
-            == 1
+            .nodes_with_class("map-trace-meta")
+            .is_empty()
     );
+    click(&mut harness, "map-trace-summary", "y");
+    assert!(!pane.plot.hidden.get_untracked().contains("2"));
     click(&mut harness, "map-layers", "");
-    assert!(pane.trajectory.get_untracked().unwrap().arrows);
-    click(&mut harness, "map-arrows", "Direction arrows");
-    assert!(!pane.trajectory.get_untracked().unwrap().arrows);
-    click(&mut harness, "map-arrows", "Direction arrows");
-    assert!(pane.trajectory.get_untracked().unwrap().arrows);
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-arrows")
+            .is_empty()
+    );
     click(&mut harness, "map-layer-option", "None (grid)");
     assert!(!map().basemap);
     click(&mut harness, "map-layer-option", "Esri World Imagery");
@@ -630,45 +751,29 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
     click(&mut harness, "map-mode-2d", "Map");
     assert_eq!(map().camera, Some(remembered));
     assert_eq!(map().camera_3d, fitted_3d);
-    click(&mut harness, "map-trace-summary", "y");
-    click(&mut harness, "map-trace-color-mode", "Speed");
-    assert_eq!(
-        pane.trace_colors.get_untracked()[&2].mode,
-        crate::trace_color::Mode::Speed
-    );
-    replace(&mut harness, "map-trace-color-low", "5");
-    replace(&mut harness, "map-trace-color-high", "50");
-    harness.deliver_to_first(SurfaceEvent::Key {
-        state: zgui::vocab::KeyState::Pressed,
-        event: zgui::vocab::KeyEvent::named(
+    click(&mut harness, "plot-settings-trigger", "");
+    click(&mut harness, "map-color-mode", "");
+    click(&mut harness, "zui-select__item", "Speed gradient");
+    replace(&mut harness, "trace-gradient-min", "5");
+    replace(&mut harness, "trace-gradient-max", "50");
+    key(
+        &mut harness,
+        zgui::vocab::KeyEvent::named(
             zgui::vocab::NamedKey::Enter,
             zgui::vocab::PhysicalKey::Unidentified(0),
         ),
-        modifiers: Modifiers::NONE,
-        timestamp: Timestamp::ORIGIN,
-    });
-    harness.settle(128);
+    );
     assert_eq!(pane.trace_colors.get_untracked()[&2].speed.range, [5., 50.]);
-    click(&mut harness, "map-trace-color-mode", "Altitude");
-    settle_until(&mut harness, |h| {
-        h.app().windows()[0]
-            .nodes_with_class("map-color-label")
-            .iter()
-            .any(|node| {
-                h.app().windows()[0]
-                    .dom()
-                    .text_content(*node)
-                    .contains("height (m)")
-            })
-    });
-    click(&mut harness, "map-trace-color-auto", "Auto");
+    click(&mut harness, "map-color-mode", "");
+    click(&mut harness, "zui-select__item", "Height gradient");
+    click(&mut harness, "trace-gradient-auto", "Auto");
     assert_eq!(
         pane.trace_colors.get_untracked()[&2].height.range,
         [100., 150.]
     );
-    assert_eq!(pane.trace_colors.get_untracked()[&2].speed.range, [5., 50.]);
-    click(&mut harness, "map-trace-color-mode", "Solid");
-    click(&mut harness, "map-trace-summary", "y");
+    click(&mut harness, "map-color-mode", "");
+    click(&mut harness, "zui-select__item", "Solid color");
+    click(&mut harness, "settings-done", "Done");
     pane.fit_axes(plot::interaction::Axes::BOTH);
     settle_until(&mut harness, |_| {
         observed.0.borrow().as_ref().is_some_and(|probe| {
@@ -686,10 +791,10 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
             .paths
             .with_untracked(|paths| paths
                 .values()
-                .all(|path| path.arrow_color() == [18, 171, 205, 255]))
+                .all(|path| path.arrow_color() == crate::trace_color::darker([18, 52, 86, 255])))
     );
-    click(&mut harness, "map-layers", "");
-    click(&mut harness, "map-arrows", "Direction arrows");
+    click(&mut harness, "plot-settings-trigger", "");
+    click(&mut harness, "map-arrows-editor", "Direction arrows");
     settle_until(&mut harness, |_| {
         observed.0.borrow().as_ref().is_some_and(|probe| {
             probe.paths.with_untracked(|paths| {
@@ -697,20 +802,8 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
             })
         })
     });
-    click(&mut harness, "map-arrows", "Direction arrows");
-    settle_until(&mut harness, |_| {
-        observed.0.borrow().as_ref().is_some_and(|probe| {
-            probe
-                .paths
-                .with_untracked(|paths| paths.values().any(|path| path.arrow_count() > 0))
-        })
-    });
-    click(&mut harness, "map-layers", "");
-    click(&mut harness, "map-trace-visibility", "");
-    assert!(pane.plot.hidden.get_untracked().contains("2"));
-    click(&mut harness, "map-trace-visibility", "");
-    assert!(!pane.plot.hidden.get_untracked().contains("2"));
-
+    click(&mut harness, "map-arrows-editor", "Direction arrows");
+    click(&mut harness, "settings-done", "Done");
     // A second line gets independent arrow color and state-marker visibility.
     let mut second = pane
         .lines
@@ -737,33 +830,43 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
         .unwrap(),
     )));
     harness.settle(128);
-    click(&mut harness, "map-trace-summary", "Second trace");
-    click(&mut harness, "map-arrow-color", "Arrow color");
-    replace(&mut harness, "map-arrow-color-popup color-hex", "#EE3344");
-    assert_eq!(
-        pane.trace_colors.get_untracked()[&5].arrow_color,
-        Some([238, 51, 68, 255])
-    );
-    assert_eq!(
-        pane.trace_colors.get_untracked()[&2].arrow_color,
-        Some([18, 171, 205, 255])
-    );
-    key(
-        &mut harness,
-        zgui::vocab::KeyEvent::named(
-            zgui::vocab::NamedKey::Escape,
-            zgui::vocab::PhysicalKey::Unidentified(0),
-        ),
-    );
+    let mut style = pane.plot.style("5");
+    style.color = [238, 51, 68, 255];
+    pane.plot.styles.update(|styles| {
+        styles.insert("5".into(), style);
+    });
     settle_until(&mut harness, |_| {
         observed.0.borrow().as_ref().is_some_and(|probe| {
             probe.paths.with_untracked(|paths| {
-                paths
-                    .get(&5)
-                    .is_some_and(|path| path.arrow_color() == [238, 51, 68, 255])
-                    && paths
-                        .get(&2)
-                        .is_some_and(|path| path.arrow_color() == [18, 171, 205, 255])
+                paths.get(&5).is_some_and(|p| {
+                    p.arrow_color() == crate::trace_color::darker([238, 51, 68, 255])
+                })
+            })
+        })
+    });
+    drag_legend(&mut harness, "Second trace", "y");
+    assert_eq!(&pane.legend_order.get_untracked()[..2], &[5, 2]);
+    let names = harness.app().windows()[0]
+        .nodes_with_class("map-trace-summary")
+        .iter()
+        .map(|node| harness.app().windows()[0].dom().text_content(*node))
+        .collect::<Vec<_>>();
+    assert_eq!(names[0], "Second trace");
+    drag_legend(&mut harness, "y", "Second trace");
+    assert_eq!(&pane.legend_order.get_untracked()[..2], &[2, 5]);
+    click(&mut harness, "map-trace-summary", "Second trace");
+    assert!(pane.plot.hidden.get_untracked().contains("5"));
+    click(&mut harness, "map-trace-summary", "Second trace");
+    assert!(!pane.plot.hidden.get_untracked().contains("5"));
+    click(&mut harness, "plot-settings-trigger", "");
+    click(&mut harness, "map-arrows-editor", "Direction arrows");
+    assert!(!crate::trace_color::arrows(pane, 5));
+    assert!(crate::trace_color::arrows(pane, 2));
+    settle_until(&mut harness, |_| {
+        observed.0.borrow().as_ref().is_some_and(|probe| {
+            probe.paths.with_untracked(|paths| {
+                paths.get(&5).is_some_and(|p| p.arrow_count() == 0)
+                    && paths.get(&2).is_some_and(|p| p.arrow_count() > 0)
             })
         })
     });
@@ -781,6 +884,63 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
             * 2,
         markers
     );
+    click(&mut harness, "map-line-choice", "y");
+    assert_eq!(pane.selected.get_untracked(), Some(2));
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-trace-states")
+            .iter()
+            .any(|node| harness.app().windows()[0]
+                .dom()
+                .text_content(*node)
+                .contains("on"))
+    );
+    click(&mut harness, "map-line-choice", "Second trace");
+    assert_eq!(pane.selected.get_untracked(), Some(5));
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-trace-states")
+            .iter()
+            .any(|node| harness.app().windows()[0]
+                .dom()
+                .text_content(*node)
+                .contains("off"))
+    );
+    click_with_modifiers(&mut harness, "map-line-choice", "y", Modifiers::CONTROL);
+    assert!(
+        harness.app().windows()[0]
+            .dom()
+            .text_content(harness.app().windows()[0].nodes_with_class("map-line-selection")[0])
+            .contains("2 lines selected")
+    );
+    assert!(
+        harness.app().windows()[0]
+            .dom()
+            .text_content(harness.app().windows()[0].nodes_with_class("map-arrows-editor")[0])
+            .contains("mixed")
+    );
+    click(&mut harness, "map-arrows-editor", "mixed");
+    assert!(crate::trace_color::arrows(pane, 2) && crate::trace_color::arrows(pane, 5));
+    click(&mut harness, "map-line-choice", "y");
+    click_with_modifiers(
+        &mut harness,
+        "map-line-choice",
+        "Second trace",
+        Modifiers::SHIFT,
+    );
+    assert!(
+        harness.app().windows()[0]
+            .dom()
+            .text_content(harness.app().windows()[0].nodes_with_class("map-line-selection")[0])
+            .contains("2 lines selected")
+    );
+    assert_eq!(
+        harness.app().windows()[0]
+            .dom()
+            .text_content(harness.app().windows()[0].nodes_with_class("settings-title")[0]),
+        format!("Map {} lines settings", pane.id)
+    );
+    click(&mut harness, "settings-done", "Done");
     let colors = pane.trace_colors.get_untracked();
     assert_eq!(
         serde_json::from_str::<std::collections::BTreeMap<u64, crate::trace_color::TraceColor>>(
@@ -789,11 +949,26 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
         .unwrap(),
         colors
     );
+    pane.trajectory.update(|s| {
+        s.as_mut().unwrap().trace_names =
+            std::collections::BTreeMap::from([(0, "Primary".into()), (1, "Backup".into())])
+    });
     workbench.edit_trajectory(pane);
+    workbench.trajectory_builder().pane.lines.update(|lines| {
+        for line in lines {
+            line.id += 1000;
+        }
+    });
+    harness.settle(128);
     click(&mut harness, "map-legend-trace map-trace-remove", "");
     assert_eq!(pane.view_lines.get_untracked().len(), 1);
     assert!(!pane.trace_colors.get_untracked().contains_key(&2));
     assert_eq!(pane.view_lines.get_untracked()[0].id, 5);
+    assert_eq!(pane.view_lines.get_untracked()[0].name, "Backup");
+    assert_eq!(
+        pane.trajectory.get_untracked().unwrap().trace_names[&0],
+        "Backup"
+    );
     assert_eq!(
         workbench
             .trajectory_builder()
@@ -816,6 +991,186 @@ fn toolbar_follow_camera_memory_and_color_picker_work_in_map() {
     assert_eq!(restored, spec);
 }
 
+#[test]
+fn map_trace_setup_edits_names_and_coordinates_live_and_keeps_map_after_source_close() {
+    use crate::{trajectory_cards::TrajectorySetupProps, workspace::PlotWorkspaceProps};
+    let directory = tempfile::tempdir().unwrap();
+    let local = directory.path().to_path_buf();
+    let captured = Rc::new(RefCell::new(None));
+    let saved = captured.clone();
+    let handler=app().with_size(1500.,900.).with_stylesheet(super::preview::stylesheet())
+        .with_renderer(Box::new(|_,target|{let mut renderer=zgui_testkit_scene::CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
+        .into_handler(move ||{
+            let workbench=Workbench::new();let source=workbench.pane();
+            workbench.new_flight_map();let builder=workbench.trajectory_builder();let (lines,spec,_)=super::telemetry::tests::fixture();builder.pane.lines.set(lines);builder.pane.trajectory.set(Some(spec));
+            workbench.map_tiles.set_value(Some(super::tiles::Service::new(super::tiles::Config{cache:local.join("cache"),local:Some(local.clone()),network:false})));
+            workbench.drop_trajectory_pair(0,source.id);let map=workbench.pane();
+            *saved.borrow_mut()=Some((workbench,source,map,builder));
+            view!{AppTheme(palette=crate::theme::Palette::Slate){row(class="page workbench",style:width="1500px",style:height="900px"){column(style:flex="1"){PlotWorkspace(workbench=workbench)}column(style:width="350px"){TrajectorySetup(workbench=workbench,pane=builder.pane)}}}}
+        }).unwrap();
+    let mut harness = Harness::new(handler.into_runtime());
+    harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
+        DevicePx(1500.),
+        DevicePx(900.),
+    )));
+    harness.settle(128);
+    let (workbench, source, map, builder) = captured.borrow().unwrap();
+    assert_ne!(source.id, map.id);
+    assert!(source.trajectory.get_untracked().is_none());
+    assert_eq!(
+        workbench.profiles.titles.get_untracked()[&map.id],
+        format!("Map {}", map.id)
+    );
+    assert_eq!(
+        reactive_graph::graph::untrack(|| workbench.plot_name(map.id)),
+        format!("Map {}", map.id)
+    );
+    assert_eq!(builder.target.get_untracked(), Some(map.id));
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-name-input")
+            .is_empty()
+    );
+    click(&mut harness, "trace-rename", "");
+    harness.advance(Duration::from_millis(17));
+    harness.settle(128);
+    assert!(
+        harness.platform().offscreens()[0]
+            .last_text_input()
+            .is_some_and(|area| area.is_some()),
+        "Rename must focus text input"
+    );
+    replace(&mut harness, "trace-name-input", "Survey route");
+    key(
+        &mut harness,
+        zgui::vocab::KeyEvent::named(
+            zgui::vocab::NamedKey::Enter,
+            zgui::vocab::PhysicalKey::Unidentified(0),
+        ),
+    );
+    assert_eq!(map.view_lines.get_untracked()[0].name, "Survey route");
+    assert_eq!(
+        builder.pane.trajectory.get_untracked().unwrap().trace_names[&0],
+        "Survey route"
+    );
+    assert!(
+        harness.app().windows()[0]
+            .nodes_with_class("map-trace-name")
+            .iter()
+            .any(|node| harness.app().windows()[0].dom().text_content(*node) == "Survey route")
+    );
+    let original = map.trajectory.get_untracked().unwrap();
+    assert_eq!(
+        serde_json::from_str::<crate::trajectory::Spec>(&serde_json::to_string(&original).unwrap())
+            .unwrap(),
+        original
+    );
+    // Press text/details, away from the old tiny grip, then drag without collapsing.
+    let summary = harness.app().windows()[0]
+        .box_with_class("trace-card-detail")
+        .unwrap();
+    let x = summary.origin.x.0 + summary.size.width.0 / 2.;
+    let y = summary.origin.y.0 + summary.size.height.0 / 2.;
+    for (action, px) in [(PointerAction::Pressed, x), (PointerAction::Moved, x - 30.)] {
+        let mut event = PointerEvent::mouse(Point::new(CssPx(px), CssPx(y)));
+        event.button = (action == PointerAction::Pressed).then_some(PointerButton::Primary);
+        harness.deliver_to_first(SurfaceEvent::Pointer {
+            action,
+            event,
+            modifiers: Modifiers::NONE,
+            timestamp: Timestamp::ORIGIN,
+        });
+        harness.settle(128);
+    }
+    assert!(
+        workbench
+            .drag
+            .state
+            .get_untracked()
+            .is_some_and(|s| s.0 == "@trajectory/pair/0" && s.3)
+    );
+    let mut event = PointerEvent::mouse(Point::new(CssPx(-20.), CssPx(y)));
+    event.button = Some(PointerButton::Primary);
+    harness.deliver_to_first(SurfaceEvent::Pointer {
+        action: PointerAction::Released,
+        event,
+        modifiers: Modifiers::NONE,
+        timestamp: Timestamp::ORIGIN,
+    });
+    harness.settle(128);
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("trace-card-body")
+            .is_some()
+    );
+    click(&mut harness, "trace-card-summary", "");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("trace-card-body")
+            .is_none()
+    );
+    click(&mut harness, "trace-card-summary", "");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("trace-card-body")
+            .is_some()
+    );
+    crate::trajectory_axes::assign(builder.pane, 0, true, &["battery".into()]).unwrap();
+    harness.settle(128);
+    assert_eq!(map.trajectory.get_untracked().unwrap().y, "battery");
+    assert!(
+        map.lines
+            .with_untracked(|lines| lines.iter().any(|line| line.source == "battery"))
+    );
+    let slot = harness.app().windows()[0]
+        .box_with_class("trajectory-axis-slot")
+        .unwrap();
+    let x = slot.origin.x.0 + slot.size.width.0 / 2.;
+    let y = slot.origin.y.0 + slot.size.height.0 / 2.;
+    workbench.drag.state.set(Some(("x".into(), x, y, true)));
+    workbench.field_drag_move(x, y);
+    harness.settle(128);
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("trace-drop-available")
+            .is_empty()
+    );
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("axis-drop-active")
+            .is_empty()
+    );
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("trace-drop-feedback")
+            .is_empty()
+    );
+    workbench
+        .drag
+        .state
+        .set(Some(("@analysis/test".into(), x, y, true)));
+    workbench.field_drag_move(x, y);
+    harness.settle(128);
+    assert!(
+        !harness.app().windows()[0]
+            .nodes_with_class("trace-drop-rejected")
+            .is_empty()
+    );
+    workbench.drag.state.set(None);
+    workbench.finish_field_drag();
+    harness.settle(128);
+    click(&mut harness, "plot-tab-close", "");
+    assert!(workbench.find(source.id).is_none());
+    assert!(workbench.find(map.id).is_some());
+    assert_eq!(map.trajectory.get_untracked().unwrap().y, "battery");
+    assert!(
+        harness.app().windows()[0]
+            .box_with_class("flight-map")
+            .is_some()
+    );
+    assert_eq!(map.view_lines.get_untracked()[0].name, "Survey route");
+}
+
 /// Renders the map controls, profile, state markers and a measurement.
 /// Run with `ENLUMI_MAP_CONTROLS_PREVIEW=path.ppm cargo test -- --ignored map_controls_preview`.
 #[test]
@@ -831,6 +1186,10 @@ fn map_controls_preview() {
         .ok()
         .and_then(|id| crate::theme::Palette::from_id(&id))
         .unwrap_or(crate::theme::Palette::Forest);
+    let corners = std::env::var("ENLUMI_MAP_PREVIEW_CORNERS")
+        .ok()
+        .and_then(|id| crate::theme::Corners::from_id(&id))
+        .unwrap_or(palette.legacy_corners());
     let directory = tempfile::tempdir().unwrap();
     let local = directory.path().to_path_buf();
     let captured = Rc::new(RefCell::new(None));
@@ -849,13 +1208,13 @@ fn map_controls_preview() {
             let mut band=crate::geometry::Geometry::new(99,crate::geometry::GeometryKind::Band,kurbo::Point::ZERO);
             band.name="Flight mode".into();band.states=Some(tint.states);band.opacity=tint.opacity;
             workbench.geometry.items.update(|items|items.push(band));workbench.attach_geometry(99,pane,true);
-            workbench.timeline.time.set(Some(2.5));
+            workbench.timeline.time.set(Some(1.5));
             workbench.map_tiles.set_value(Some(super::tiles::Service::new(super::tiles::Config{cache:local.join("cache"),local:Some(local.clone()),network:false})));
             workbench.edit_trajectory(pane);
             *saved.borrow_mut()=Some((workbench,pane));
             use crate::trajectory_cards::TrajectorySetupProps;
             let builder=workbench.trajectory_builder().pane;
-            view!{AppTheme(palette=palette){row(class="page workbench",style:width="1400px",style:height="760px"){column(style:width="1050px",style:height="760px"){FlightMap(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} column(style:width="350px",style:height="760px"){TrajectorySetup(workbench=workbench,pane=builder)}}}}
+            view!{AppTheme(palette=palette,corners=corners){row(class="page workbench",style:width="1400px",style:height="760px"){column(style:width="1050px",style:height="760px"){FlightMap(workbench=workbench,pane=pane,visible=Signal::stored_local(true))} column(style:width="350px",style:height="760px"){TrajectorySetup(workbench=workbench,pane=builder)}}}}
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -942,13 +1301,13 @@ fn map_controls_follow_live_theme_corner_changes() {
     let handler=app().with_size(1400.,760.).with_stylesheet(super::preview::stylesheet())
         .with_renderer(Box::new(|_,target|{let mut renderer=zgui_testkit_scene::CaptureRenderer::new();renderer.configure(target);Ok(Box::new(renderer))}))
         .into_handler(move || {
-            let palette=RwSignal::new_local(Palette::Slate);let workbench=Workbench::new();let pane=workbench.pane();
+            let palette=RwSignal::new_local(Palette::Slate);let corners=RwSignal::new_local(crate::theme::Corners::Square);let workbench=Workbench::new();let pane=workbench.pane();
             let (lines,mut spec,tracks)=super::telemetry::tests::fixture();spec.map=Some(Config{offline:true,..Default::default()});
             pane.lines.set(lines);pane.trajectory_data.set(Some(tracks));pane.trajectory.set(Some(spec));
             workbench.map_tiles.set_value(Some(super::tiles::Service::new(super::tiles::Config{cache:local.join("cache"),local:Some(local.clone()),network:false})));
             workbench.edit_trajectory(pane);let builder=workbench.trajectory_builder().pane;
-            *saved.borrow_mut()=Some(palette);
-            view!{AppTheme(palette=Signal::derive_local(move ||palette.get())){row(class="page workbench",style:width="1400px",style:height="760px"){column(style:width="1050px",style:height="760px"){FlightMap(workbench=workbench,pane=pane,visible=Signal::stored_local(true))}column(style:width="350px",style:height="760px"){TrajectorySetup(workbench=workbench,pane=builder)}}}}
+            *saved.borrow_mut()=Some((palette,corners));
+            view!{AppTheme(palette=Signal::derive_local(move ||palette.get()),corners=corners){row(class="page workbench",style:width="1400px",style:height="760px"){column(style:width="1050px",style:height="760px"){FlightMap(workbench=workbench,pane=pane,visible=Signal::stored_local(true))}column(style:width="350px",style:height="760px"){TrajectorySetup(workbench=workbench,pane=builder)}}}}
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
@@ -956,14 +1315,21 @@ fn map_controls_follow_live_theme_corner_changes() {
         DevicePx(760.),
     )));
     harness.settle(128);
-    let palette = captured.borrow().unwrap();
+    let (palette, corners) = captured.borrow().unwrap();
     click(&mut harness, "map-layers", "");
-    for (choice, radius, small) in [
-        (Palette::Slate, 0., 0.),
-        (Palette::Amethyst, 10., 6.),
-        (Palette::Forest, 4., 3.),
+    for (choice, rounding, radius, small) in [
+        (Palette::Slate, crate::theme::Corners::Soft, 4., 3.),
+        (Palette::Amethyst, crate::theme::Corners::Soft, 4., 3.),
+        (
+            Palette::Amethyst,
+            crate::theme::Corners::ExtraRounded,
+            10.,
+            6.,
+        ),
+        (Palette::Forest, crate::theme::Corners::Square, 0., 0.),
     ] {
         palette.set(choice);
+        corners.set(rounding);
         harness.deliver_to_first(SurfaceEvent::Resized(Size::new(
             DevicePx(1401.),
             DevicePx(760.),

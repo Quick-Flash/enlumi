@@ -169,7 +169,7 @@ pub fn AltitudeOptions(
     };
     let reference = Memo::new(move |_| {
         let a = altitude.get();
-        (a.local, a.at_first)
+        (a.local, a.at_first, a.local_zero)
     });
     let unit = Memo::new(move |_| altitude.get().scale.abs());
     view! {if move ||force||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some_and(|m|m.terrain||m.coloring==super::telemetry::ColorBy::Altitude))) {
@@ -188,10 +188,11 @@ pub fn AltitudeOptions(
                 }
             }
             }
-            row(class="trace-card-segment",a11y:role=Role::Group,a11y:label="Altitude reference") {
-                ActionButton(class="altitude-amsl",class:setting-active=move ||!reference.get().0,a11y:label="Z is absolute elevation above sea level",on:click=move |_|update_altitude(|a|{a.local=false;a.at_first=false;})) {"AMSL"}
-                ActionButton(class="altitude-terrain",class:setting-active=move ||reference.get()==(true,false),a11y:label="Z is added to terrain height at the trace start",on:click=move |_|update_altitude(|a|{a.local=true;a.at_first=false;})) {"Above terrain"}
-                ActionButton(class="altitude-ground",class:setting-active=move ||reference.get()==(true,true),a11y:label="The first Z sample sits on the ground",on:click=move |_|update_altitude(|a|{a.local=true;a.at_first=true;})) {"Start on ground"}
+            row(class="trace-card-segment altitude-reference",a11y:role=Role::Group,a11y:label="Altitude reference") {
+                ActionButton(class="altitude-amsl",class:setting-active=move ||!reference.get().0&&!reference.get().2,a11y:label="Z is absolute elevation above sea level",on:click=move |_|update_altitude(|a|{a.local=false;a.at_first=false;a.local_zero=false;})) {"AMSL"}
+                ActionButton(class="altitude-terrain",class:setting-active=move ||reference.get()==(true,false,false),a11y:label="Z is added to terrain height at the trace start",on:click=move |_|update_altitude(|a|{a.local=true;a.at_first=false;a.local_zero=false;})) {"Above terrain"}
+                ActionButton(class="altitude-ground",class:setting-active=move ||reference.get()==(true,true,false),a11y:label="The first Z sample sits on the ground",on:click=move |_|update_altitude(|a|{a.local=true;a.at_first=true;a.local_zero=false;})) {"Start on ground"}
+                ActionButton(class="altitude-local-zero",class:setting-active=move ||reference.get().2,a11y:label="First valid Z sample is local zero, without terrain offset",on:click=move |_|update_altitude(|a|{a.local=false;a.at_first=true;a.local_zero=true;})) {"Local zero"}
             }
             row(class="trace-card-segment") {
                 ActionButton(class="altitude-metres",class:setting-active=move ||unit.get()==1.,on:click=move |_|update_altitude(|a|a.scale=a.scale.signum())) {"m"}
@@ -354,6 +355,7 @@ mod tests {
                     scale: 0.001,
                     local: true,
                     at_first: true,
+                    local_zero: false,
                 },
             );
         });

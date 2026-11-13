@@ -72,7 +72,8 @@ impl Pane {
         let lines = RwSignal::new_local(Vec::<Line>::new());
         let trajectory = RwSignal::new_local(None::<crate::trajectory::Spec>);
         let view_lines = Signal::derive_local(move || {
-            let pairs = trajectory.get().map(|spec| spec.pairs());
+            let spec = trajectory.get();
+            let pairs = spec.as_ref().map(|spec| spec.pairs());
             lines
                 .get()
                 .into_iter()
@@ -83,7 +84,11 @@ impl Pane {
                 })
                 .map(|line| plot::zgui_series::SeriesLine {
                     id: line.id,
-                    name: line.name.clone(),
+                    name: pairs
+                        .as_ref()
+                        .and_then(|pairs| pairs.iter().position(|p| p.y == line.source))
+                        .and_then(|index| spec.as_ref()?.trace_names.get(&index).cloned())
+                        .unwrap_or(line.name),
                     data: line.data,
                     revision: line.revision,
                 })
@@ -175,6 +180,7 @@ impl Pane {
                 if let Some(spec) = spec {
                     let previous = spec.pairs();
                     let altitudes = spec.altitudes.clone();
+                    let names = spec.trace_names.clone();
                     spec.extra.retain(|pair| pair.y != source);
                     if spec.y == source {
                         if spec.extra.is_empty() {
@@ -188,6 +194,18 @@ impl Pane {
                             spec.gps_scale = pair.gps_scale;
                         }
                     }
+                    spec.trace_names = spec
+                        .pairs()
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(slot, pair)| {
+                            previous
+                                .iter()
+                                .position(|old| old.y == pair.y)
+                                .and_then(|old| names.get(&old).cloned())
+                                .map(|name| (slot, name))
+                        })
+                        .collect();
                     spec.altitudes = spec
                         .pairs()
                         .iter()

@@ -30,6 +30,19 @@ fn trajectory_recipe_preserves_axes_and_display_mode_through_capture_and_restore
     add_line(workbench, &other, log().prepare(&other).unwrap());
     let pane = workbench.pane();
     pane.trajectory.set(Some(crate::trajectory::Spec {
+        altitudes: BTreeMap::from([(
+            0,
+            crate::trajectory::Altitude {
+                source: SOURCE.into(),
+                local: false,
+                local_zero: true,
+                ..Default::default()
+            },
+        )]),
+        trace_names: BTreeMap::from([
+            (0, "Primary position".into()),
+            (1, "Backup position".into()),
+        ]),
         x: SOURCE.into(),
         y: SOURCE.into(),
         points: true,
@@ -97,6 +110,9 @@ fn trajectory_recipe_preserves_axes_and_display_mode_through_capture_and_restore
     settle(&window, || restored.lines.with_untracked(Vec::len) == 2);
     assert!(restored.timeline_link.get_untracked());
     let spec = restored.trajectory.get_untracked().unwrap();
+    assert!(spec.altitudes[&0].local_zero);
+    assert_eq!(spec.trace_names[&0], "Primary position");
+    assert_eq!(spec.trace_names[&1], "Backup position");
     assert_eq!(spec.x, SOURCE);
     assert_eq!(spec.y, SOURCE);
     assert!(spec.points);

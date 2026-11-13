@@ -34,13 +34,14 @@ pub fn WorkbenchApp(
         workbench.open(path);
     }
     let palette = RwSignal::new_local(preferences.load());
+    let corners = RwSignal::new_local(preferences.load_corners());
     #[cfg(test)]
     let updates = use_local_context::<UpdateState>().unwrap_or_else(UpdateState::new);
     #[cfg(not(test))]
     let updates = UpdateState::new();
     let drop_directory = log_directory.clone();
     view! {
-        AppTheme(palette = palette) {
+        AppTheme(palette = palette,corners=corners) {
             WindowFrame(enabled = client_frame,
                 on:drop:capture = move |event| {
                     match event.paths.as_slice() {
@@ -117,7 +118,7 @@ pub fn WorkbenchApp(
                     }) {"Analyze"}
                     ActionButton(class="create-2d-plot",class:setting-active=move ||workbench.trajectory_builder().open.get()&&!workbench.trajectory_builder().pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked()&&!workbench.trajectory_builder().pane.trajectory.with_untracked(|s|s.as_ref().is_some_and(|s|s.map.is_some())){workbench.trajectory_builder().open.set(false);}else{workbench.new_trajectory(false);}}) {"2D plot"}
                     ActionButton(class="create-flight-map",class:setting-active=move ||workbench.trajectory_builder().open.get()&&workbench.trajectory_builder().pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())),on:click=move |_|{if workbench.trajectory_builder().open.get_untracked()&&workbench.trajectory_builder().pane.trajectory.with_untracked(|s|s.as_ref().is_some_and(|s|s.map.is_some())){workbench.trajectory_builder().open.set(false);}else{workbench.new_flight_map();}}) {"Map"}
-                    ThemePicker(palette = palette, preferences = preferences.clone())
+                    ThemePicker(palette = palette,corners=corners, preferences = preferences.clone())
                     row(class="toolbar-brand") {
                         GithubLink(workbench = workbench)
                         Fps()

@@ -18,6 +18,11 @@ fn height_range_reports_clipping_and_zero_z_matches_3d_geometry() {
     styles.get_mut(&2).unwrap().height.range = colors.scales[&2].data_range.unwrap();
     let colors = prepare_styled(&tracks, &lines, &spec, &Default::default(), &styles, vec![]);
     assert_ne!(colors.color(2, 0, [255; 4]), colors.color(2, 5, [255; 4]));
+    spec.altitudes.get_mut(&0).unwrap().local_zero = true;
+    let local = prepare_styled(&tracks, &lines, &spec, &Default::default(), &styles, vec![]);
+    assert_eq!(local.scales[&2].data_range, Some([0., 50.]));
+    assert_eq!(local.samples[&2][0], 0.);
+    assert_eq!(local.samples[&2][5], 50.);
     spec.altitudes.clear();
     let colors = prepare_styled(&tracks, &lines, &spec, &Default::default(), &styles, vec![]);
     assert_eq!(colors.scales[&2].data_range, Some([0., 0.]));
@@ -35,6 +40,7 @@ fn new_map_keeps_channel_source_when_dropping_first_pair() {
     builder.pane.trajectory.set(Some(spec));
     builder.pane.lines.set(lines);
     workbench.drop_trajectory_pair(0, pane.id);
+    let pane = workbench.pane();
     let spec = pane.trajectory.get_untracked().unwrap();
     assert_eq!(spec.color_source, "battery");
     assert_eq!(spec.map.unwrap().coloring, ColorBy::Channel);

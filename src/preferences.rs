@@ -1,5 +1,5 @@
 //! Palette persistence and platform configuration directory.
-use crate::theme::Palette;
+use crate::theme::{Corners, Palette};
 use std::{
     io::{self, Write},
     path::{Path, PathBuf},
@@ -21,6 +21,24 @@ impl ThemePreference {
             .and_then(|path| std::fs::read_to_string(path).ok())
             .and_then(|text| Palette::from_id(text.trim()))
             .unwrap_or_default()
+    }
+    pub fn load_corners(&self) -> Corners {
+        self.0
+            .as_ref()
+            .and_then(|path| std::fs::read_to_string(path.with_file_name("corners")).ok())
+            .and_then(|text| Corners::from_id(text.trim()))
+            .unwrap_or_else(|| self.load().legacy_corners())
+    }
+    pub fn save_corners(&self, corners: Corners) -> io::Result<()> {
+        let Some(path) = self.0.as_ref().map(|path| path.with_file_name("corners")) else {
+            return Ok(());
+        };
+        let parent = path.parent().unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent)?;
+        let mut file = tempfile::NamedTempFile::new_in(parent)?;
+        writeln!(file, "{}", corners.id())?;
+        file.persist(path).map_err(|error| error.error)?;
+        Ok(())
     }
     pub fn save(&self, palette: Palette) -> io::Result<()> {
         let Some(path) = &self.0 else {
@@ -123,6 +141,21 @@ pub(crate) fn cache_directory() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn colors_and_corners_persist_independently_and_migrate_old_theme() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ThemePreference(Some(directory.path().join("theme")));
+        store.save(Palette::Amethyst).unwrap();
+        assert_eq!(store.load_corners(), Corners::ExtraRounded);
+        store.save_corners(Corners::Subtle).unwrap();
+        assert_eq!(store.load(), Palette::Amethyst);
+        store.save(Palette::Forest).unwrap();
+        assert_eq!(store.load_corners(), Corners::Subtle);
+        store.save_corners(Corners::Square).unwrap();
+        assert_eq!(store.load(), Palette::Forest);
+        std::fs::write(directory.path().join("corners"), "bad").unwrap();
+        assert_eq!(store.load_corners(), Corners::Soft);
+    }
     #[test]
     fn last_log_directory_roundtrips_and_rejects_stale_or_relative_paths() {
         let dir = tempfile::tempdir().unwrap();

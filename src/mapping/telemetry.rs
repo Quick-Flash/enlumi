@@ -199,8 +199,7 @@ pub fn prepare(data: &Tracks, lines: &[Line], spec: &Spec, hidden: &BTreeSet<Str
             }
         }
         if mode == ColorBy::Altitude
-            && altitude.local
-            && altitude.at_first
+            && altitude.zero_at_start()
             && let Some(first) = values.iter().find(|v| v.is_finite()).copied()
         {
             for value in &mut values {

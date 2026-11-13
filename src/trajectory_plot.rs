@@ -723,6 +723,18 @@ pub(crate) fn TrajectoryOverlay(
                     && ranges.x.contains(point.x)
                     && ranges.y.contains(point.y)
                 {
+                    if let Some(time) = workbench.timeline.time.get()
+                        && let Some(arrow) =
+                            crate::trajectory_render::timeline_arrow(trace, time, g, ranges)
+                    {
+                        plot::zgui_renderer::push_fill_stroke(
+                            scene,
+                            arrow,
+                            Color::srgb_u8(0, 0, 0, 0),
+                            Color::srgb_u8(255, 255, 255, 235),
+                            3.,
+                        );
+                    }
                     let mut path = kurbo::BezPath::new();
                     plot::append_circle(
                         &mut path,

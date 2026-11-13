@@ -126,4 +126,35 @@
 .map-add-trace { flex: none; margin-top: 2px; border: 1px dashed var(--app-border-strong); border-radius: var(--app-radius); padding: 10px; text-align: center; color: var(--app-muted); font-size: 11px; white-space: normal; }
 .map-trace-setup .trajectory-setup-pairs { padding: 8px; gap: 8px; background: var(--app-surface); }
 .trace-card-map { background: var(--app-inset); border-radius: var(--app-radius); }
-.trace-card-map .map-unit-degrees, .trace-card-map .map-unit-e7, .trace-card-map .map-unit-radians, .trace-card-map .map-unit-local, .trace-card-map .start-default, .trace-card-map .start-gps, .trace-card-map .start-map, .trace-card-map .start-coordinates, .trace-card-map .altitude-amsl, .trace-card-map .altitude-terrain, .trace-card-map .altitude-ground { flex: 1; min-width: 0; }
+.trace-card-map .map-unit-degrees, .trace-card-map .map-unit-e7, .trace-card-map .map-unit-radians, .trace-card-map .map-unit-local, .trace-card-map .start-default, .trace-card-map .start-gps, .trace-card-map .start-map, .trace-card-map .start-coordinates, .trace-card-map .altitude-amsl, .trace-card-map .altitude-terrain, .trace-card-map .altitude-ground, .trace-card-map .altitude-local-zero { flex: 1; min-width: 0; }
+
+.trajectory-setup-page.trace-drop-available .trajectory-axis-slot, .trajectory-setup-page.trace-drop-available .altitude-slot, .trajectory-setup-page.trace-drop-available .color-field-slot, .trajectory-setup-page.trace-drop-available .map-add-trace { border-color: var(--app-accent); background: var(--app-selected); }
+.trajectory-setup-page.trace-drop-hover .trajectory-setup-pairs { outline: 2px solid var(--app-accent); outline-offset: -2px; }
+.trajectory-setup-page .axis-drop-active { border: 2px solid var(--app-accent); background: var(--app-hover); }
+.trace-drop-feedback { flex: none; padding: 6px 8px; color: var(--app-accent-text); background: var(--app-selected); font-size: var(--app-font-sm); line-height: 18px; white-space: normal; }
+
+.trajectory-setup-page { position: relative; }
+.trace-drop-feedback { position: absolute; bottom: 30px; left: 8px; right: 8px; z-index: 5; border: 1px solid var(--app-accent); border-radius: var(--app-radius-sm); pointer-events: none; }
+
+.trace-drop-rejected .trace-drop-feedback { border-color: var(--app-warning); color: var(--app-warning); background: var(--app-surface); }
+
+/* One field surface per coordinate; nested source controls remain unboxed. */
+.map-trace-setup .trajectory-input-chip { flex: 1; width: 100%; min-width: 0; border: 0; padding: 0; background: transparent; }
+.map-trace-setup .trajectory-input-chip .signal-name { flex: 1; }
+.trace-card-summary { position: relative; padding-left: 28px; }
+.trace-card-map .trace-card-summary { padding-left: 28px; }
+.trace-card-summary .trajectory-pair-handle { position: absolute; inset: 0; width: auto; height: auto; }
+.trace-card-summary .pair-drag-handle .metric-option { width: 100%; height: 100%; min-height: 36px; cursor: grab; background: transparent; border: 0; }
+.trace-card-summary .pair-drag-handle .trajectory-grip-icon { left: 8px; top: calc(50% - 8px); }
+.trace-card-summary .trace-card-name, .trace-card-summary .trace-card-swatch, .trace-card-summary .trace-card-chevron { pointer-events: none; }
+.trace-card-summary .trace-name-input, .trace-card-summary .trace-rename { position: relative; z-index: 1; pointer-events: auto; }
+.trace-card-summary .trace-name-input { min-width: 0; width: 100%; height: 24px; min-height: 24px; }
+.trace-card-summary .trace-rename.app-action.zui-button { width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 2px; border: 0; background: transparent; }
+
+.trace-card-summary.trace-card-renaming .trace-card-name { position: relative; z-index: 1; pointer-events: auto; }
+
+.map-trace-setup .trajectory-input-chip .metric-option { border: 0; background: transparent; border-radius: 0; }
+
+.trace-card-map .altitude-reference { gap: 3px; }
+.trace-card-map .altitude-reference .app-action.zui-button { flex: 1 1 45%; }
+.trace-card-map .altitude-reference .app-action.zui-button[data-variant="ghost"], .trace-card-map .altitude-reference .app-action.zui-button[data-variant="ghost"]:first-child, .trace-card-map .altitude-reference .app-action.zui-button[data-variant="ghost"]:last-child { border-radius: var(--app-radius-sm); }

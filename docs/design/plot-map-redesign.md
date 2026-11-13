@@ -39,10 +39,13 @@ their sample, with 18 px stacking for changes within 20 px. Labels fade with
 the highlighted time window. Theme colors remain app-controlled; midpoint
 readouts clamp inside the viewport to stay readable near edges.
 
-The map now uses the mockup's compact trace legend (eye, swatch, short name,
-color mode and inline color/framing controls), with collapse and Options restored.
-Options opens the full line editor for color, width, pattern and sample markers. Layers uses labeled checkboxes and radio choices;
-Direction arrows changes both 2D and 3D rendering. Basemap includes None (grid),
+The map uses a compact trace legend (eye, swatch, short name), with collapse
+and Options. Clicking a row toggles visibility; dragging changes legend and draw order.
+The collapse header has a hover highlight without a boxed button.
+Options opens the full line editor for color, width, pattern and sample markers.
+Its line list matches normal plots, including Ctrl/Shift selection; State markers
+and Direction arrows follow. Titles use Map X lines settings. Layers holds basemap
+and map-wide display choices. Per-line direction arrows affect 2D and 3D rendering. Basemap includes None (grid),
 with extra providers and passive tile status plus Retry tiles in Layers. Navigation order and
 spacing follow the mockup. Hover info is a compact, theme-aware chip with mode,
 coordinates, altitude and ground speed. Trace cards use stacked coordinate slots,
@@ -50,9 +53,13 @@ NED/ENU presentation, four start-location tabs, a GPS-source choice and inline
 color controls. NED/ENU changes slot presentation; stored geometry stays normalized
 to east/north. Color Auto shares prepared map data with the setup panel.
 
-Direction arrow color is independent for each line, editable inline or in legend
-Options and saved with line appearance. Each line also has a State markers toggle.
+Direction arrows use a darker shade of each line color, including gradients.
+Each line has separate Direction arrows and State markers toggles.
 Legend rows expose X to remove a trace; an open setup panel stays in sync.
+Maps default to numbered Map X names, editable from their tabs. Trace headers support full-area dragging and
+a pencil action for persistent trace names. Coordinate and Z slots use one box.
+Completed coordinate edits update maps live, and drag targets show drop feedback.
+Closing source plots keeps associated maps.
 New maps default to Esri World Imagery; saved provider choices stay intact. State markers identify their state-band source. Map M
 uses shared pane measurement state in 2D and 3D. Timeline heading follows ascent
 and descent, including vertical travel. New panels and controls use theme corner

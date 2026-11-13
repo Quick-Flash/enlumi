@@ -34,30 +34,43 @@ Local metre displacements use the ground scale at the start, a flat local frame.
 **Altitude** takes an optional Z field. **AMSL** uses absolute elevation in the
 terrain dataset's vertical reference; **Above terrain** adds Z to the terrain height
 at the trace start (sampled once, fixed as the trace moves); **Start on ground**
-also removes the starting Z. Units are m, mm or ft, and **Down + (NED)** handles
+also removes the starting Z. **Local zero** subtracts the first valid Z sample
+without adding terrain height; that sample becomes Z=0. Units are m, mm or ft, and **Down + (NED)** handles
 down-positive Z. With no Z binding the trace uses Z=0. Invalid or unavailable
 altitude samples break segments rather than extrapolating.
 
 Each card has **Color** controls (Solid, Speed, Altitude, Field). Field mode shows
-a **By** drop slot; the bound field is shared by the map. Click a map legend row
-for inline color controls, **Fit to trace** and **Edit trace…**. Its eye toggles
-trace visibility; the gradient scale sits directly below that trace's row.
-Legend header collapses the list; Options stays available while collapsed and
-opens the full editor for line colors, widths, patterns and sample markers.
-Direction arrows can be toggled in Options or Layers. Options also provides an
-per-line Arrow color picker and State markers toggle; these persist with each line.
-Use the X on a legend row to remove that trace. New maps default to Esri World Imagery.
+a **By** drop slot; the bound field is shared by the map. Clicking a map legend row
+or its eye toggles trace visibility. Drag rows to change legend and drawing order;
+the gradient scale sits below its trace. The header collapses the list and shows a
+hover highlight. Options remains available while collapsed and opens line settings.
+Map Options starts with the same line selection list as normal plots: Ctrl-click
+selects multiple lines and Shift-click selects a range. State markers and Direction
+arrows follow, with box buttons showing on/off or mixed state. Both persist per line.
+Direction-arrow controls live in legend Options, not the Map traces side panel.
+Direction arrows use a darker shade of their line, including gradient colors.
+State markers place labeled dots where an attached state band changes value
+(for example, armed/disarmed). State-band trace tint colors the line instead.
+Use X on a legend row to remove that trace. New maps default to Esri World Imagery.
 Gradient limits apply on Enter or when the field loses focus;
 **Auto** fits them to the trace's data.
 
 Drag a finished card's bar onto a map to add the trace, or onto another plot to
-create a map. Each map has its own camera and can be docked, duplicated and saved.
+create a separate map. Closing the source plot keeps its maps. Maps default to
+**Map X** tab names; double-click the tab to rename the map.
+Use each trace header's pencil to rename that trace. Names persist with map settings
+and appear in its legend, line settings and exports. Drag anywhere on the trace
+header (including its coordinate summary) to move the full trace.
+Position and altitude slots use one field surface, without nested boxed chips.
+Each map has its own camera and can be docked, duplicated and saved.
 Open **Map** with a map selected, or use **Edit coordinates**, to change it live.
+Completed coordinate edits update the map automatically. Dragging fields highlights
+available slots and the active drop target; unsupported fields show rejection.
 Settings persist with plot/workspace recipes.
 
 On the map, **2D/3D** and the **Layers** popover sit at top left. Layers holds the
 basemap provider, offline tiles, tile retry and status, 3D options (**Ground path**,
-**Terrain height ×2**) and trace options: **Direction arrows**, **State markers**
+**Terrain height ×2**) and trace options: **State markers**
 (labelled markers in 2D and 3D where the plot's first
 state band changes value; the control names its state-band source),
 **Altitude profile (2D)** and **Show path** (whole flight, flown so far, or last
@@ -83,8 +96,9 @@ shared timeline marker; clicking a projected segment pins timeline time.
 
 Map legends retain eye visibility, color swatches, collapse and Options for
 colors, widths, patterns and markers. Panels and controls follow theme corner
-tokens, including when switching themes. The 3D timeline heading follows ascent
-and descent. 2D screenshot/context-menu/clipboard actions use the normal
+tokens. Toolbar color and corner selectors are independent and persist separately.
+Timeline arrows have a shaft joining dot and arrowhead in 2D and 3D; 3D heading
+follows ascent and descent. 2D screenshot/context-menu/clipboard actions use the normal
 zgui-plot snapshot API: SVG retains vector paths and embeds currently loaded
 raster tiles; PNG uses the same SVG rasterizer. Exports include the legend,
 distance scale and selected-provider attribution; exports perform no tile requests.

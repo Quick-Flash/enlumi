@@ -33,8 +33,18 @@ fn timeline_updates_keep_static_geometry_key_and_small_marker_layer() {
     );
     assert_eq!(
         before.len(),
-        6,
+        8,
         "Marker-only update holds the marker and heading chevron, not flight or ground paths"
+    );
+    assert_eq!(
+        before[4][..3],
+        before[6][..3],
+        "Arrow shaft begins at timeline dot"
+    );
+    assert_eq!(
+        before[5][..3],
+        before[1][..3],
+        "Arrow shaft reaches chevron tip"
     );
     scene.time = Some(1.5);
     assert_eq!(key, geometry_key(&scene, camera, orbit, size));
@@ -263,7 +273,7 @@ fn timeline_heading_follows_climb_descent_and_vertical_travel() {
 }
 
 #[test]
-fn direction_arrows_use_separate_color_and_toggle_without_changing_line() {
+fn direction_arrows_darken_line_color_and_toggle_without_changing_line() {
     let (lines, spec, tracks) = super::super::telemetry::tests::fixture();
     let paths = prepare(
         &tracks,
@@ -304,17 +314,22 @@ fn direction_arrows_use_separate_color_and_toggle_without_changing_line() {
     assert_ne!(key, geometry_key(&scene, camera, orbit, size));
     let after = draw(&scene);
     assert!(after.len() > before.len());
-    let rgb = [18., 171., 205.].map(|v| v / 255.);
-    assert!(
-        after
+    let rgb = crate::trace_color::darker([50, 80, 120, 255])[..3]
+        .iter()
+        .map(|v| f32::from(*v) / 255.)
+        .collect::<Vec<_>>();
+    assert!(after.iter().any(|v| {
+        v[3..6]
             .iter()
-            .any(|v| v[3..6].iter().zip(rgb).all(|(a, b)| (a - b).abs() < 1e-6))
-    );
-    assert!(
-        !before
+            .zip(rgb.iter().copied())
+            .all(|(a, b)| (a - b).abs() < 1e-6)
+    }));
+    assert!(!before.iter().any(|v| {
+        v[3..6]
             .iter()
-            .any(|v| v[3..6].iter().zip(rgb).all(|(a, b)| (a - b).abs() < 1e-6))
-    );
+            .zip(rgb.iter().copied())
+            .all(|(a, b)| (a - b).abs() < 1e-6)
+    }));
 }
 
 #[test]
@@ -382,10 +397,17 @@ fn each_3d_line_keeps_its_arrow_color_and_state_markers() {
     first.arrows = true;
     let mut second = first.clone();
     second.id = 5;
+    second.color = [30, 100, 180, 255];
     let mut paths = Arc::from([first, second]);
     decorate(workbench, pane, &mut paths);
-    assert_eq!(paths[0].arrow_color, [18, 171, 205, 255]);
-    assert_eq!(paths[1].arrow_color, [238, 51, 68, 255]);
+    assert_eq!(
+        paths[0].arrow_color,
+        crate::trace_color::darker(paths[0].color)
+    );
+    assert_eq!(
+        paths[1].arrow_color,
+        crate::trace_color::darker([30, 100, 180, 255])
+    );
     assert!(paths[0].modes.is_empty());
     assert!(!paths[1].modes.is_empty());
     let mut scene = Scene::default();
@@ -402,12 +424,16 @@ fn each_3d_line_keeps_its_arrow_color_and_state_markers() {
         &mut Default::default(),
         &mut Default::default(),
     );
-    for color in [[18., 171., 205.], [238., 51., 68.]] {
-        let rgb = color.map(|c| c / 255.);
-        assert!(
-            geometry
+    for color in [[255, 180, 50, 255], [30, 100, 180, 255]] {
+        let rgb = crate::trace_color::darker(color)[..3]
+            .iter()
+            .map(|c| f32::from(*c) / 255.)
+            .collect::<Vec<_>>();
+        assert!(geometry.iter().any(|v| {
+            v[3..6]
                 .iter()
-                .any(|v| v[3..6].iter().zip(rgb).all(|(a, b)| (a - b).abs() < 1e-6))
-        );
+                .zip(rgb.iter().copied())
+                .all(|(a, b)| (a - b).abs() < 1e-6)
+        }));
     }
 }

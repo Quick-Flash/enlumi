@@ -236,6 +236,11 @@ impl Workbench {
             return;
         }
         if let Some((index, axis)) = self.builder_slot_at(x, y) {
+            if !crate::trajectory_axes::trace_field_source(&source) {
+                self.status.set("Drop a field into map trace slots".into());
+                self.finish_field_drag();
+                return;
+            }
             self.queue_field_sources(
                 self.drag_fields(source),
                 crate::profile_state::Destination::TrajectoryAxis(index, axis),

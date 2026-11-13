@@ -33,7 +33,9 @@ impl Gradient {
 #[serde(default, deny_unknown_fields)]
 pub struct TraceColor {
     pub mode: Mode,
+    /// Legacy custom color, retained for reading older presets.
     pub arrow_color: Option<[u8; 4]>,
+    pub direction_arrows: Option<bool>,
     pub state_markers: bool,
     pub speed: Gradient,
     pub height: Gradient,
@@ -45,6 +47,7 @@ impl Default for TraceColor {
         Self {
             mode: Mode::Solid,
             arrow_color: None,
+            direction_arrows: None,
             state_markers: true,
             speed: Gradient {
                 range: [0., 30.],
@@ -83,6 +86,17 @@ impl TraceColor {
             && self.height.valid()
             && (self.field.valid() || self.field.range == [0., 0.])
     }
+}
+/// Darken the rendered line color by one third, preserving opacity.
+pub fn darker([r, g, b, a]: [u8; 4]) -> [u8; 4] {
+    let shade = |c: u8| (u16::from(c) * 2 / 3) as u8;
+    [shade(r), shade(g), shade(b), a]
+}
+pub fn arrows(pane: crate::state::Pane, id: u64) -> bool {
+    current(pane, Some(id)).direction_arrows.unwrap_or_else(|| {
+        pane.trajectory
+            .with(|s| s.as_ref().is_some_and(|s| s.arrows))
+    })
 }
 pub fn selected(pane: crate::state::Pane) -> Option<u64> {
     let selected = pane.selected.get();
@@ -134,6 +148,7 @@ mod tests {
     fn per_line_markers_roundtrip_and_old_styles_keep_markers_enabled() {
         let style = TraceColor {
             arrow_color: Some([18, 171, 205, 255]),
+            direction_arrows: Some(false),
             state_markers: false,
             ..Default::default()
         };
@@ -148,6 +163,16 @@ mod tests {
             serde_json::from_str::<TraceColor>("{}")
                 .unwrap()
                 .arrow_color,
+            None
+        );
+    }
+    #[test]
+    fn arrow_shade_preserves_alpha_and_darkens_each_channel() {
+        assert_eq!(darker([0, 120, 255, 97]), [0, 80, 170, 97]);
+        assert_eq!(
+            serde_json::from_str::<TraceColor>("{}")
+                .unwrap()
+                .direction_arrows,
             None
         );
     }

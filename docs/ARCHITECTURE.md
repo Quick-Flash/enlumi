@@ -59,17 +59,20 @@ See [profile format and limits](PROFILES.md).
 ## Design tokens and themes
 
 `theme::stylesheet()` supplies shared tokens and app styles, using Slate by default. `themes/slate.css`
-and other palette files define the same semantic color and corner-radius roles;
+and other palette files define the same semantic color roles. `Corners` owns separate
+corner presets (Square, Subtle, Soft, Rounded, Extra rounded);
 `themes/common.css` owns typography, control height, and code syntax colors. Components use
 `var(--app-...)` references rather than literal palette colors. Add new palette
 roles to every theme; register presets once in `Palette::ALL`. Keep layout and interaction rules out of palette files.
 
-`AppTheme` changes palette declarations on window root, including portalled menus,
+`AppTheme` accepts independent palette and corner signals and changes declarations
+on window root, including portalled menus,
 without rebuilding UI. Zgui UI tokens reference those same roles through
 `theme.css`; `plot_theme.css` adapts upstream plot chrome to app tokens. Series
 colors and code syntax colors remain distinct from interface accent. Plot canvas
 rendering/grid colors still belong to upstream plotting library; current
-presets use dark surfaces. Theme ID, profile directory, and local Auto overrides are persisted;
+presets use dark surfaces. Theme color ID and corner ID persist separately. Old theme-only preferences keep
+their former corner preset until changed. Profile directory and local Auto overrides are persisted;
 logs, scripts, plots, and drafts remain session-only.
 
 ## UI action buttons

@@ -11,6 +11,8 @@ use std::sync::Arc;
 #[serde(deny_unknown_fields)]
 pub struct Spec {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub trace_names: std::collections::BTreeMap<usize, String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub altitudes: std::collections::BTreeMap<usize, Altitude>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local: Option<crate::mapping::flight::LocalFrame>,
@@ -49,6 +51,8 @@ pub struct Altitude {
     pub local: bool,
     /// Subtract first valid aligned altitude before anchoring to terrain.
     pub at_first: bool,
+    /// First valid Z sample defines zero, without terrain anchoring.
+    pub local_zero: bool,
 }
 impl Default for Altitude {
     fn default() -> Self {
@@ -57,7 +61,13 @@ impl Default for Altitude {
             scale: 1.,
             local: true,
             at_first: false,
+            local_zero: false,
         }
+    }
+}
+impl Altitude {
+    pub fn zero_at_start(&self) -> bool {
+        self.local_zero || (self.local && self.at_first)
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -74,6 +84,7 @@ pub struct Pair {
 impl Default for Spec {
     fn default() -> Self {
         Self {
+            trace_names: Default::default(),
             altitudes: Default::default(),
             local: None,
             map: None,

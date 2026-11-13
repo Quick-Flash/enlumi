@@ -1,8 +1,7 @@
 use crate::plot_appearance::PlotBackgroundDialogProps;
 use crate::state_tint_options::StateTintOptionsProps;
 use crate::{
-    mapping::color_settings::ColorSettingsProps,
-    mapping::display_options::MapDisplayOptionsProps,
+    mapping::line_settings::MapLineSettingsProps,
     preset_capture::CaptureKind,
     state::{Pane, Workbench},
 };
@@ -214,11 +213,14 @@ pub fn PlotMenuEditor(
         }}
         DialogContent(class="plot-settings-surface plot-editor-surface") {
         column(class="plot-settings-content",class:trace-gradient-active=move ||crate::trace_color::current(pane,crate::trace_color::selected(pane)).mode!=crate::trace_color::Mode::Solid) {
-            DialogTitle(class="settings-title") {{format!("Plot {} line settings",pane.id)}}
+            DialogTitle(class="settings-title") {{move ||if pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())){format!("Map {} lines settings",pane.id)}else{format!("Plot {} line settings",pane.id)}}}
             column(class="plot-settings-body") {
-            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {MapDisplayOptions(workbench=workbench,pane=pane,editor=true) ColorSettings(workbench=workbench,pane=pane)}
+            if move ||pane.trajectory.with(|s|s.as_ref().is_some_and(|s|s.map.is_some())) {
+                MapLineSettings(workbench=workbench,pane=pane,open=open)
+            } else {
             if move ||pane.analysis.with(Option::is_none) {StateTintOptions(workbench=workbench,pane=pane)}
             {move ||if spatial.get() {AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),fixed_connection=plot::line_draw::Connection::Linear,on_extra=UnsyncCallback::new(move |()|open.set(false)))})}else{AnyView::new(view!{SeriesEditor(actions=actions,pane=pane.display(),on_extra=UnsyncCallback::new(move |()|open.set(false)))})}}
+            }
             }
             DialogClose(class="settings-done",size=ButtonSize::Sm,variant=ButtonVariant::Outline) {"Done"}
         }

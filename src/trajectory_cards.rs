@@ -3,6 +3,7 @@ use crate::{
     action_button::ActionButtonProps,
     mapping::settings::{AltitudeOptionsProps, target, update},
     mapping::trace_controls::TraceColorControlsProps,
+    mapping::trace_markers::TraceMarkersProps,
     state::{Pane, Workbench},
     trajectory::Pair,
     trajectory_axes::{
@@ -102,10 +103,11 @@ fn summary(workbench: Workbench, pane: Pane, index: usize) -> (String, String) {
         detail.push_str(&format!(
             " · Z {} {}",
             name(&altitude.source),
-            match (altitude.local, altitude.at_first) {
-                (false, _) => "AMSL",
-                (true, true) => "start on ground",
-                (true, false) => "above terrain",
+            match (altitude.local_zero, altitude.local, altitude.at_first) {
+                (true, _, _) => "local zero",
+                (false, false, _) => "AMSL",
+                (false, true, true) => "start on ground",
+                (false, true, false) => "above terrain",
             }
         ));
     }
@@ -124,7 +126,11 @@ fn summary(workbench: Workbench, pane: Pane, index: usize) -> (String, String) {
             crate::trace_color::Mode::Field => " · field",
         },
     );
-    (crate::mapping::legend::trace_name(&title), detail)
+    let title = pane
+        .trajectory
+        .with(|s| s.as_ref().and_then(|s| s.trace_names.get(&index).cloned()))
+        .unwrap_or_else(|| crate::mapping::legend::trace_name(&title));
+    (title, detail)
 }
 
 #[component]
@@ -149,12 +155,45 @@ pub fn TrajectorySetup(workbench: Workbench, pane: Pane) -> impl IntoView {
             })
             .unwrap_or_default()
     }));
-    view! {column(class="trajectory-setup-page",class:map-trace-setup=move ||is_map.get()){
+    let live = zgui::reactive::RenderEffect::new(move |_| {
+        pane.trajectory.track();
+        builder.target.track();
+        if builder.open.get() && is_map.get() {
+            reactive_graph::graph::untrack(|| workbench.sync_map_traces());
+        }
+    });
+    on_cleanup_local(move || drop(live));
+    let dragging = move || {
+        workbench.drag.state.get().is_some_and(|drag| drag.3)
+            || workbench
+                .line_drag
+                .state
+                .get()
+                .is_some_and(|drag| drag.moving)
+    };
+    let accepted = move || {
+        workbench
+            .drag
+            .state
+            .get()
+            .is_some_and(|drag| crate::trajectory_axes::trace_field_source(&drag.0))
+            || workbench
+                .line_drag
+                .state
+                .get()
+                .is_some_and(|drag| drag.line < (1_u64 << 63))
+    };
+    let hovering =
+        move || builder.pane.trajectory_drop.get().is_some() || builder.color_hover.get();
+    view! {column(class="trajectory-setup-page",class:trace-drop-available=move ||dragging()&&accepted(),class:trace-drop-hover=move ||dragging()&&hovering()&&accepted(),class:trace-drop-rejected=move ||dragging()&&hovering()&&!accepted(),class:map-trace-setup=move ||is_map.get()){
         row(class="trajectory-setup-heading"){
             column(class="trajectory-heading-copy"){text(class="heading"){{move ||if is_map.get(){"Map traces"}else{"2D traces"}}}text(class="trajectory-setup-caption"){"Drag a finished trace onto a plot"}}
             ActionButton(icon=true,class="trajectory-close-builder",a11y:label="Close plot setup",on:click=move |_|builder.open.set(false)){
                 vector(class="trajectory-control-icon",prop:viewBox="0 0 16 16",prop:d="M4 4 L12 12 M12 4 L4 12",a11y:hidden=true)
             }
+        }
+        if move ||is_map.get() {
+            Show(when=dragging) {text(class="trace-drop-feedback",a11y:role=Role::Status) {{move ||if !accepted(){"Drop a field here; drag trace cards onto map plots"}else if let Some((index,_))=builder.pane.trajectory_drop.get(){if pane.trajectory.with(|s|s.as_ref().is_some_and(|s|index>=s.pairs().len()||(s.pairs()[index].x.is_empty()&&s.pairs()[index].y.is_empty()))){"Release to add a trace"}else{"Release to update this trace"}}else if builder.color_hover.get(){"Release to set color field"}else{"Drop on a coordinate slot, altitude, color field, or empty area to add a trace"}}}}
         }
         scroll(class="trajectory-setup-pairs",node_ref=builder.area){
             for index in move ||row_indices(pane).into_iter().filter(|index|!is_map.get()||pair(pane,*index).is_some_and(|pair|!pair.x.is_empty()||!pair.y.is_empty())).collect::<Vec<_>>(),key=|index|*index{
@@ -208,14 +247,42 @@ fn TraceCard(
         let [r, g, b, _] = target(workbench, pane).plot.style(&id.to_string()).color;
         Some(format!("#{r:02x}{g:02x}{b:02x}"))
     });
+    let renaming = RwSignal::new_local(false);
+    let name = RwSignal::new_local(String::new());
+    let input = NodeRef::new();
+    let bounds = input.observe_border_box();
+    let focus = zgui::reactive::RenderEffect::new(move |_| {
+        if renaming.get() && bounds.get().is_some() {
+            input.focus();
+            input.select_all();
+        }
+    });
+    on_cleanup_local(move || drop(focus));
+    let save = move || {
+        if !renaming.get_untracked() {
+            return;
+        }
+        let name = name.get_untracked().trim().to_owned();
+        update(workbench, pane, |s| {
+            if name.is_empty() {
+                s.trace_names.remove(&index);
+            } else {
+                s.trace_names.insert(index, name.clone());
+            }
+        });
+        renaming.set(false);
+    };
     view! {column(class="trace-card",class:trace-card-open=move ||open.get(),class:trace-card-map=move ||map_mode.get()) {
-        row(class="trace-card-summary",on:click=move |_|closed.update(|c|{if !c.remove(&index){c.insert(index);}})) {
-            PairDrag(workbench=workbench,pane=pane,index=index,compact=true)
+        row(class="trace-card-summary",class:trace-card-renaming=move ||renaming.get()) {
+            PairDrag(workbench=workbench,pane=pane,index=index,compact=true,on_click=UnsyncCallback::new(move |()|closed.update(|c|{if !c.remove(&index){c.insert(index);}})))
             box(class="trace-card-swatch",class:trace-card-swatch-empty=move ||swatch.get().is_none(),style:background=move ||swatch.get()) {}
             column(class="trace-card-name") {
-                text(class="trace-card-title") {{move ||summary(workbench,pane,index).0}}
+                if move ||renaming.get() {
+                    Input(class="trace-name-input",node_ref=input,value=name,a11y:label="Trace name",on:focus_out=move |_|save(),on:key_down=move |e|{use zgui::vocab::{Key,NamedKey};match e.key{Key::Named(NamedKey::Enter)=>{save();e.prevent_default();e.stop_propagation();},Key::Named(NamedKey::Escape)=>{renaming.set(false);e.prevent_default();e.stop_propagation();},_=>{}}})
+                } else {text(class="trace-card-title") {{move ||summary(workbench,pane,index).0}}}
                 text(class="trace-card-detail") {{move ||summary(workbench,pane,index).1}}
             }
+            ActionButton(icon=true,class="trace-rename",a11y:label="Rename trace",on:click=move |e|{e.stop_propagation();name.set(reactive_graph::graph::untrack(||summary(workbench,pane,index).0));renaming.set(true);}) {vector(class="trajectory-control-icon",prop:viewBox="0 0 16 16",prop:d="M3 10 L10 3 L13 6 L6 13 L2 14 Z M9 4 L12 7",a11y:hidden=true)}
             vector(class="trace-card-chevron",prop:viewBox="0 0 12 12",prop:d=move ||PropValue::from(if open.get(){CHEVRON_OPEN}else{CHEVRON_CLOSED}),a11y:hidden=true)
         }
         if move ||open.get() {
@@ -262,6 +329,7 @@ fn TraceCard(
                     column(class="trace-card-group") {
                         row(class="trace-card-group-title") {text {"Color"}}
                         TraceColorControls(workbench=workbench,pane=actual,selected=selected,source=Some(color_source))
+                        if move ||selected.get().is_some(){TraceMarkers(workbench=workbench,pane=actual,selected=selected,show_arrows=false)}
                         if move ||crate::mapping::trace_controls::appearance(actual,selected.get(),Some(&color_source.get())).mode==crate::trace_color::Mode::Field {ColorFieldSlot(workbench=workbench,pane=pane,index=index)}
                     }
                 }
@@ -640,6 +708,7 @@ pub(crate) fn fill_siblings(workbench: Workbench, pane: Pane, index: usize, sour
                 scale: if found.geographic { 1. } else { -1. },
                 local: !found.geographic,
                 at_first: !found.geographic,
+                local_zero: false,
             },
         );
     }
@@ -725,6 +794,7 @@ pub(crate) fn add_map_trace(workbench: Workbench, pane: Pane, source: &str) -> O
                 scale: if found.geographic { 1. } else { -1. },
                 local: !found.geographic,
                 at_first: !found.geographic,
+                local_zero: false,
             },
         );
     }

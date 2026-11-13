@@ -70,7 +70,7 @@ pub fn Panel(
             row(class = "plot-strip") {
                 PlotTabContext(workbench=workbench,dock=dock) {
                 PlotTabs(pane = pane.dock, dock = dock,
-                    title = UnsyncCallback::new(move |id| workbench.profiles.titles.with(|titles| titles.get(&id).cloned().unwrap_or_else(|| format!("Plot {id}")))),
+                    title = UnsyncCallback::new(move |id|workbench.plot_name(id)),
                     on_select = UnsyncCallback::new(move |id| workbench.activate(id)),
                     on_rename = UnsyncCallback::new(move |(id, name): (u64, String)| {
                         workbench.profiles.titles.update(|titles| { if name.is_empty() { titles.remove(&id); } else { titles.insert(id, name); } });
